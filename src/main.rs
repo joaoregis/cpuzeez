@@ -4,24 +4,31 @@
 // Style-only lints; the tuple/type shapes are local to one function each.
 #![allow(clippy::type_complexity, clippy::field_reassign_with_default)]
 
+mod battery;
 mod bench;
 mod bios;
 mod chipset;
 mod config;
 mod cpu;
+mod diff;
 mod gpu;
 #[cfg(feature = "gui")]
 mod gui;
+mod history;
 mod hw;
+mod membench;
+mod network;
 mod npu;
 mod os;
 mod pci;
 mod report;
 mod sensors;
+mod settings;
 mod smbios;
 mod software;
 mod spd;
 mod storage;
+mod telemetry;
 mod timers;
 mod update;
 mod usb;
@@ -66,6 +73,8 @@ pub fn collect(ctx: &Ctx) -> Vec<Section> {
     r.extend(pci::collect(ctx)); // PCI Devices
     r.extend(smbios::collect(ctx)); // DMI
     r.extend(storage::collect(ctx));
+    r.extend(battery::collect(ctx));
+    r.extend(network::collect(ctx));
     r.extend(usb::collect(ctx));
     r.extend(gpu::collect(ctx)); // Graphics, Graphic APIs, Display Adapters (+ monitors)
     r.extend(npu::collect(ctx)); // AI Devices, NPU Devices
@@ -84,7 +93,7 @@ enum Out {
 }
 
 const USAGE: &str = "usage: cpuzeez [-txt=FILE] [-html=FILE] [-json=FILE] [-jsontxt=FILE] [-console] \
-[-bench] [-core=ID] [-coremask=HEX] [-checkupdate] [-screenshots=DIR]\nWith no output option the GUI opens.";
+[-bench] [-membench] [-core=ID] [-coremask=HEX] [-sensors] [-log=FILE[,SECONDS]] [-diff=OLD.json,NEW.json|now] [-checkupdate] [-screenshots=DIR]\nWith no output option the GUI opens.";
 
 fn main() {
     let mut outs = Vec::new();
@@ -99,6 +108,13 @@ fn main() {
             "jsontxt" => outs.push(Out::JsonTxt(v.into())),
             "console" => console = true,
             "checkupdate" => return update::cli(),
+            "sensors" => return telemetry::cli_once(&Ctx::new(config::Config::load())),
+            "membench" => return membench::cli(&Ctx::new(config::Config::load())),
+            "diff" => return diff::cli(&Ctx::new(config::Config::load()), v),
+            "log" => {
+                let (file, secs) = v.split_once(',').map_or((v, None), |(f, s)| (f, s.parse().ok()));
+                return telemetry::cli_log(Ctx::new(config::Config::load()), file, secs);
+            }
             "bench" => bench = true,
             "core" => core = v.parse::<usize>().ok(),
             "coremask" => coremask = u64::from_str_radix(v.trim_start_matches("0x"), 16).ok(),

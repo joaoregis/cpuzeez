@@ -317,3 +317,16 @@ mod tests {
         assert!(w > 0x200 as f64 && w < 0x200 as f64 / 0.09, "{w}");
     }
 }
+
+/// Memory/fabric clocks from the CPU's power-management firmware (AMD SMU PM
+/// table: FCLK, UCLK, MCLK; Intel: ring/uncore). Used by Chipset/Memory tabs.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct FabricClocks {
+    pub fclk_mhz: Option<f64>,
+    pub uclk_mhz: Option<f64>,
+    pub mclk_mhz: Option<f64>,
+}
+
+pub fn fabric_clocks(_ctx: &Ctx) -> Option<FabricClocks> {
+    None
+}

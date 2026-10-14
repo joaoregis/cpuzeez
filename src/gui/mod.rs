@@ -4,6 +4,11 @@
 
 mod bench_tab;
 mod bmp;
+pub mod i18n;
+
+/// This file's UI strings (see i18n.rs).
+pub const PT_BR: &[(&str, &str)] = &[];
+pub const ES: &[(&str, &str)] = &[];
 
 use crate::Ctx;
 use crate::report::{self, Node, Section};
