@@ -6,6 +6,7 @@
 //! (privileged), then whatever the OS exposes without privileges (Linux
 //! hwmon/powercap/cpufreq, Windows PDH counters + power status, Apple SMC).
 
+mod amd_pm;
 mod cpu;
 mod hwmon;
 #[cfg(target_os = "macos")]
@@ -100,6 +101,7 @@ pub fn monitors(ctx: &Ctx) -> Vec<Monitor> {
         }
     }
     v.extend(cpu::monitor(ctx));
+    v.extend(cpu::pm_monitor(ctx));
     v.retain(|m| !m.readings.is_empty());
     v
 }
@@ -134,7 +136,18 @@ pub fn cpu_nodes(ctx: &Ctx) -> Vec<Node> {
         r.raw = None; // CPU-Z shows raw codes only in the Hardware Monitors section
     }
     rows.extend(reading_rows(&m.readings));
+    rows.extend(cpu::ratio_fields(ctx));
     rows
+}
+
+pub use amd_pm::FabricClocks;
+
+/// AMD data-fabric (FCLK), memory-controller (UCLK) and memory (MCLK) clocks
+/// in MHz, from the SMU PM table; None without SMU access or for unknown
+/// table versions.
+#[allow(dead_code)] // for the memory/telemetry consumers
+pub fn fabric_clocks(ctx: &Ctx) -> Option<FabricClocks> {
+    cpu::fabric_clocks(ctx)
 }
 
 pub fn collect(ctx: &Ctx) -> Vec<Section> {
