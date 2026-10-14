@@ -474,6 +474,8 @@ pub fn cli(ctx: &Ctx, coremask: Option<u64>) {
         eprintln!("running {} multi thread ({} threads)...", v.label(), cpus.len());
         let mt = Bench::start_pinned(&cpus, v).wait();
         if let (Some(st), Some(mt)) = (st, mt) {
+            crate::history::record(ctx, &st, "");
+            crate::history::record(ctx, &mt, "");
             out.push_str(&format!(
                 "\n[{}]\nSingle thread\t\t{:.1}\nMulti thread\t\t{:.1}\nThreads\t\t\t{}\nMT ratio\t\t{:.2}\n",
                 v.label(),
