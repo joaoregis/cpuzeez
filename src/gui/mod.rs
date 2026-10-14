@@ -5,6 +5,7 @@
 mod bench_tab;
 mod bmp;
 pub mod i18n;
+pub mod overview;
 pub mod theme;
 pub mod widgets;
 
