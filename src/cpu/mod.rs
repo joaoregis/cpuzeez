@@ -95,7 +95,27 @@ fn build(ctx: &Ctx) -> Cpu {
         c.bus_mhz = c.bus_mhz.or((ext > 0).then_some(ext as f64));
         c.max_mhz = c.max_mhz.or((max > 0).then_some(max as f64));
     }
+    if let Some(b) = measured_bclk(ctx, &c) {
+        c.bus_mhz = Some(b);
+    }
     c
+}
+
+/// Real reference clock: the TSC ticks at the base ratio (AMD P0, Intel max
+/// non-turbo), so measured TSC / ratio = BCLK (e.g. 99.96 MHz, not 100).
+/// Needs MSR access; None otherwise or when the result isn't plausible.
+fn measured_bclk(ctx: &Ctx, c: &Cpu) -> Option<f64> {
+    let tsc = clocks::tsc_hz()? / 1e6;
+    let ratio = if c.vendor == "AuthenticAMD" || c.vendor == "HygonGenuine" {
+        let p0 = ctx.hw.rdmsr(0, 0xC001_0064).filter(|r| r >> 63 == 1)?;
+        let (fid, did) = ((p0 & 0xFF) as f64, ((p0 >> 8) & 0x3F) as f64);
+        (did > 0.0).then(|| fid * 2.0 / did)?
+    } else {
+        ((ctx.hw.rdmsr(0, 0xCE)? >> 8) & 0xFF) as f64
+    };
+    let b = tsc / ratio;
+    // Only accept values near the usual reference clocks.
+    [100.0, 133.33].iter().any(|n| (b - n).abs() < n * 0.03).then_some(b)
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
