@@ -50,6 +50,7 @@ struct Pdh {
     perf: isize,
     freq: isize,
     thermal: isize,
+    time: isize,
 }
 
 fn wide(s: &str) -> Vec<u16> {
@@ -60,8 +61,8 @@ fn wide(s: &str) -> Vec<u16> {
 /// so the first call collects twice and later calls diff against the last.
 /// A sample younger than 500 ms is reused: back-to-back callers would
 /// otherwise get a near-empty interval (parked cores then read 0).
-fn sample() -> Vec<(String, [Option<f64>; 3])> {
-    static LAST: Mutex<Option<(Instant, Vec<(String, [Option<f64>; 3])>)>> = Mutex::new(None);
+fn sample() -> Vec<(String, [Option<f64>; 4])> {
+    static LAST: Mutex<Option<(Instant, Vec<(String, [Option<f64>; 4])>)>> = Mutex::new(None);
     let Ok(mut last) = LAST.lock() else { return Vec::new() };
     if let Some((_, v)) = last.as_ref().filter(|l| l.0.elapsed() < Duration::from_millis(500)) {
         return v.clone();
@@ -71,7 +72,7 @@ fn sample() -> Vec<(String, [Option<f64>; 3])> {
     v
 }
 
-fn collect() -> Vec<(String, [Option<f64>; 3])> {
+fn collect() -> Vec<(String, [Option<f64>; 4])> {
     static Q: Mutex<Option<Option<Pdh>>> = Mutex::new(None);
     let Ok(mut g) = Q.lock() else { return Vec::new() };
     let first = g.is_none();
@@ -86,13 +87,13 @@ fn collect() -> Vec<(String, [Option<f64>; 3])> {
             return Vec::new();
         }
     }
-    let mut out: Vec<(String, [Option<f64>; 3])> = Vec::new();
-    for (slot, c) in [p.perf, p.freq, p.thermal].into_iter().enumerate() {
+    let mut out: Vec<(String, [Option<f64>; 4])> = Vec::new();
+    for (slot, c) in [p.perf, p.freq, p.thermal, p.time].into_iter().enumerate() {
         for (name, v) in array(c) {
             match out.iter_mut().find(|e| e.0 == name) {
                 Some(e) => e.1[slot] = Some(v),
                 None => {
-                    let mut a = [None; 3];
+                    let mut a = [None; 4];
                     a[slot] = Some(v);
                     out.push((name, a));
                 }
@@ -118,6 +119,7 @@ fn open() -> Option<Pdh> {
             perf: add(r"\Processor Information(*)\% Processor Performance"),
             freq: add(r"\Processor Information(*)\Processor Frequency"),
             thermal: add(r"\Thermal Zone Information(*)\Temperature"),
+            time: add(r"\Processor Information(*)\% Processor Time"),
         })
     }
 }
@@ -154,7 +156,7 @@ fn array(c: isize) -> Vec<(String, f64)> {
 pub fn cpu_mhz() -> Vec<Option<f64>> {
     let groups = crate::os::cpu_groups();
     let mut v = vec![None; groups.iter().map(|g| g.1 as usize).sum()];
-    for (name, [perf, freq, _]) in sample() {
+    for (name, [perf, freq, _, _]) in sample() {
         let Some((g, n)) = name.split_once(',') else { continue };
         let (Ok(g), Ok(n)) = (g.parse::<u16>(), n.parse::<usize>()) else { continue };
         let off: usize = groups.iter().take_while(|x| x.0 < g).map(|x| x.1 as usize).sum();
@@ -167,10 +169,31 @@ pub fn cpu_mhz() -> Vec<Option<f64>> {
     v
 }
 
+/// OS "% Processor Time": (whole machine, per global logical CPU).
+pub fn cpu_load() -> (Option<f64>, Vec<Option<f64>>) {
+    let groups = crate::os::cpu_groups();
+    let mut v = vec![None; groups.iter().map(|g| g.1 as usize).sum()];
+    let mut total = None;
+    for (name, [_, _, _, t]) in sample() {
+        let Some(t) = t else { continue };
+        if name == "_Total" {
+            total = Some(t);
+            continue;
+        }
+        let Some((g, n)) = name.split_once(',') else { continue };
+        let (Ok(g), Ok(n)) = (g.parse::<u16>(), n.parse::<usize>()) else { continue };
+        let off: usize = groups.iter().take_while(|x| x.0 < g).map(|x| x.1 as usize).sum();
+        if let Some(slot) = v.get_mut(off + n) {
+            *slot = Some(t.clamp(0.0, 100.0));
+        }
+    }
+    (total, v)
+}
+
 pub fn monitors() -> Vec<Monitor> {
     let mut out = Vec::new();
     let mut tz = Monitor::new("ACPI Thermal Zone");
-    for (name, [_, _, k]) in sample() {
+    for (name, [_, _, k, _]) in sample() {
         if let Some(k) = k.filter(|&k| k > 0.0) {
             let label = name.rsplit('.').next().unwrap_or(&name).to_string();
             tz.push(Kind::Temperature, label, k - 273.15, None);

@@ -189,6 +189,15 @@ fn amd(ctx: &Ctx, c: &Cpu, cores: &[usize], m: &mut Monitor) {
     }
 }
 
+/// AMD SMU PPT (W), TDC (A), EDC (A) as (limit, value), when the PM table layout is known.
+pub fn amd_limits(ctx: &Ctx) -> Option<[(f64, f64); 3]> {
+    if !is_amd(crate::cpu::get(ctx)) {
+        return None;
+    }
+    let (ver, t) = ctx.hw.amd_smu_pm_table()?;
+    raphael(ver, &t).map(|l| [l.ppt, l.tdc, l.edc])
+}
+
 /// (limit, value) pairs of the SMU PM table.
 struct PmLimits {
     ppt: (f64, f64),

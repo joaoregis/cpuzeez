@@ -14,6 +14,10 @@ mod superio;
 #[cfg(windows)]
 mod windows;
 
+pub use cpu::amd_limits;
+#[cfg(windows)]
+pub use windows::cpu_load;
+
 use crate::Ctx;
 use crate::report::{Node, Section, f, g, gv, hex, section};
 use std::sync::OnceLock;
@@ -114,6 +118,12 @@ fn os_monitors(ctx: &Ctx) -> Vec<Monitor> {
     return macos::monitors();
     #[allow(unreachable_code)]
     Vec::new()
+}
+
+/// CPU temperatures from the kernel's k10temp/zenpower/coretemp, CPU-Z labels.
+#[cfg(target_os = "linux")]
+pub fn os_cpu_temps() -> Vec<Reading> {
+    hwmon::cpu_temps(std::path::Path::new(hwmon::ROOT))
 }
 
 /// Sensor rows appended to "Processors Information".

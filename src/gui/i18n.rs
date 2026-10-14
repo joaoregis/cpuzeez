@@ -48,10 +48,12 @@ pub fn from_code(code: &str) -> Lang {
 /// The OS UI language.
 pub fn os_lang() -> Lang {
     for var in ["LC_ALL", "LC_MESSAGES", "LANG"] {
-        if let Ok(v) = std::env::var(var) {
-            if !v.is_empty() && v != "C" && v != "POSIX" {
-                return from_code(&v);
-            }
+        if let Ok(v) = std::env::var(var)
+            && !v.is_empty()
+            && v != "C"
+            && v != "POSIX"
+        {
+            return from_code(&v);
         }
     }
     #[cfg(windows)]
