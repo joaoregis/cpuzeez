@@ -13,6 +13,7 @@ authors = ["Joao Regis <22204842+joaoregis@users.noreply.github.com>"]
 
 [dependencies]
 eframe = { version = "0.36", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"], optional = true }
+egui-phosphor = { version = "0.14", optional = true }
 png = { version = "0.18", optional = true }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
@@ -22,7 +23,7 @@ libc = "0.2.190"
 
 [features]
 default = ["gui"]
-gui = ["dep:eframe", "dep:png"]
+gui = ["dep:eframe", "dep:png", "dep:egui-phosphor"]
 
 
 [package.metadata.deb]
