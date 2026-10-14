@@ -37,7 +37,11 @@ jobs:
         shell: pwsh
         run: Compress-Archive -Path target/release/cpuzeez.exe, README.md, LICENSE-MIT, LICENSE-APACHE -DestinationPath "cpuzeez-$env:VER-windows-x64-portable.zip"
       - uses: actions/upload-artifact@v4
-        with: { name: windows, path: "cpuzeez-*" }
+        with:
+          name: windows
+          path: |
+            cpuzeez-*.msi
+            cpuzeez-*-portable.zip
 
   macos:
     runs-on: macos-latest

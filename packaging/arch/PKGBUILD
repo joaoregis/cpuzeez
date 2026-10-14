@@ -12,6 +12,7 @@ optdepends=('libxkbcommon: GUI keyboard input under Wayland/X11'
             'i2c-tools: SPD reading via i2c-dev (run as root)')
 provides=('cpuzeez')
 conflicts=('cpuzeez')
+options=('!debug' '!strip')
 
 package() {
   cd "$startdir/cpuzeez-$pkgver"
