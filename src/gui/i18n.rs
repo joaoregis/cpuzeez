@@ -22,8 +22,8 @@ static CURRENT: AtomicUsize = AtomicUsize::new(0);
 type Table = &'static [(&'static str, &'static str)];
 
 /// (pt-BR, es) tables of every GUI file.
-fn tables() -> [(Table, Table); 1] {
-    [(super::PT_BR, super::ES)]
+fn tables() -> [(Table, Table); 2] {
+    [(super::PT_BR, super::ES), (super::overview::PT_BR, super::overview::ES)]
 }
 
 pub fn set(lang: Lang) {
@@ -48,10 +48,12 @@ pub fn from_code(code: &str) -> Lang {
 /// The OS UI language.
 pub fn os_lang() -> Lang {
     for var in ["LC_ALL", "LC_MESSAGES", "LANG"] {
-        if let Ok(v) = std::env::var(var) {
-            if !v.is_empty() && v != "C" && v != "POSIX" {
-                return from_code(&v);
-            }
+        if let Ok(v) = std::env::var(var)
+            && !v.is_empty()
+            && v != "C"
+            && v != "POSIX"
+        {
+            return from_code(&v);
         }
     }
     #[cfg(windows)]
