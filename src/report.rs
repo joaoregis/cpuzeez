@@ -1,9 +1,9 @@
 //! Report tree shared by every probe, the TXT/HTML/JSON writers and the GUI.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fmt::Write;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Node {
     Field { key: String, value: String },
@@ -11,7 +11,7 @@ pub enum Node {
     Hex { title: String, bytes: Vec<u8> },
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Section {
     pub title: String,
     pub nodes: Vec<Node>,

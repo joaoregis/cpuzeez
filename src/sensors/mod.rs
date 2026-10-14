@@ -6,6 +6,7 @@
 //! (privileged), then whatever the OS exposes without privileges (Linux
 //! hwmon/powercap/cpufreq, Windows PDH counters + power status, Apple SMC).
 
+mod amd_pm;
 mod cpu;
 mod hwmon;
 #[cfg(target_os = "macos")]
@@ -13,6 +14,10 @@ mod macos;
 mod superio;
 #[cfg(windows)]
 mod windows;
+
+pub use cpu::amd_limits;
+#[cfg(windows)]
+pub use windows::cpu_load;
 
 use crate::Ctx;
 use crate::report::{Node, Section, f, g, gv, hex, section};
@@ -101,6 +106,7 @@ pub fn monitors(ctx: &Ctx) -> Vec<Monitor> {
         }
     }
     v.extend(cpu::monitor(ctx));
+    v.extend(cpu::pm_monitor(ctx));
     v.push(chipset(ctx.hw.pch_temp_c(), &v));
     v.retain(|m| !m.readings.is_empty());
     v
@@ -164,6 +170,12 @@ fn os_monitors(ctx: &Ctx) -> Vec<Monitor> {
     Vec::new()
 }
 
+/// CPU temperatures from the kernel's k10temp/zenpower/coretemp, CPU-Z labels.
+#[cfg(target_os = "linux")]
+pub fn os_cpu_temps() -> Vec<Reading> {
+    hwmon::cpu_temps(std::path::Path::new(hwmon::ROOT))
+}
+
 /// Sensor rows appended to "Processors Information".
 pub fn cpu_nodes(ctx: &Ctx) -> Vec<Node> {
     if !ctx.cfg.sensor {
@@ -182,7 +194,18 @@ pub fn cpu_nodes(ctx: &Ctx) -> Vec<Node> {
         r.raw = None; // CPU-Z shows raw codes only in the Hardware Monitors section
     }
     rows.extend(reading_rows(&m.readings));
+    rows.extend(cpu::ratio_fields(ctx));
     rows
+}
+
+pub use amd_pm::FabricClocks;
+
+/// AMD data-fabric (FCLK), memory-controller (UCLK) and memory (MCLK) clocks
+/// in MHz, from the SMU PM table; None without SMU access or for unknown
+/// table versions.
+#[allow(dead_code)] // for the memory/telemetry consumers
+pub fn fabric_clocks(ctx: &Ctx) -> Option<FabricClocks> {
+    cpu::fabric_clocks(ctx)
 }
 
 pub fn collect(ctx: &Ctx) -> Vec<Section> {
