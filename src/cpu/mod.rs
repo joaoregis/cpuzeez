@@ -423,7 +423,7 @@ fn microcode() -> Option<String> {
 fn arm_free_sysctl(name: &str) -> Option<String> {
     let out = crate::os::cmd("sysctl", &["-n", name])?;
     let n: u64 = out.trim().parse().ok()?;
-    Some(format!("0x{n:X}"))
+    (n != 0).then(|| format!("0x{n:X}"))
 }
 
 // ---- AMD / Intel model-specific extras (privileged) ----
@@ -615,13 +615,17 @@ fn processors_info(ctx: &Ctx, c: &Cpu) -> Vec<Node> {
     if let Some(v) = c.info.tjmax_c {
         s.push(f("Tjmax", format!("{v:.1} °C")));
     }
+    let bus = bus_mhz(c);
     if let Some((m, src)) = clocks::core_mhz(ctx, 0) {
         s.push(f("Core Speed", format!("{} ({})", mhz(m), src.label())));
-        let bus = c.bus_mhz.unwrap_or(100.0);
-        s.push(f("Multiplier x Bus Speed", format!("{:.1} x {bus:.1} MHz", m / bus)));
+        if let Some(bus) = bus {
+            s.push(f("Multiplier x Bus Speed", format!("{:.1} x {bus:.1} MHz", m / bus)));
+        }
     }
     // CPU-Z's "base frequency" is the core reference clock (BCLK).
-    s.push(f("Base frequency (cores)", mhz(c.bus_mhz.unwrap_or(100.0))));
+    if let Some(bus) = bus {
+        s.push(f("Base frequency (cores)", mhz(bus)));
+    }
     if let Some(b) = c.base_mhz {
         s.push(f("Rated frequency", mhz(b)));
     }
@@ -672,4 +676,10 @@ pub fn print_core_clock(ctx: &Ctx, id: usize) {
         Some((m, src)) => println!("Core #{id}: {} ({})", mhz(m), src.label()),
         None => eprintln!("core #{id}: no clock source"),
     }
+}
+
+/// Core reference clock: SMBIOS/CPUID when known, else the 100 MHz every x86
+/// platform since Sandy Bridge / Zen uses. ARM has no such bus.
+pub fn bus_mhz(c: &Cpu) -> Option<f64> {
+    c.bus_mhz.or(cfg!(any(target_arch = "x86", target_arch = "x86_64")).then_some(100.0))
 }

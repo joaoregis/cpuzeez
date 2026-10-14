@@ -105,18 +105,21 @@ fn chain(span: Duration) -> f64 {
 
 #[inline(never)]
 fn adds(iters: u64) {
-    // 16 dependent adds per iteration; the counter/branch run in parallel.
+    // 16 dependent register+register adds per iteration; the counter/branch
+    // run in parallel. Register operands matter: Intel Golden Cove and later
+    // fold chains of `add reg, imm` at rename, which would read as ~20 GHz.
     #[cfg(target_arch = "x86_64")]
     unsafe {
         std::arch::asm!(
             "2:",
-            "add {x}, 1", "add {x}, 1", "add {x}, 1", "add {x}, 1",
-            "add {x}, 1", "add {x}, 1", "add {x}, 1", "add {x}, 1",
-            "add {x}, 1", "add {x}, 1", "add {x}, 1", "add {x}, 1",
-            "add {x}, 1", "add {x}, 1", "add {x}, 1", "add {x}, 1",
+            "add {x}, {y}", "add {x}, {y}", "add {x}, {y}", "add {x}, {y}",
+            "add {x}, {y}", "add {x}, {y}", "add {x}, {y}", "add {x}, {y}",
+            "add {x}, {y}", "add {x}, {y}", "add {x}, {y}", "add {x}, {y}",
+            "add {x}, {y}", "add {x}, {y}", "add {x}, {y}", "add {x}, {y}",
             "dec {n}",
             "jnz 2b",
             x = inout(reg) 0u64 => _,
+            y = in(reg) std::hint::black_box(1u64),
             n = inout(reg) iters => _,
             options(nomem, nostack),
         );
@@ -125,13 +128,14 @@ fn adds(iters: u64) {
     unsafe {
         std::arch::asm!(
             "2:",
-            "add {x}, {x}, #1", "add {x}, {x}, #1", "add {x}, {x}, #1", "add {x}, {x}, #1",
-            "add {x}, {x}, #1", "add {x}, {x}, #1", "add {x}, {x}, #1", "add {x}, {x}, #1",
-            "add {x}, {x}, #1", "add {x}, {x}, #1", "add {x}, {x}, #1", "add {x}, {x}, #1",
-            "add {x}, {x}, #1", "add {x}, {x}, #1", "add {x}, {x}, #1", "add {x}, {x}, #1",
+            "add {x}, {x}, {y}", "add {x}, {x}, {y}", "add {x}, {x}, {y}", "add {x}, {x}, {y}",
+            "add {x}, {x}, {y}", "add {x}, {x}, {y}", "add {x}, {x}, {y}", "add {x}, {x}, {y}",
+            "add {x}, {x}, {y}", "add {x}, {x}, {y}", "add {x}, {x}, {y}", "add {x}, {x}, {y}",
+            "add {x}, {x}, {y}", "add {x}, {x}, {y}", "add {x}, {x}, {y}", "add {x}, {x}, {y}",
             "subs {n}, {n}, #1",
             "b.ne 2b",
             x = inout(reg) 0u64 => _,
+            y = in(reg) std::hint::black_box(1u64),
             n = inout(reg) iters => _,
             options(nomem, nostack),
         );

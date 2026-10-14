@@ -279,7 +279,7 @@ impl App {
         let first_of_core = c.logical.iter().filter(|l| l.smt == 0).nth(self.core).map_or(0, |l| l.cpu);
         let core_mhz = live.mhz.get(first_of_core).copied().flatten();
         drop(live);
-        let bus = c.bus_mhz.unwrap_or(100.0);
+        let bus = crate::cpu::bus_mhz(c);
         boxed(
             ui,
             "Processor",
@@ -308,8 +308,8 @@ impl App {
                 &format!("Clocks (Core #{})", self.core),
                 &[
                     ("Core Speed", core_mhz.map(|m| format!("{m:.2} MHz")).unwrap_or_else(|| pi("Core Speed"))),
-                    ("Multiplier", core_mhz.map(|m| format!("x {:.1}", m / bus)).unwrap_or_default()),
-                    ("Bus Speed", format!("{bus:.2} MHz")),
+                    ("Multiplier", core_mhz.zip(bus).map(|(m, b)| format!("x {:.1}", m / b)).unwrap_or_default()),
+                    ("Bus Speed", bus.map(|b| format!("{b:.2} MHz")).unwrap_or_default()),
                     ("Base", c.base_mhz.map(|b| format!("{b:.0} MHz")).unwrap_or_default()),
                 ],
             );

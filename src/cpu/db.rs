@@ -467,6 +467,33 @@ fn some(s: &str) -> Option<String> {
     (!s.is_empty()).then(|| s.to_string())
 }
 
+/// Core iN-GXXX brand generation vs. the client models that generation used.
+/// Unknown brands or models are accepted.
+fn intel_brand_matches_model(brand: &str, model: u32) -> bool {
+    let Some(i) = brand.find('-').filter(|_| brand.contains("Core(TM) i") || brand.contains("Core i")) else {
+        return true;
+    };
+    let digits: String = brand[i + 1..].chars().take_while(char::is_ascii_digit).collect();
+    let generation = match digits.len() {
+        4 => digits[..1].parse::<u32>().ok(),
+        5 => digits[..2].parse::<u32>().ok(),
+        _ => None,
+    };
+    let models: &[u32] = match generation {
+        Some(2) => &[0x2A, 0x2D],
+        Some(3) => &[0x3A, 0x3E],
+        Some(4) => &[0x3C, 0x3F, 0x45, 0x46],
+        Some(5) => &[0x3D, 0x47, 0x4F],
+        Some(6) => &[0x4E, 0x5E, 0x55],
+        Some(7..=9) => &[0x8E, 0x9E, 0x55],
+        Some(10) => &[0x7D, 0x7E, 0x8E, 0xA5, 0xA6, 0x55, 0x66],
+        Some(11) => &[0x8C, 0x8D, 0xA7],
+        Some(12..=14) => &[0x97, 0x9A, 0xB7, 0xBA, 0xBF, 0xBE],
+        _ => return true,
+    };
+    models.contains(&model)
+}
+
 pub fn lookup(vendor: &str, family: u32, model: u32, stepping: u32, brand: &str) -> Info {
     if vendor == "Apple" || brand.starts_with("Apple") {
         return APPLE
@@ -476,6 +503,11 @@ pub fn lookup(vendor: &str, family: u32, model: u32, stepping: u32, brand: &str)
             .unwrap_or_default();
     }
     let t = tag(vendor);
+    if t == 'I' && family == 6 && !intel_brand_matches_model(brand, model) {
+        // Hypervisors (e.g. macOS CI VMs) can mask the CPUID signature while
+        // keeping the real brand string; no data beats wrong data.
+        return Info::default();
+    }
     let clean = clean_brand(brand);
     let (token, suffix) = model_token(&clean);
     let mobile = is_mobile(t, &clean, suffix);
@@ -531,6 +563,17 @@ pub fn clean_brand(brand: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn masked_signature_is_ignored() {
+        // macOS CI VM: i7-8700B brand string, Ivy Bridge signature.
+        assert!(
+            super::lookup("GenuineIntel", 6, 0x3A, 9, "Intel(R) Core(TM) i7-8700B CPU @ 3.20GHz").codename.is_none()
+        );
+        assert!(
+            super::lookup("GenuineIntel", 6, 0x9E, 10, "Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz").codename.is_some()
+        );
+    }
 
     #[test]
     fn brand() {
