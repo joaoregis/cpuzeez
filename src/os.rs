@@ -16,7 +16,15 @@ pub fn read_u64(p: impl AsRef<Path>) -> Option<u64> {
 
 /// stdout of a command, if it ran and succeeded.
 pub fn cmd(prog: &str, args: &[&str]) -> Option<String> {
-    let o = Command::new(prog).args(args).output().ok()?;
+    let mut c = Command::new(prog);
+    c.args(args);
+    #[cfg(windows)]
+    {
+        // CREATE_NO_WINDOW: helpers must not pop up a console from the GUI.
+        use std::os::windows::process::CommandExt;
+        c.creation_flags(0x0800_0000);
+    }
+    let o = c.output().ok()?;
     o.status.success().then(|| String::from_utf8_lossy(&o.stdout).into_owned())
 }
 
@@ -86,6 +94,18 @@ pub fn cpu_groups() -> Vec<(u16, u32)> {
     vec![(0, logical_cpus() as u32)]
 }
 
+/// Double-clicked from Explorer, Windows gives the GUI its own console window;
+/// drop it. Started from a terminal, the console is shared and stays.
+pub fn hide_own_console() {
+    #[cfg(windows)]
+    unsafe {
+        let mut pids = [0u32; 2];
+        if win::GetConsoleProcessList(pids.as_mut_ptr(), 2) == 1 {
+            win::FreeConsole();
+        }
+    }
+}
+
 #[cfg(windows)]
 pub mod win {
     #![allow(non_snake_case)]
@@ -107,6 +127,8 @@ pub mod win {
         pub fn GetSystemFirmwareTable(provider: u32, id: u32, buf: *mut u8, size: u32) -> u32;
         pub fn QueryPerformanceFrequency(f: *mut i64) -> i32;
         pub fn QueryPerformanceCounter(c: *mut i64) -> i32;
+        pub fn GetConsoleProcessList(list: *mut u32, count: u32) -> u32;
+        pub fn FreeConsole() -> i32;
     }
 
     #[link(name = "advapi32")]

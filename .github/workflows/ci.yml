@@ -100,3 +100,33 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build --no-default-features && ./target/debug/cpuzeez | head -n 20
+
+  msi-upgrade:
+    name: MSI install / upgrade / downgrade-block
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release
+      - name: Build two MSIs from the same binary (1.0.0 and 1.0.1)
+        shell: bash
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          for v in 1.0.0 1.0.1; do
+            wix build packaging/windows/cpuzeez.wxs -arch x64 -d Version=$v -d Bin=target/release/cpuzeez.exe -d IconFile=assets/cpuzeez.ico -o cz-$v.msi
+          done
+      - name: Install 1.0.0, upgrade to 1.0.1 in place, refuse downgrade
+        shell: pwsh
+        run: |
+          function Installed { Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object DisplayName -eq 'CpuZeeZ' }
+          $p = Start-Process msiexec -ArgumentList '/i cz-1.0.0.msi /qn /l*v i1.log' -Wait -PassThru; if ($p.ExitCode) { throw "install 1.0.0: $($p.ExitCode)" }
+          (Installed).DisplayVersion
+          $p = Start-Process msiexec -ArgumentList '/i cz-1.0.1.msi /qn /l*v i2.log' -Wait -PassThru; if ($p.ExitCode) { throw "upgrade: $($p.ExitCode)" }
+          $e = @(Installed); "$($e.Count) entry, version $($e.DisplayVersion)"
+          if ($e.Count -ne 1 -or $e[0].DisplayVersion -ne '1.0.1') { throw 'upgrade left the wrong entries' }
+          & "C:\Program Files\CpuZeeZ\cpuzeez.exe" -core=0
+          $p = Start-Process msiexec -ArgumentList '/i cz-1.0.0.msi /qn' -Wait -PassThru
+          if ($p.ExitCode -eq 0) { throw 'downgrade was not blocked' } else { "downgrade blocked ($($p.ExitCode))" }
+          $p = Start-Process msiexec -ArgumentList "/x $($e[0].PSChildName) /qn" -Wait -PassThru; if ($p.ExitCode) { throw "uninstall: $($p.ExitCode)" }
+          if (Installed) { throw 'uninstall left an entry' } else { 'uninstalled cleanly' }

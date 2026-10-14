@@ -2,8 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>cpuzeez</string>
-  <key>CFBundleDisplayName</key><string>cpuzeez</string>
+  <key>CFBundleName</key><string>CpuZeeZ</string>
+  <key>CFBundleDisplayName</key><string>CpuZeeZ</string>
+  <key>CFBundleIconFile</key><string>cpuzeez</string>
   <key>CFBundleIdentifier</key><string>io.github.joaoregis.cpuzeez</string>
   <key>CFBundleExecutable</key><string>cpuzeez</string>
   <key>CFBundlePackageType</key><string>APPL</string>

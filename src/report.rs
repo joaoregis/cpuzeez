@@ -155,7 +155,7 @@ fn hex_rows(out: &mut String, bytes: &[u8], depth: usize) {
 }
 
 pub fn to_txt(report: &[Section]) -> String {
-    let mut out = format!("{} TXT Report\n{RULE}\n\n", crate::NAME);
+    let mut out = format!("{} TXT Report\n{RULE}\n\n", crate::DISPLAY_NAME);
     for s in report {
         let _ = write!(out, "{}\n{RULE}\n\n", s.title);
         txt_nodes(&mut out, &s.nodes, 0);
@@ -201,7 +201,7 @@ table{{border-collapse:collapse}}th{{text-align:left;vertical-align:top;padding:
 th.g{{color:#2c3e66;font-weight:700}}td{{padding:1px 0}}pre{{margin:0;font-size:11px}}\
 @media(prefers-color-scheme:dark){{body{{background:#16181d;color:#ddd}}th{{color:#aaa}}th.g{{color:#8fb0ff}}}}\
 </style></head><body><h1>{n} report</h1>",
-        n = crate::NAME
+        n = crate::DISPLAY_NAME
     );
     for s in report {
         let _ = write!(out, "<h2>{}</h2>", esc(&s.title));

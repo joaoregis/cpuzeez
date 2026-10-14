@@ -1,8 +1,6 @@
 <div align="center">
 
-<img src="packaging/cpuzeez.svg" width="96" alt="cpuzeez icon">
-
-# cpuzeez
+<img src="assets/wordmark.png" width="440" alt="CpuZeeZ">
 
 **A clean-room, open-source, cross-platform reimplementation of CPU-Z's feature set, written in Rust.**
 
@@ -18,7 +16,7 @@ Processor, caches, mainboard, memory, SPD, graphics, sensors, storage, a benchma
 
 ---
 
-> cpuzeez is **not affiliated with CPUID**. CPU-Z is a trademark of CPUID. No CPU-Z code, data tables or text were used. See [Clean-room process](#clean-room-process).
+> CpuZeeZ (`cpuzeez`) is **not affiliated with CPUID**. CPU-Z is a trademark of CPUID. No CPU-Z code, data tables or text were used. See [Clean-room process](#clean-room-process).
 
 ## Contents
 
@@ -27,6 +25,7 @@ Processor, caches, mainboard, memory, SPD, graphics, sensors, storage, a benchma
 - [Install](#install)
 - [Privileged hardware access](#privileged-hardware-access)
 - [Usage](#usage)
+- [Updates](#updates)
 - [Feature coverage](#feature-coverage)
 - [Accuracy: side by side with CPU-Z](#accuracy-side-by-side-with-cpu-z)
 - [Clean-room process](#clean-room-process)
@@ -93,7 +92,7 @@ Every [release](https://github.com/joaoregis/cpuzeez/releases) ships an installe
 |---|---|---|
 | Windows 10/11 x64 | `cpuzeez-<ver>-windows-x64.msi` | Per-machine install, Start-menu shortcut, adds `cpuzeez` to `PATH` |
 | Windows (portable) | `cpuzeez-<ver>-windows-x64-portable.zip` | Just `cpuzeez.exe` |
-| macOS 11+ (Intel and Apple Silicon) | `cpuzeez-<ver>-macos-universal.dmg` | Drag `cpuzeez.app` to Applications |
+| macOS 11+ (Intel and Apple Silicon) | `cpuzeez-<ver>-macos-universal.dmg` | Drag `CpuZeeZ.app` to Applications |
 | macOS (installer) | `cpuzeez-<ver>-macos-universal.pkg` | Installs the app and `/usr/local/bin/cpuzeez` |
 | Debian 12+, Ubuntu 22.04+ | `cpuzeez_<ver>_amd64.deb` / `_arm64.deb` | `sudo apt install ./cpuzeez_<ver>_amd64.deb` |
 | Arch Linux | `cpuzeez-bin-<ver>-1-x86_64.pkg.tar.zst` | `sudo pacman -U cpuzeez-bin-*.pkg.tar.zst` |
@@ -101,13 +100,13 @@ Every [release](https://github.com/joaoregis/cpuzeez/releases) ships an installe
 
 > **Unsigned binaries.** The installers are not code-signed, because that needs a paid certificate.
 > - **Windows:** SmartScreen may say "Windows protected your PC". Click *More info → Run anyway*.
-> - **macOS:** right-click the app → *Open* the first time, or run `xattr -dr com.apple.quarantine /Applications/cpuzeez.app`.
+> - **macOS:** right-click the app → *Open* the first time, or run `xattr -dr com.apple.quarantine /Applications/CpuZeeZ.app`.
 
 With Rust installed you can also run `cargo install --git https://github.com/joaoregis/cpuzeez`.
 
 ## Privileged hardware access
 
-Like CPU-Z, some information can only come from hardware registers: MSRs, the SMBus where the SPD EEPROMs live, the Super I/O sensor chip, and memory-controller registers. CPU-Z installs its own kernel driver for this. **cpuzeez never ships a driver.** It uses what each OS already offers, and simply leaves out what it can't read.
+Like CPU-Z, some information can only come from hardware registers: MSRs, the SMBus where the SPD EEPROMs live, the Super I/O sensor chip, and memory-controller registers. CPU-Z installs its own kernel driver for this. **CpuZeeZ never ships a driver.** It uses what each OS already offers, and simply leaves out what it can't read.
 
 | | Without privileges | With privileges |
 |---|---|---|
@@ -121,7 +120,7 @@ Like CPU-Z, some information can only come from hardware registers: MSRs, the SM
 
 1. Install it: `winget install namazso.PawnIO`, or get the installer from [pawnio.eu](https://pawnio.eu).
 2. Download the official modules ([PawnIO.Modules releases](https://github.com/namazso/PawnIO.Modules/releases), LGPL-2.1). Extract the `.bin` files into a `pawnio-modules` folder next to `cpuzeez.exe`, or into the PawnIO install folder.
-3. Run cpuzeez **as administrator**. *About* (and the report's *Binaries* section) then shows `Hardware access: PawnIO 2.2.0 (modules: …)`.
+3. Run CpuZeeZ **as administrator**. *About* (and the report's *Binaries* section) then shows `Hardware access: PawnIO 2.2.0 (modules: …)`.
 
 Details are in [docs/windows-pawnio.md](docs/windows-pawnio.md).
 
@@ -150,6 +149,7 @@ Run `cpuzeez` with no arguments to open the GUI. Every CPU-Z option works:
 | `-bench` | Single- and multi-threaded benchmark, saved as `<hostname>.txt` |
 | `-core=N` | Print core #N's clock and exit |
 | `-coremask=HEX` | Restrict `-bench` to these logical CPUs |
+| `-checkupdate` | Check GitHub for a newer release |
 | `-screenshots=DIR` | Render every GUI tab to PNG and exit (docs/CI) |
 
 GUI keys, as in CPU-Z:
@@ -174,9 +174,27 @@ Display=1
 UseDisplayAPI=1 ; NVML / NVAPI / ADL
 SMART=1
 TextFontSize=0  ; 0 = default
+CheckUpdates=1  ; update notice at startup
 ```
 
 Debugging a new mainboard: `CPUZEEZ_EC_DUMP=1 cpuzeez -txt=board` adds the Nuvoton EC register page to the report. That makes it easy to map fan and voltage inputs for boards we don't know yet.
+
+## Updates
+
+**Update notice.** At startup CpuZeeZ asks GitHub's releases API whether a newer version exists. That is one anonymous `GET`; nothing about your machine is sent.
+- If there is one, a bar at the top of the window offers **Download**, which fetches the installer for your OS and CPU, and **What's new**.
+- You can also check on demand with *About ▸ Check for updates*, or from a terminal with `cpuzeez -checkupdate`.
+- To turn it off, set `CheckUpdates=0` in `cpuzeez.ini`.
+- It uses the system `curl`, which ships with Windows 10+, macOS and desktop Linux distros.
+
+**Upgrading** means installing the new version over the old one:
+
+| Platform | How |
+|---|---|
+| Windows | Run the new `.msi`. It upgrades in place: same folder, a single entry in *Installed apps*, PATH and shortcut kept. Installing an older version over a newer one is refused. CI installs one MSI, upgrades it and checks the downgrade block on every push. |
+| macOS | Drag the new `CpuZeeZ.app` over the old one, or run the new `.pkg` |
+| Debian / Ubuntu | `sudo apt install ./cpuzeez_<ver>_amd64.deb` |
+| Arch | `sudo pacman -U cpuzeez-bin-<ver>-1-x86_64.pkg.tar.zst` |
 
 ## Feature coverage
 
@@ -227,8 +245,8 @@ Legend:
 
 ### Deliberately not included
 
-- **Online validation** (valid.x86.fr, Validator Statistics). It is CPUID's service, so cpuzeez doesn't submit to it. Share the HTML/JSON report instead.
-- **CPU-Z's benchmark algorithm and reference scores.** They are CPUID's work. cpuzeez's benchmark is its own, and its scores are not comparable with CPU-Z's.
+- **Online validation** (valid.x86.fr, Validator Statistics). It is CPUID's service, so CpuZeeZ doesn't submit to it. Share the HTML/JSON report instead.
+- **CPU-Z's benchmark algorithm and reference scores.** They are CPUID's work. CpuZeeZ's benchmark is its own, and its scores are not comparable with CPU-Z's.
 - **Obsolete targets:** Itanium/IA-64, Windows 9x, and CPUs older than i686. None of today's target OSes run on them.
 
 ## Accuracy: side by side with CPU-Z
@@ -256,7 +274,7 @@ On the reference machine (Ryzen 9 7900X, MSI PRO X870-P WIFI, Windows 11 25H2), 
 
 ## Clean-room process
 
-cpuzeez was built so that no expression of CPU-Z (its code, tables or text) could end up in this project:
+CpuZeeZ was built so that no expression of CPU-Z (its code, tables or text) could end up in this project:
 
 1. **Black-box observation.** CPU-Z's documented `-txt` option produced its own report of a test machine. That report shows what CPU-Z reports and in which format, not how it does it.
 2. **Feature inventory.** The readme and the exported string and RTTI class names of `cpuz.exe`, inspected with [REA](https://github.com/morluto/rea) and Ghidra, list which features and hardware families exist (e.g. "Nuvoton NCT6687 hardware monitor", "XMP profile"). **No function was decompiled or translated.**

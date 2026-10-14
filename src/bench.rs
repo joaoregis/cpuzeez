@@ -459,7 +459,7 @@ pub fn cli(ctx: &Ctx, coremask: Option<u64>) {
         coremask.map(mask_cpus).filter(|c| !c.is_empty()).unwrap_or_else(|| (0..crate::os::logical_cpus()).collect());
     let mut out = format!(
         "{} {} benchmark\n(own workload: scores are not comparable with CPU-Z's)\n\nCPU\t\t\t{}\n",
-        crate::NAME,
+        crate::DISPLAY_NAME,
         crate::VERSION,
         cpu.name
     );

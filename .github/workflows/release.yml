@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
           dotnet tool install --global wix --version 5.0.2
-          wix build packaging/windows/cpuzeez.wxs -arch x64 -d Version="$VER" -d Bin=target/release/cpuzeez.exe -o "cpuzeez-$VER-windows-x64.msi"
+          wix build packaging/windows/cpuzeez.wxs -arch x64 -d Version="$VER" -d Bin=target/release/cpuzeez.exe -d IconFile=assets/cpuzeez.ico -o "cpuzeez-$VER-windows-x64.msi"
       - name: Portable zip
         shell: pwsh
         run: Compress-Archive -Path target/release/cpuzeez.exe, README.md, LICENSE-MIT, LICENSE-APACHE -DestinationPath "cpuzeez-$env:VER-windows-x64-portable.zip"
@@ -58,14 +58,15 @@ jobs:
           set -e
           mkdir -p dist
           lipo -create -output dist/cpuzeez target/aarch64-apple-darwin/release/cpuzeez target/x86_64-apple-darwin/release/cpuzeez
-          APP=dist/cpuzeez.app
+          APP=dist/CpuZeeZ.app
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
           cp dist/cpuzeez "$APP/Contents/MacOS/cpuzeez"
           sed "s/@VERSION@/$VER/g" packaging/macos/Info.plist > "$APP/Contents/Info.plist"
+          cp assets/cpuzeez.icns "$APP/Contents/Resources/cpuzeez.icns"
           # Ad-hoc signature: required for arm64 binaries; not a Developer ID signature.
           codesign --force --deep -s - "$APP"
           mkdir -p dmg && cp -R "$APP" dmg/ && ln -s /Applications dmg/Applications
-          hdiutil create -volname cpuzeez -srcfolder dmg -ov -format UDZO "cpuzeez-$VER-macos-universal.dmg"
+          hdiutil create -volname CpuZeeZ -srcfolder dmg -ov -format UDZO "cpuzeez-$VER-macos-universal.dmg"
           mkdir -p pkgroot/Applications pkgroot/usr/local/bin
           cp -R "$APP" pkgroot/Applications/
           cp dist/cpuzeez pkgroot/usr/local/bin/cpuzeez
@@ -94,7 +95,7 @@ jobs:
           cargo deb --no-build --no-strip -o "cpuzeez_${VER}_${{ matrix.deb }}.deb"
       - name: tarball
         run: |
-          mkdir -p "cpuzeez-$VER" && cp target/release/cpuzeez README.md LICENSE-MIT LICENSE-APACHE packaging/linux/cpuzeez.desktop packaging/cpuzeez.svg "cpuzeez-$VER/"
+          mkdir -p "cpuzeez-$VER" && cp target/release/cpuzeez README.md LICENSE-MIT LICENSE-APACHE packaging/linux/cpuzeez.desktop assets/icon.svg assets/icon-*.png "cpuzeez-$VER/"
           tar -czf "cpuzeez-$VER-linux-${{ matrix.arch }}.tar.gz" "cpuzeez-$VER"
       - uses: actions/upload-artifact@v4
         with:

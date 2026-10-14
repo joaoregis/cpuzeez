@@ -23,12 +23,16 @@ mod software;
 mod spd;
 mod storage;
 mod timers;
+mod update;
 mod usb;
 
 use report::{Section, f, section};
 use std::sync::OnceLock;
 
+/// Binary, package and file-name stem.
 pub const NAME: &str = "cpuzeez";
+/// Name shown to people (window title, About, report headers).
+pub const DISPLAY_NAME: &str = "CpuZeeZ";
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const REPO_URL: &str = env!("CARGO_PKG_REPOSITORY");
 
@@ -50,8 +54,10 @@ impl Ctx {
 
 /// Every report section, in CPU-Z's order.
 pub fn collect(ctx: &Ctx) -> Vec<Section> {
-    let mut r =
-        vec![section("Binaries", vec![f(format!("{NAME} version"), VERSION), f("Hardware access", ctx.hw.name())])];
+    let mut r = vec![section(
+        "Binaries",
+        vec![f(format!("{DISPLAY_NAME} version"), VERSION), f("Hardware access", ctx.hw.name())],
+    )];
     r.extend(cpu::collect(ctx)); // Processors, APICs, Timers, Processors Information, Thread dumps
     r.push(bios::section(ctx));
     r.extend(chipset::collect(ctx)); // Chipset
@@ -78,7 +84,7 @@ enum Out {
 }
 
 const USAGE: &str = "usage: cpuzeez [-txt=FILE] [-html=FILE] [-json=FILE] [-jsontxt=FILE] [-console] \
-[-bench] [-core=ID] [-coremask=HEX]\nWith no output option the GUI opens.";
+[-bench] [-core=ID] [-coremask=HEX] [-checkupdate] [-screenshots=DIR]\nWith no output option the GUI opens.";
 
 fn main() {
     let mut outs = Vec::new();
@@ -92,6 +98,7 @@ fn main() {
             "json" => outs.push(Out::Json(v.into())),
             "jsontxt" => outs.push(Out::JsonTxt(v.into())),
             "console" => console = true,
+            "checkupdate" => return update::cli(),
             "bench" => bench = true,
             "core" => core = v.parse::<usize>().ok(),
             "coremask" => coremask = u64::from_str_radix(v.trim_start_matches("0x"), 16).ok(),
@@ -110,7 +117,10 @@ fn main() {
     }
     if outs.is_empty() && !console {
         #[cfg(feature = "gui")]
-        return gui::run(ctx, shots);
+        {
+            os::hide_own_console();
+            return gui::run(ctx, shots);
+        }
         #[cfg(not(feature = "gui"))]
         {
             let _ = shots;

@@ -71,6 +71,12 @@ struct App {
     shot: Option<Shot>,
     auto: Option<AutoShots>,
     bench: bench_tab::State,
+    /// Newer release found by the background check (None = none / not yet).
+    update: Arc<Mutex<Option<crate::update::Release>>>,
+    update_dismissed: bool,
+    logo: Option<egui::TextureHandle>,
+    /// About > Check for updates: Some(result text) once finished.
+    update_manual: Arc<Mutex<Option<String>>>,
     title_minimized: bool,
 }
 
@@ -87,7 +93,8 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
 
     let opts = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title(crate::NAME)
+            .with_title(crate::DISPLAY_NAME)
+            .with_icon(app_icon())
             .with_inner_size([520.0, 560.0])
             .with_min_inner_size([460.0, 440.0]),
         ..Default::default()
@@ -110,11 +117,19 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
             AutoShots { dir, step: 0, wait: 0, started: std::time::Instant::now() }
         }),
         bench: bench_tab::State::default(),
+        update: Arc::new(Mutex::new(None)),
+        update_dismissed: false,
+        logo: None,
+        update_manual: Arc::new(Mutex::new(None)),
         title_minimized: false,
     };
+    if app.ctx.cfg.check_updates && app.auto.is_none() {
+        let slot = app.update.clone();
+        std::thread::spawn(move || *slot.lock().unwrap() = crate::update::check());
+    }
     let font_size = app.ctx.cfg.text_font_size;
     if let Err(e) = eframe::run_native(
-        crate::NAME,
+        crate::DISPLAY_NAME,
         opts,
         Box::new(move |cc| {
             if font_size > 0.0 {
@@ -163,6 +178,7 @@ impl eframe::App for App {
         self.minimized_title(&ectx);
 
         let report = self.report.lock().unwrap().clone();
+        self.update_banner(ui);
         egui::Panel::top("tabs").show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
@@ -173,7 +189,7 @@ impl eframe::App for App {
         });
         egui::Panel::bottom("status").show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new(format!("{} {}", crate::NAME, crate::VERSION)).weak());
+                ui.label(RichText::new(format!("{} {}", crate::DISPLAY_NAME, crate::VERSION)).weak());
                 ui.menu_button("Tools", |ui| {
                     if ui.button("Clocks").clicked() {
                         *self.show_clocks.lock().unwrap() = true;
@@ -463,7 +479,15 @@ impl App {
     }
 
     fn about_tab(&mut self, ui: &mut egui::Ui, r: &[Section]) {
-        ui.heading(format!("{} {}", crate::NAME, crate::VERSION));
+        let logo = self.logo.get_or_insert_with(|| {
+            let icon = decode_png(include_bytes!("../../assets/icon-128.png")).unwrap_or_default();
+            let img = egui::ColorImage::from_rgba_unmultiplied([icon.width as usize, icon.height as usize], &icon.rgba);
+            ui.ctx().load_texture("logo", img, egui::TextureOptions::LINEAR)
+        });
+        ui.horizontal(|ui| {
+            ui.image((logo.id(), egui::vec2(64.0, 64.0)));
+            ui.heading(RichText::new(format!("{} {}", crate::DISPLAY_NAME, crate::VERSION)).size(26.0));
+        });
         ui.label("Clean-room, open-source reimplementation of CPU-Z's feature set.");
         ui.label(format!("Hardware access: {}", self.ctx.hw.name()));
         let sw = sec(r, "Software")
@@ -488,8 +512,51 @@ impl App {
             }
         });
         ui.separator();
-        ui.hyperlink_to("Project page / updates", crate::REPO_URL);
+        ui.horizontal(|ui| {
+            ui.hyperlink_to("Project page", crate::REPO_URL);
+            if ui.button("Check for updates").clicked() {
+                let slot = self.update_manual.clone();
+                *slot.lock().unwrap() = Some("Checking...".into());
+                let found = self.update.clone();
+                std::thread::spawn(move || {
+                    let r = crate::update::check();
+                    let text = match &r {
+                        Some(r) => format!("{} {} is available.", crate::DISPLAY_NAME, r.version),
+                        None => format!("You have the latest version ({}).", crate::VERSION),
+                    };
+                    *found.lock().unwrap() = r;
+                    *slot.lock().unwrap() = Some(text);
+                });
+            }
+            if let Some(t) = self.update_manual.lock().unwrap().as_deref() {
+                ui.label(t);
+            }
+        });
         ui.label(RichText::new("Not affiliated with CPUID. CPU-Z is a trademark of CPUID.").small().weak());
+    }
+
+    fn update_banner(&mut self, ui: &mut egui::Ui) {
+        if self.update_dismissed {
+            return;
+        }
+        let Some(rel) = self.update.lock().unwrap().clone() else { return };
+        egui::Panel::top("update").show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(format!("{} {} is available", crate::DISPLAY_NAME, rel.version)).strong());
+                ui.label(RichText::new(format!("(you have {})", crate::VERSION)).weak());
+                if let Some(d) = &rel.download
+                    && ui.button("Download").clicked()
+                {
+                    ui.ctx().open_url(egui::OpenUrl::new_tab(d));
+                }
+                if ui.button("What's new").clicked() {
+                    ui.ctx().open_url(egui::OpenUrl::new_tab(&rel.page));
+                }
+                if ui.small_button("x").clicked() {
+                    self.update_dismissed = true;
+                }
+            });
+        });
     }
 
     fn clocks_window(&mut self, ectx: &egui::Context) {
@@ -639,11 +706,11 @@ impl App {
         if min {
             let m = self.live.lock().unwrap().mhz.first().copied().flatten();
             if let Some(m) = m {
-                ectx.send_viewport_cmd(egui::ViewportCommand::Title(format!("{m:.0} MHz - {}", crate::NAME)));
+                ectx.send_viewport_cmd(egui::ViewportCommand::Title(format!("{m:.0} MHz - {}", crate::DISPLAY_NAME)));
             }
             self.title_minimized = true;
         } else if self.title_minimized {
-            ectx.send_viewport_cmd(egui::ViewportCommand::Title(crate::NAME.into()));
+            ectx.send_viewport_cmd(egui::ViewportCommand::Title(crate::DISPLAY_NAME.into()));
             self.title_minimized = false;
         }
     }
@@ -762,4 +829,21 @@ fn write_png(path: &std::path::Path, img: &egui::ColorImage) -> Result<(), Box<d
     let data: Vec<u8> = img.pixels.iter().flat_map(|p| p.to_array()).collect();
     enc.write_header()?.write_image_data(&data)?;
     Ok(())
+}
+
+/// Window/taskbar icon (the same artwork as assets/icon.svg).
+fn app_icon() -> egui::IconData {
+    decode_png(include_bytes!("../../assets/icon-256.png")).unwrap_or_default()
+}
+
+/// RGBA PNG -> pixels (our icons are always 8-bit RGBA).
+fn decode_png(png: &[u8]) -> Option<egui::IconData> {
+    let mut r = png::Decoder::new(std::io::Cursor::new(png)).read_info().ok()?;
+    let mut buf = vec![0; r.output_buffer_size()?];
+    let info = r.next_frame(&mut buf).ok()?;
+    (info.color_type == png::ColorType::Rgba).then_some(egui::IconData {
+        rgba: buf,
+        width: info.width,
+        height: info.height,
+    })
 }

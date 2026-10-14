@@ -1,20 +1,18 @@
 <div align="center">
 
-<img src="packaging/cpuzeez.svg" width="96" alt="ícone do cpuzeez">
-
-# cpuzeez
+<img src="assets/wordmark.png" width="440" alt="CpuZeeZ">
 
 **Reimplementação clean room, open source e multiplataforma das funcionalidades do CPU-Z, escrita em Rust.**
 
 Processador, caches, placa-mãe, memória, SPD, gráficos, sensores, armazenamento, benchmark e relatórios TXT/HTML/JSON completos, no **Windows, Linux (Debian, Ubuntu, Arch, …) e macOS (Intel e Apple Silicon)**.
 
-[English](README.md) · [Download](#instalação) · [Screenshots](#screenshots) · [Cobertura](#cobertura-de-funcionalidades) · [Processo clean room](#processo-clean-room)
+[English](README.md) · [Download](#instalação) · [Atualizações](#atualizações) · [Screenshots](#screenshots) · [Cobertura](#cobertura-de-funcionalidades) · [Processo clean room](#processo-clean-room)
 
 </div>
 
 ---
 
-> O cpuzeez **não tem vínculo com a CPUID**. CPU-Z é marca registrada da CPUID. Nenhum código, tabela ou texto do CPU-Z foi usado. Veja [Processo clean room](#processo-clean-room).
+> O CpuZeeZ (`cpuzeez`) **não tem vínculo com a CPUID**. CPU-Z é marca registrada da CPUID. Nenhum código, tabela ou texto do CPU-Z foi usado. Veja [Processo clean room](#processo-clean-room).
 
 ## Destaques
 
@@ -74,7 +72,7 @@ Cada [release](https://github.com/joaoregis/cpuzeez/releases) traz um instalador
 |---|---|---|
 | Windows 10/11 x64 | `cpuzeez-<ver>-windows-x64.msi` | Instala para todos os usuários, cria atalho no menu Iniciar e adiciona o `cpuzeez` ao `PATH` |
 | Windows (portátil) | `cpuzeez-<ver>-windows-x64-portable.zip` | Só o `cpuzeez.exe` |
-| macOS 11+ (Intel e Apple Silicon) | `cpuzeez-<ver>-macos-universal.dmg` | Arraste o `cpuzeez.app` para Aplicativos |
+| macOS 11+ (Intel e Apple Silicon) | `cpuzeez-<ver>-macos-universal.dmg` | Arraste o `CpuZeeZ.app` para Aplicativos |
 | macOS (instalador) | `cpuzeez-<ver>-macos-universal.pkg` | Instala o app e o `/usr/local/bin/cpuzeez` |
 | Debian 12+, Ubuntu 22.04+ | `cpuzeez_<ver>_amd64.deb` / `_arm64.deb` | `sudo apt install ./cpuzeez_<ver>_amd64.deb` |
 | Arch Linux | `cpuzeez-bin-<ver>-1-x86_64.pkg.tar.zst` | `sudo pacman -U cpuzeez-bin-*.pkg.tar.zst` |
@@ -82,13 +80,13 @@ Cada [release](https://github.com/joaoregis/cpuzeez/releases) traz um instalador
 
 > **Binários sem assinatura.** Os instaladores não têm assinatura de código, porque isso exige certificado pago.
 > - **Windows:** o SmartScreen pode mostrar "O Windows protegeu o computador". Clique em *Mais informações → Executar assim mesmo*.
-> - **macOS:** na primeira vez, clique com o botão direito no app → *Abrir*, ou rode `xattr -dr com.apple.quarantine /Applications/cpuzeez.app`.
+> - **macOS:** na primeira vez, clique com o botão direito no app → *Abrir*, ou rode `xattr -dr com.apple.quarantine /Applications/CpuZeeZ.app`.
 
 Com Rust instalado, também dá para usar `cargo install --git https://github.com/joaoregis/cpuzeez`.
 
 ## Acesso privilegiado ao hardware
 
-Como no CPU-Z, algumas informações só vêm de registradores do hardware: MSRs, o SMBus onde ficam as EEPROMs SPD, o chip Super I/O dos sensores e os registradores do controlador de memória. O CPU-Z instala o próprio driver de kernel para isso. **O cpuzeez nunca traz driver.** Ele usa o que cada sistema já oferece e simplesmente omite o que não consegue ler.
+Como no CPU-Z, algumas informações só vêm de registradores do hardware: MSRs, o SMBus onde ficam as EEPROMs SPD, o chip Super I/O dos sensores e os registradores do controlador de memória. O CPU-Z instala o próprio driver de kernel para isso. **O CpuZeeZ nunca traz driver.** Ele usa o que cada sistema já oferece e simplesmente omite o que não consegue ler.
 
 | | Sem privilégios | Com privilégios |
 |---|---|---|
@@ -102,7 +100,7 @@ O [PawnIO](https://pawnio.eu) é um driver de kernel assinado, open source e pro
 
 1. Instale: `winget install namazso.PawnIO`, ou baixe o instalador em [pawnio.eu](https://pawnio.eu).
 2. Baixe os módulos oficiais ([releases do PawnIO.Modules](https://github.com/namazso/PawnIO.Modules/releases), LGPL-2.1). Extraia os `.bin` numa pasta `pawnio-modules` ao lado do `cpuzeez.exe`, ou na pasta de instalação do PawnIO.
-3. Rode o cpuzeez **como administrador**. A aba *About* (e a seção *Binaries* do relatório) passa a mostrar `Hardware access: PawnIO 2.2.0 (modules: …)`.
+3. Rode o CpuZeeZ **como administrador**. A aba *About* (e a seção *Binaries* do relatório) passa a mostrar `Hardware access: PawnIO 2.2.0 (modules: …)`.
 
 Detalhes em [docs/windows-pawnio.md](docs/windows-pawnio.md).
 
@@ -131,6 +129,7 @@ Rode `cpuzeez` sem argumentos para abrir a interface. Todas as opções do CPU-Z
 | `-bench` | Benchmark com uma e com várias threads, salvo em `<hostname>.txt` |
 | `-core=N` | Mostra o clock do núcleo N e sai |
 | `-coremask=HEX` | Restringe o `-bench` a essas CPUs lógicas |
+| `-checkupdate` | Verifica se há release mais nova no GitHub |
 | `-screenshots=DIR` | Renderiza cada aba em PNG e sai (para docs e CI) |
 
 Atalhos da interface, como no CPU-Z:
@@ -139,6 +138,23 @@ Atalhos da interface, como no CPU-Z:
 - **F7** salva um arquivo `.cvf` (o nosso relatório JSON).
 
 O `cpuzeez.ini` fica ao lado do executável e aceita as mesmas chaves do `cpuz.ini`. O arquivo UTF-16 do próprio CPU-Z é lido sem conversão. Para mapear uma placa-mãe nova, `CPUZEEZ_EC_DUMP=1 cpuzeez -txt=placa` inclui no relatório a página de registradores do EC Nuvoton.
+
+## Atualizações
+
+**Aviso de atualização.** Ao abrir, o CpuZeeZ pergunta à API de releases do GitHub se existe versão mais nova. É um único `GET` anônimo; nada sobre o seu computador é enviado.
+- Se houver, uma faixa no topo da janela oferece **Download**, que baixa o instalador do seu SO e da sua CPU, e **What's new**.
+- Também dá para checar na hora, em *About ▸ Check for updates*, ou no terminal com `cpuzeez -checkupdate`.
+- Para desligar, use `CheckUpdates=0` no `cpuzeez.ini`.
+- O aviso usa o `curl` do sistema, que já vem no Windows 10+, no macOS e nas distros Linux desktop.
+
+**Para atualizar**, basta instalar a versão nova por cima:
+
+| Plataforma | Como |
+|---|---|
+| Windows | Rode o `.msi` novo. Ele atualiza no lugar: mesma pasta, um único item em *Aplicativos instalados*, PATH e atalho mantidos. Instalar uma versão mais antiga por cima de uma mais nova é recusado. O CI instala um MSI, atualiza por cima e confere o bloqueio de downgrade a cada push. |
+| macOS | Arraste o `CpuZeeZ.app` novo por cima do antigo, ou rode o `.pkg` novo |
+| Debian / Ubuntu | `sudo apt install ./cpuzeez_<ver>_amd64.deb` |
+| Arch | `sudo pacman -U cpuzeez-bin-<ver>-1-x86_64.pkg.tar.zst` |
 
 ## Cobertura de funcionalidades
 
@@ -225,4 +241,4 @@ Mantenha a regra clean room: **nada derivado do binário do CPU-Z**.
 
 ## Licença
 
-Licenciado sob [Apache 2.0](LICENSE-APACHE) ou [MIT](LICENSE-MIT), à sua escolha. O PawnIO e seus módulos são projetos separados, com licenças próprias, e não acompanham o cpuzeez.
+Licenciado sob [Apache 2.0](LICENSE-APACHE) ou [MIT](LICENSE-MIT), à sua escolha. O PawnIO e seus módulos são projetos separados, com licenças próprias, e não acompanham o CpuZeeZ.

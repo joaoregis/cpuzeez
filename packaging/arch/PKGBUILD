@@ -18,7 +18,10 @@ package() {
   cd "$startdir/cpuzeez-$pkgver"
   install -Dm755 cpuzeez "$pkgdir/usr/bin/cpuzeez"
   install -Dm644 cpuzeez.desktop "$pkgdir/usr/share/applications/cpuzeez.desktop"
-  install -Dm644 cpuzeez.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/cpuzeez.svg"
+  install -Dm644 icon.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/cpuzeez.svg"
+  for s in 32 48 64 128 256 512; do
+    install -Dm644 "icon-$s.png" "$pkgdir/usr/share/icons/hicolor/${s}x${s}/apps/cpuzeez.png"
+  done
   install -Dm644 LICENSE-MIT "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
   install -Dm644 LICENSE-APACHE "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE"
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"

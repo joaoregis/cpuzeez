@@ -42,7 +42,7 @@ impl Default for Config {
             lpcio: true,
             smart: true,
             xoc: false,
-            check_updates: false,
+            check_updates: true,
             text_font_name: String::new(),
             text_font_size: 0.0,
             text_font_color: 0x0000A0,

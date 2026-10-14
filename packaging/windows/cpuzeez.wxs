@@ -1,13 +1,16 @@
 <!-- WiX v5 per-machine installer: cpuzeez.exe in Program Files, Start menu
-     shortcut, added to PATH. Build: wix build cpuzeez.wxs -d Version=x.y.z -d Bin=path\to\cpuzeez.exe -->
+     shortcut, added to PATH. Build: wix build cpuzeez.wxs -d Version=x.y.z -d Bin=path\to\cpuzeez.exe -d IconFile=assets\cpuzeez.ico -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <Package Name="cpuzeez" Manufacturer="cpuzeez contributors" Version="$(Version)"
+  <Package Name="CpuZeeZ" Manufacturer="CpuZeeZ contributors" Version="$(Version)"
            UpgradeCode="6F2C1A0E-4B7D-4E8A-9C35-2D1B7A9E0C41" Scope="perMachine" Compressed="yes">
-    <MajorUpgrade DowngradeErrorMessage="A newer version of cpuzeez is already installed." />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of CpuZeeZ is already installed." />
     <MediaTemplate EmbedCab="yes" />
+    <Icon Id="AppIcon" SourceFile="$(IconFile)" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/joaoregis/cpuzeez" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="INSTALLFOLDER" Name="cpuzeez">
+      <Directory Id="INSTALLFOLDER" Name="CpuZeeZ">
         <Component Id="MainExe" Guid="*">
           <File Id="CpuzeezExe" Source="$(Bin)" KeyPath="yes" />
           <Environment Id="PathEntry" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="set" System="yes" />
@@ -17,7 +20,7 @@
 
     <StandardDirectory Id="ProgramMenuFolder">
       <Component Id="StartMenuShortcut" Guid="*">
-        <Shortcut Id="AppShortcut" Name="cpuzeez" Description="CPU, mainboard, memory and GPU information"
+        <Shortcut Id="AppShortcut" Name="CpuZeeZ" Description="CPU, mainboard, memory and GPU information" Icon="AppIcon"
                   Target="[INSTALLFOLDER]cpuzeez.exe" WorkingDirectory="INSTALLFOLDER" />
         <RegistryValue Root="HKCU" Key="Software\cpuzeez" Name="installed" Type="integer" Value="1" KeyPath="yes" />
       </Component>
