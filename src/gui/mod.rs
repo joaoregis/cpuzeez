@@ -54,7 +54,7 @@ struct Live {
     /// MHz per logical CPU (index = logical CPU), refreshed in the background.
     mhz: Vec<Option<f64>>,
     source: &'static str,
-    gpus: Vec<crate::gpu::LiveRow>,
+    gpus: Vec<crate::gpu::Live>,
 }
 
 struct App {
@@ -576,19 +576,26 @@ impl App {
                     ui.end_row();
                 }
                 let names = crate::gpu::adapters(&self.ctx);
-                for (idx, core, mem, temp, power, load) in &live.gpus {
-                    let name = names.get(*idx).map_or("GPU", |a| a.name.as_str());
-                    let opt = |v: &Option<f64>, unit: &str| v.map_or(String::new(), |v| format!("{v:.0} {unit}"));
+                for g in &live.gpus {
+                    let name = names.get(g.adapter).map_or("GPU", |a| a.name.as_str());
+                    let opt = |v: Option<f64>, unit: &str| v.map_or(String::new(), |v| format!("{v:.0} {unit}"));
                     ui.label(name);
-                    value(
-                        ui,
-                        &[opt(core, "MHz core"), opt(mem, "MHz mem"), opt(temp, "°C"), opt(power, "W"), opt(load, "%")]
-                            .iter()
-                            .filter(|s| !s.is_empty())
-                            .cloned()
-                            .collect::<Vec<_>>()
-                            .join(", "),
-                    );
+                    let mut s: Vec<String> = [
+                        opt(g.core_mhz, "MHz core"),
+                        opt(g.mem_mhz, "MHz mem"),
+                        opt(g.temp_c, "°C"),
+                        opt(g.hotspot_c, "°C hot spot"),
+                        opt(g.fan_rpm, "RPM"),
+                        opt(g.power_w, "W"),
+                        opt(g.load_pct, "%"),
+                    ]
+                    .into_iter()
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                    if g.throttling() {
+                        s.push("throttling".into());
+                    }
+                    value(ui, &s.join(", "));
                     ui.end_row();
                 }
             });

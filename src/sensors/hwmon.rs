@@ -27,6 +27,7 @@ pub fn display_name(name: &str, cpu_family: u32) -> String {
         "nvme" => "NVMe".into(),
         "drivetemp" => "Drive".into(),
         "acpitz" => "ACPI Thermal Zone".into(),
+        _ if name.starts_with("pch_") => "Intel PCH".into(), // intel_pch_thermal zones: pch_skylake, pch_cannonlake, ...
         _ => name.to_string(),
     }
 }
@@ -176,6 +177,7 @@ mod tests {
         assert_eq!(r.iter().filter(|r| r.kind == Kind::Fan).count(), 1, "fan2_min is not a reading");
         let t = cpu_temps(&root);
         assert_eq!(t.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["Package", "CCD #0"]);
+        assert_eq!(display_name("pch_cannonlake", 0), "Intel PCH");
         let _ = std::fs::remove_dir_all(&root);
     }
 }

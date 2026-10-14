@@ -3,7 +3,7 @@
 //! loaded at run time. Raw FFI against the public Windows SDK headers.
 
 use super::dl::{Lib, sym};
-use super::{Adapter, Link, LiveRow, Perf, Probe, edid};
+use super::{Adapter, Link, Live, Perf, Probe, edid};
 use crate::hw::Bdf;
 use crate::os::win::{reg_str, reg_u64};
 use crate::report::{f, gv};
@@ -341,15 +341,53 @@ fn displays() -> (Option<String>, Vec<Vec<u8>>) {
 }
 
 // ---- NVAPI (public NVAPI SDK, MIT; function IDs from nvapi_interface.h) ----
+// The RAM maker/type, tach and thermal-sensor calls are not in the public
+// header; their QueryInterface IDs and layouts are the ones documented by
+// open-source NVAPI bindings and monitors. All are optional.
+
+type NvU32Fn = unsafe extern "C" fn(*mut c_void, *mut u32) -> i32;
+
+struct NvGpu {
+    h: *mut c_void,
+    bus: u32,
+    /// Sensors NvAPI_GPU_ThermalGetSensors accepts (probed once), 0 = none.
+    thermal_mask: u32,
+}
 
 struct NvApi {
     _lib: Lib,
-    gpus: Vec<(*mut c_void, u32)>, // (handle, bus)
+    gpus: Vec<NvGpu>,
     clocks: Option<unsafe extern "C" fn(*mut c_void, *mut NvClocks) -> i32>,
     arch: Option<unsafe extern "C" fn(*mut c_void, *mut [u32; 4]) -> i32>,
+    ram_maker: Option<NvU32Fn>,
+    ram_type: Option<NvU32Fn>,
+    tach: Option<NvU32Fn>,
+    thermal: Option<unsafe extern "C" fn(*mut c_void, *mut NvThermal) -> i32>,
 }
 unsafe impl Send for NvApi {}
 unsafe impl Sync for NvApi {}
+
+/// NvAPI_GPU_ThermalGetSensors, struct version 2: temperatures in 1/256 °C.
+#[repr(C)]
+struct NvThermal {
+    version: u32,
+    mask: u32,
+    reserved: [i32; 8],
+    temps: [i32; 32],
+}
+
+impl NvThermal {
+    fn new(mask: u32) -> NvThermal {
+        NvThermal { version: std::mem::size_of::<NvThermal>() as u32 | 2 << 16, mask, reserved: [0; 8], temps: [0; 32] }
+    }
+}
+
+/// NV_GPU_RAM_MAKER values.
+const RAM_MAKERS: [&str; 11] =
+    ["", "Samsung", "Qimonda", "Elpida", "Etron", "Nanya", "SK Hynix", "Mosel", "Winbond", "Elite", "Micron"];
+/// NV_GPU_RAM_TYPE values as far as they are documented (newer types come from the GPU table).
+const RAM_TYPES: [&str; 11] =
+    ["", "SDRAM", "DDR", "DDR2", "GDDR2", "GDDR3", "GDDR4", "DDR3", "GDDR5", "LPDDR2", "GDDR5X"];
 
 #[repr(C)]
 struct NvClocks {
@@ -380,19 +418,48 @@ fn nvapi() -> Option<&'static NvApi> {
         if unsafe { enumg(&mut hs, &mut n) } != 0 {
             return None;
         }
+        let thermal: Option<unsafe extern "C" fn(*mut c_void, *mut NvThermal) -> i32> = q!(0x65FE_3AAD);
         let gpus = hs[..(n as usize).min(64)]
             .iter()
             .filter_map(|&h| {
                 let mut b = 0;
-                (unsafe { busid(h, &mut b) } == 0).then_some((h, b))
+                (unsafe { busid(h, &mut b) } == 0).then(|| NvGpu { h, bus: b, thermal_mask: thermal_mask(thermal, h) })
             })
             .collect();
-        Some(NvApi { gpus, clocks: q!(0xDCB6_16C3), arch: q!(0xD826_5D24), _lib: lib })
+        Some(NvApi {
+            gpus,
+            clocks: q!(0xDCB6_16C3),
+            arch: q!(0xD826_5D24),
+            ram_maker: q!(0x42AE_A16A),
+            ram_type: q!(0x57F7_CAAC),
+            tach: q!(0x5F60_8315),
+            thermal,
+            _lib: lib,
+        })
     })
     .as_ref()
 }
 
+/// The driver rejects a mask naming a sensor the GPU lacks, so grow it one
+/// bit at a time; the accepted bits are contiguous from bit 0.
+fn thermal_mask(f: Option<unsafe extern "C" fn(*mut c_void, *mut NvThermal) -> i32>, h: *mut c_void) -> u32 {
+    let Some(f) = f else { return 0 };
+    let n = (0..32).take_while(|&b| unsafe { f(h, &mut NvThermal::new(1 << b)) } == 0).count();
+    ((1u64 << n) - 1) as u32
+}
+
 impl NvApi {
+    fn u32_of(f: Option<NvU32Fn>, h: *mut c_void) -> Option<u32> {
+        let mut v = 0;
+        (unsafe { f?(h, &mut v) } == 0).then_some(v)
+    }
+
+    /// Raw thermal-sensor slots in °C (0 = slot not reported).
+    fn sensors(&self, g: &NvGpu) -> Option<[f64; 32]> {
+        let mut t = NvThermal::new(g.thermal_mask);
+        (g.thermal_mask != 0 && unsafe { self.thermal?(g.h, &mut t) } == 0).then(|| t.temps.map(|v| v as f64 / 256.0))
+    }
+
     /// (graphics MHz, memory MHz) for clock type 0 current / 1 base / 2 boost.
     fn clocks(&self, h: *mut c_void, ty: u32) -> Option<(Option<f64>, Option<f64>)> {
         let f = self.clocks?;
@@ -418,8 +485,36 @@ impl NvApi {
     }
 }
 
+fn nv_gpu<'a>(n: &'a NvApi, a: &Adapter) -> Option<&'a NvGpu> {
+    n.gpus.iter().find(|g| a.pci.is_some_and(|p| p.bus as u32 == g.bus))
+}
+
+/// Hot spot and memory junction slots of the thermal-sensor array per
+/// generation (Ada: 1 and 7, Blackwell: none and 2, older: 1 and 9).
+fn thermal_slots(codename: &str) -> (Option<usize>, usize) {
+    match codename.get(..2) {
+        Some("AD") => (Some(1), 7),
+        Some("GB") => (None, 2),
+        _ => (Some(1), 9),
+    }
+}
+
+fn plausible(t: f64) -> Option<f64> {
+    (t > 0.0 && t <= 150.0).then_some(t)
+}
+
 fn apply_nvapi(a: &mut Adapter, n: &NvApi) {
-    let Some(&(h, _)) = n.gpus.iter().find(|g| a.pci.is_some_and(|p| p.bus as u32 == g.1)) else { return };
+    let Some(g) = nv_gpu(n, a) else { return };
+    let h = g.h;
+    if let Some(v) = NvApi::u32_of(n.ram_maker, h).and_then(|m| RAM_MAKERS.get(m as usize)).filter(|v| !v.is_empty()) {
+        a.mem_vendor = Some(v.to_string());
+    }
+    if a.mem_type.is_none() {
+        a.mem_type = NvApi::u32_of(n.ram_type, h)
+            .and_then(|t| RAM_TYPES.get(t as usize))
+            .filter(|v| !v.is_empty())
+            .map(|v| v.to_string());
+    }
     for (ty, level) in [(1, "Base"), (2, "Boost"), (0, "Current")] {
         if let Some((core, mem)) = n.clocks(h, ty)
             && (core.is_some() || mem.is_some())
@@ -507,7 +602,8 @@ fn adl() -> Option<&'static Adl> {
 }
 
 // ADL_PMLOG_SENSORS: CLK_GFXCLK 1, CLK_MEMCLK 2, CLK_SOCCLK 3, TEMPERATURE_EDGE 8,
-// INFO_ACTIVITY_GFX 19, ASIC_POWER 23, TEMPERATURE_GFX 28, TEMPERATURE_HOTSPOT 27.
+// TEMPERATURE_MEM 9, FAN_RPM 14, FAN_PERCENTAGE 15, INFO_ACTIVITY_GFX 19,
+// INFO_ACTIVITY_MEM 20, ASIC_POWER 23, TEMPERATURE_HOTSPOT 27, TEMPERATURE_GFX 28.
 impl Adl {
     fn sensors(&self, bus: u32) -> Option<Vec<(usize, i32)>> {
         let &(idx, _) = self.gpus.iter().find(|g| g.1 as u32 == bus)?;
@@ -628,17 +724,48 @@ pub fn probe(use_api: bool) -> Probe {
     p
 }
 
-pub fn live(ads: &[Adapter], use_api: bool) -> Vec<LiveRow> {
+pub fn live(ads: &[Adapter], use_api: bool) -> Vec<Live> {
     let mut out = Vec::new();
     if !use_api {
         return out;
     }
     super::nvml_live(ads, &mut out);
+    if let Some(n) = nvapi() {
+        for (i, a) in ads.iter().enumerate().filter(|(_, a)| a.vendor_id == 0x10DE) {
+            let Some(g) = nv_gpu(n, a) else { continue };
+            if !out.iter().any(|l| l.adapter == i) {
+                out.push(Live { adapter: i, ..Default::default() });
+            }
+            let Some(l) = out.iter_mut().find(|l| l.adapter == i) else { continue };
+            if let Some(t) = n.sensors(g) {
+                let (hot, mem) = thermal_slots(a.codename.as_deref().unwrap_or(""));
+                l.hotspot_c = hot.and_then(|s| plausible(t[s]));
+                l.mem_junction_c = plausible(t[mem]);
+                l.temp_c = l.temp_c.or(plausible(t[0]));
+            }
+            if l.fan_rpm.is_none() {
+                l.fan_rpm = NvApi::u32_of(n.tach, g.h).filter(|&r| r > 0).map(f64::from);
+            }
+        }
+    }
     if let Some(adl) = adl() {
         for (i, a) in ads.iter().enumerate().filter(|(_, a)| a.vendor_id == 0x1002) {
             let Some(s) = a.pci.and_then(|b| adl.sensors(b.bus as u32)) else { continue };
-            let temp = sensor(&s, 28).or(sensor(&s, 8));
-            out.push((i, sensor(&s, 1), sensor(&s, 2), temp, sensor(&s, 23), sensor(&s, 19)));
+            let v = |id| sensor(&s, id);
+            out.push(Live {
+                adapter: i,
+                core_mhz: v(1),
+                mem_mhz: v(2),
+                temp_c: v(28).or(v(8)),
+                hotspot_c: v(27),
+                mem_junction_c: v(9),
+                fan_rpm: v(14).filter(|&r| r > 0.0),
+                fan_pct: v(15),
+                power_w: v(23),
+                load_pct: v(19),
+                mem_load_pct: v(20),
+                throttle: None,
+            });
         }
     }
     out
@@ -653,5 +780,31 @@ mod tests {
             Some((0x10DE, 0x2882, 0x51611462, 0xA1))
         );
         assert_eq!(super::parse_hwid("ROOT\\BasicDisplay"), None);
+    }
+
+    #[test]
+    fn nvapi_tables() {
+        assert_eq!(std::mem::size_of::<super::NvThermal>(), 168);
+        assert_eq!(super::RAM_MAKERS[1], "Samsung");
+        assert_eq!(super::thermal_slots("AD107-400"), (Some(1), 7));
+        assert_eq!(super::thermal_slots("GB206"), (None, 2));
+        assert_eq!(super::thermal_slots(""), (Some(1), 9));
+    }
+
+    /// Real NVAPI when present: thermal slots and RAM maker of each GPU.
+    #[test]
+    fn nvapi_live_probe() {
+        let Some(n) = super::nvapi() else { return };
+        for g in &n.gpus {
+            println!(
+                "bus {} mask {:#x} sensors {:?} maker {:?} type {:?} tach {:?}",
+                g.bus,
+                g.thermal_mask,
+                n.sensors(g),
+                super::NvApi::u32_of(n.ram_maker, g.h),
+                super::NvApi::u32_of(n.ram_type, g.h),
+                super::NvApi::u32_of(n.tach, g.h)
+            );
+        }
     }
 }
