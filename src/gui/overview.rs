@@ -96,6 +96,11 @@ fn temp_tone(c: f64, limit: f64) -> Tone {
     }
 }
 
+/// "a · b · c" from the non-empty parts.
+fn join(parts: &[String]) -> String {
+    parts.iter().map(|s| s.trim()).filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" · ")
+}
+
 fn sget(r: &[Section], s: &str, k: &str) -> String {
     report::find_section(r, s).and_then(|x| x.get(k)).unwrap_or_default().to_string()
 }
@@ -226,17 +231,14 @@ pub fn page(ui: &mut Ui, ctx: &Ctx, r: &[Section], tel: &Telemetry, core_mhz: Op
             vec![
                 (tr("Model"), board.trim().to_string()),
                 (tr("Chipset"), chipset("Southbridge")),
-                ("BIOS", format!("{} · {}", sgi(r, "DMI", "DMI BIOS", "version"), sgi(r, "DMI", "DMI BIOS", "date"))),
+                ("BIOS", join(&[sgi(r, "DMI", "DMI BIOS", "version"), sgi(r, "DMI", "DMI BIOS", "date")])),
             ],
         ),
         (
             icon::MEMORY,
             tr("Memory"),
             vec![
-                (
-                    tr("Type"),
-                    format!("{} · {} · {}", chipset("Memory Type"), chipset("Memory Size"), chipset("Channels")),
-                ),
+                (tr("Type"), join(&[chipset("Memory Type"), chipset("Memory Size"), chipset("Channels")])),
                 (tr("Frequency"), chipset("Memory Frequency")),
                 (
                     tr("Timings"),

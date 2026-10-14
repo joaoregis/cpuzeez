@@ -2,15 +2,15 @@
 
 <img src="assets/wordmark.png" width="440" alt="CpuZeeZ">
 
-**A clean-room, open-source, cross-platform reimplementation of CPU-Z's feature set, written in Rust.**
+**A clean-room, open-source, cross-platform reimplementation of CPU-Z's feature set, plus a hardware monitor, written in Rust.**
 
-Processor, caches, mainboard, memory, SPD, graphics, sensors, storage, a benchmark and full TXT/HTML/JSON reports, on **Windows, Linux (Debian, Ubuntu, Arch, …) and macOS (Intel and Apple Silicon)**.
+Processor, caches, mainboard, memory and SPD, graphics, sensors, drives, network and batteries, benchmarks and full TXT/HTML/JSON reports, on **Windows, Linux (Debian, Ubuntu, Arch, …) and macOS (Intel and Apple Silicon)**.
 
 [![CI](https://github.com/joaoregis/cpuzeez/actions/workflows/ci.yml/badge.svg)](https://github.com/joaoregis/cpuzeez/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/joaoregis/cpuzeez)](https://github.com/joaoregis/cpuzeez/releases)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](#license)
 
-[Português](README.pt-BR.md) · [Download](#install) · [Screenshots](#screenshots) · [Feature coverage](#feature-coverage) · [Clean-room process](#clean-room-process)
+[Português](README.pt-BR.md) · [Download](#install) · [Screenshots](#screenshots) · [Changelog](CHANGELOG.md) · [Feature coverage](#feature-coverage) · [Clean-room process](#clean-room-process)
 
 </div>
 
@@ -23,9 +23,9 @@ Processor, caches, mainboard, memory, SPD, graphics, sensors, storage, a benchma
 - [Highlights](#highlights)
 - [Screenshots](#screenshots)
 - [Install](#install)
+- [Updates](#updates)
 - [Privileged hardware access](#privileged-hardware-access)
 - [Usage](#usage)
-- [Updates](#updates)
 - [Feature coverage](#feature-coverage)
 - [Accuracy: side by side with CPU-Z](#accuracy-side-by-side-with-cpu-z)
 - [Clean-room process](#clean-room-process)
@@ -36,57 +36,79 @@ Processor, caches, mainboard, memory, SPD, graphics, sensors, storage, a benchma
 
 ## Highlights
 
-- **The tabs CPU-Z users know:** CPU, Caches, Mainboard, Memory, SPD, Graphics, Bench and About, plus the Tools ▸ Clocks and Tools ▸ Timers windows.
-- **CPU-Z's report layout.** `-txt` produces the same 23 sections in the same order as CPU-Z's register dump, from *Binaries* to *Register Spaces*. `-html` and `-json` produce the same data.
-- **CPU-Z's command line:**
-  - `-txt=`, `-html=`, `-json=`, `-jsontxt=`
-  - `-console`, `-bench`, `-core=`, `-coremask=`
-  - a `cpuzeez.ini` with the same keys as `cpuz.ini`
-- **CPU:**
-  - full CPUID decoding, with the instruction-set list in CPU-Z's notation
-  - per-thread topology (socket → node → CCD → CCX → core → thread), including hybrid P/E/LP cores
-  - cache instances
-  - codename, package, process node, stepping name, TDP and Tjmax for x86 CPUs from 2008 to 2026, plus Apple M1–M5
-- **SPD:** decoders for SDR, DDR, DDR2/FB-DIMM, DDR3, DDR4, DDR5 (UDIMM, RDIMM, SODIMM, CUDIMM, CAMM2…) and LPDDR4/5, with XMP 1.x/2.0/3.0, EXPO, EPP and JEP106 manufacturer names.
-- **Sensors:** Super I/O chips (Nuvoton, ITE, Fintek, Winbond), AMD SMU (PPT/TDC/EDC), RAPL power, DIMM thermal sensors, Linux hwmon, Apple SMC, and GPU sensors (NVML, ADL).
-- **Benchmark:** single- and multi-threaded runs, Scalar, AVX2, AVX-512 and NEON variants, and Stress CPU.
-- **A single native binary**, about 8 MB, with no runtime dependencies. The GUI is drawn with egui (OpenGL).
+- **A modern interface.**
+  - Sidebar navigation and a live **Overview** dashboard: CPU, GPU and chipset temperatures with sparklines, plus health and throttling status.
+  - Card-based pages in light and dark themes, using the OS's own UI font.
+  - Available in English, Português (Brasil) and Español.
+- **Everything CPU-Z reports.**
+  - CPU and topology (CCD/CCX, P/E/LP cores).
+  - Caches, mainboard, chipset and BIOS.
+  - Memory timings: AMD from the UMC, Intel from MCHBAR, Skylake through Arrow Lake.
+  - SPD: DDR to DDR5 and LPDDR4/5, with XMP, EXPO and EPP.
+  - Graphics, PCI, DMI, timers and register dumps.
+  - The same 23 report sections as CPU-Z's `-txt`, in the same order.
+- **A hardware monitor.**
+  - Every sensor with min/max/average, live charts and CSV logging.
+  - Thermal, power and current **throttling detection**.
+  - A **monitored stress test** that stops automatically at a temperature limit.
+  - A tray / menu-bar icon with the CPU temperature, and an always-on-top mini monitor.
+  - Sensor sources:
+    - **CPU:** AMD SMU per-core temperatures, rails and PPT/TDC/EDC; Intel and AMD RAPL; per-core effective clocks.
+    - **GPU:** temperature, hot spot, memory junction, fans, power, load.
+    - **Mainboard:** Super I/O voltages, temperatures and fans, with maps for more than 150 board models.
+    - **Chipset, DIMMs and drives.**
+- **Benchmarks.**
+  - CPU single- and multi-threaded, in Scalar, AVX2, AVX-512 and NEON variants.
+  - **Memory and cache latency and bandwidth.**
+  - A local **benchmark history** to compare before and after an overclock or a BIOS update.
+- **Devices.** Full **SMART** for NVMe and SATA, **battery health** (wear, cycles), and **network adapters** (link, IPs, DNS, driver, Wi-Fi).
+- **Tools.**
+  - **Compare reports**: what changed after a hardware or BIOS change.
+  - Live clocks of every core and GPU, timers, and TXT/HTML/JSON export.
+- **CPU-Z's command line**:
+  - CPU-Z's own flags: `-txt=`, `-html=`, `-json=`, `-console`, `-bench`, `-core=`, `-coremask=`.
+  - New flags: `-sensors`, `-log=`, `-membench`, `-diff=`, `-checkupdate`.
+  - A `cpuzeez.ini` with the same keys as `cpuz.ini`.
+- **One-click updates.** The app finds new releases and installs the right package for your OS, after verifying its SHA-256.
+- **A single native binary**, about 8 MB, with no runtime dependencies.
 
 ## Screenshots
 
-Captured with `cpuzeez -screenshots=DIR`, which renders every tab and saves a PNG. On Windows these come from an AMD Ryzen 9 7900X, MSI PRO X870-P WIFI, 2×16 GB DDR5-6000 and an RTX 4060, running elevated with PawnIO.
+Captured with `cpuzeez -screenshots=DIR`, which renders every page and saves a PNG. The Windows set comes from an AMD Ryzen 9 7900X, MSI PRO X870-P WIFI, 2×16 GB DDR5-6000 and an RTX 4060, running elevated with PawnIO. Serial numbers, MACs and IPs are masked in this mode.
 
 ### Windows 11
 
-| CPU | Caches | Mainboard |
+| Overview | Processor | Memory |
 |---|---|---|
-| ![CPU tab](docs/screenshots/windows/cpu.png) | ![Caches tab](docs/screenshots/windows/caches.png) | ![Mainboard tab](docs/screenshots/windows/mainboard.png) |
-| **Memory** | **SPD** | **Graphics** |
-| ![Memory tab](docs/screenshots/windows/memory.png) | ![SPD tab](docs/screenshots/windows/spd.png) | ![Graphics tab](docs/screenshots/windows/graphics.png) |
-| **Bench** | **Tools ▸ Clocks** | **About** |
-| ![Bench tab](docs/screenshots/windows/bench.png) | ![Clocks window](docs/screenshots/windows/clocks.png) | ![About tab](docs/screenshots/windows/about.png) |
+| ![Overview](docs/screenshots/windows/overview.png) | ![Processor](docs/screenshots/windows/processor.png) | ![Memory and SPD](docs/screenshots/windows/memory.png) |
+| **Sensors** | **Stress test** | **Memory benchmark** |
+| ![Sensors](docs/screenshots/windows/sensors.png) | ![Monitored stress test](docs/screenshots/windows/stress.png) | ![Memory and cache benchmark](docs/screenshots/windows/membench.png) |
+| **Devices** | **Graphics** | **Mainboard** |
+| ![Devices](docs/screenshots/windows/devices.png) | ![Graphics](docs/screenshots/windows/graphics.png) | ![Mainboard](docs/screenshots/windows/mainboard.png) |
+| **Benchmark history** | **Compare reports** | **Settings** |
+| ![History](docs/screenshots/windows/history.png) | ![Compare reports](docs/screenshots/windows/compare.png) | ![Settings](docs/screenshots/windows/settings.png) |
+| **Light theme, Português** | **About, Português** | **Clocks** |
+| ![Overview, light theme in Portuguese](docs/screenshots/windows/overview-light.png) | ![About in Portuguese](docs/screenshots/windows/about-pt.png) | ![Clocks](docs/screenshots/windows/clocks.png) |
 
 ### Linux
 
-Ubuntu 24.04 (WSLg, Wayland), same machine, NVIDIA through NVML:
+Ubuntu 24.04 (WSLg, Wayland) on the same machine, with NVIDIA through NVML:
 
-| CPU | Graphics | Bench |
+| Overview | Sensors | Devices |
 |---|---|---|
-| ![Linux CPU tab](docs/screenshots/linux/cpu.png) | ![Linux Graphics tab](docs/screenshots/linux/graphics.png) | ![Linux Bench tab](docs/screenshots/linux/bench.png) |
+| ![Linux Overview](docs/screenshots/linux/overview.png) | ![Linux Sensors](docs/screenshots/linux/sensors.png) | ![Linux Devices](docs/screenshots/linux/devices.png) |
 
 ### macOS
 
-Captured by CI on GitHub's macOS runners (virtual machines, so some fields are what the hypervisor exposes):
+Captured by CI on GitHub's macOS runners. These are virtual machines, so some fields show what the hypervisor exposes:
 
-| Apple Silicon: CPU | Apple Silicon: Caches | Apple Silicon: Graphics |
+| Apple Silicon: Overview | Apple Silicon: Processor | Intel Mac: Overview |
 |---|---|---|
-| ![macOS ARM CPU tab](docs/screenshots/macos/cpu.png) | ![macOS ARM Caches tab](docs/screenshots/macos/caches.png) | ![macOS ARM Graphics tab](docs/screenshots/macos/graphics.png) |
-| **Intel Mac: CPU** | **Intel Mac: Mainboard** | **Intel Mac: Bench** |
-| ![macOS Intel CPU tab](docs/screenshots/macos-intel/cpu.png) | ![macOS Intel Mainboard tab](docs/screenshots/macos-intel/mainboard.png) | ![macOS Intel Bench tab](docs/screenshots/macos-intel/bench.png) |
+| ![macOS ARM Overview](docs/screenshots/macos/overview.png) | ![macOS ARM Processor](docs/screenshots/macos/processor.png) | ![macOS Intel Overview](docs/screenshots/macos-intel/overview.png) |
 
 ## Install
 
-Every [release](https://github.com/joaoregis/cpuzeez/releases) ships an installer per platform, plus `SHA256SUMS.txt`:
+Every [release](https://github.com/joaoregis/cpuzeez/releases) ships an installer per platform, plus `SHA256SUMS.txt` and the [changelog](CHANGELOG.md) section for that version:
 
 | Platform | File | Notes |
 |---|---|---|
@@ -96,23 +118,50 @@ Every [release](https://github.com/joaoregis/cpuzeez/releases) ships an installe
 | macOS (installer) | `cpuzeez-<ver>-macos-universal.pkg` | Installs the app and `/usr/local/bin/cpuzeez` |
 | Debian 12+, Ubuntu 22.04+ | `cpuzeez_<ver>_amd64.deb` / `_arm64.deb` | `sudo apt install ./cpuzeez_<ver>_amd64.deb` |
 | Arch Linux | `cpuzeez-bin-<ver>-1-x86_64.pkg.tar.zst` | `sudo pacman -U cpuzeez-bin-*.pkg.tar.zst` |
-| Any Linux (glibc 2.35+) | `cpuzeez-<ver>-linux-<arch>.tar.gz` | Binary, `.desktop` file and icon |
+| Any Linux (glibc 2.35+) | `cpuzeez-<ver>-linux-<arch>.tar.gz` | Binary, `.desktop` file and icons |
 
-> **No publisher certificate.** The installers are not signed with a publisher certificate, because that needs a paid certificate. macOS executables use ad-hoc signatures, which do not identify the developer or provide Apple notarization.
+> **No publisher certificate.** The installers are not signed with a publisher certificate, because that needs a paid certificate. macOS executables use ad-hoc signatures, which neither identify the developer nor provide Apple notarization.
 > - **Windows:** SmartScreen may say "Windows protected your PC". Click *More info → Run anyway*.
-> - **macOS:** Gatekeeper may block the app or `.pkg` because Apple cannot verify the developer. After checking your download against `SHA256SUMS.txt`, try opening it once, dismiss the alert, then go to *System Settings → Privacy & Security → Open Anyway* and confirm *Open*. For the `.pkg`, finish installing and repeat for the app if prompted. On macOS 11–12 this is under *System Preferences → Security & Privacy → General*. Right-click → *Open* no longer bypasses this check on macOS 15 and later. See [Apple's instructions](https://support.apple.com/en-us/102445). Ad-hoc signing alone does not remove this warning; releases need a Developer ID signature and Apple notarization for that.
+> - **macOS:** Gatekeeper may block the app or the `.pkg` because Apple cannot verify the developer.
+>   1. Check your download against `SHA256SUMS.txt`.
+>   2. Try to open it once and dismiss the alert.
+>   3. Go to *System Settings → Privacy & Security → Open Anyway* and confirm *Open*.
+>
+>   For the `.pkg`, finish installing and repeat for the app if prompted. On macOS 11–12 this setting is under *System Preferences → Security & Privacy → General*. Right-click → *Open* no longer bypasses this check on macOS 15 and later; see [Apple's instructions](https://support.apple.com/en-us/102445).
 
 With Rust installed you can also run `cargo install --git https://github.com/joaoregis/cpuzeez`.
 
+## Updates
+
+**Update notice.** At startup CpuZeeZ asks GitHub's releases API whether a newer version exists. That is one anonymous `GET`; nothing about your machine is sent.
+- If there is one, a bar offers **Download & install**. It fetches the package for your OS and CPU, verifies its SHA-256 against the release's `SHA256SUMS.txt`, then launches it:
+  - **Windows:** the MSI.
+  - **macOS:** the DMG or PKG.
+  - **Debian/Ubuntu and Arch:** `pkexec` with `apt` or `pacman`.
+  - **Anywhere else:** it opens the download folder.
+- **What's new** opens the release notes.
+- You can also check from *About ▸ Check for updates*, or with `cpuzeez -checkupdate`.
+- To turn the check off, set `CheckUpdates=0` in `cpuzeez.ini`.
+- It uses the system `curl`, which ships with Windows 10+, macOS and desktop Linux distros.
+
+**Upgrading by hand** means installing the new version over the old one:
+
+| Platform | How |
+|---|---|
+| Windows | Run the new `.msi`. It upgrades in place: same folder, a single entry in *Installed apps*, PATH and shortcut kept. Installing an older version over a newer one is refused. CI checks install → upgrade → downgrade block → uninstall on every push. |
+| macOS | Drag the new `CpuZeeZ.app` over the old one, or run the new `.pkg` |
+| Debian / Ubuntu | `sudo apt install ./cpuzeez_<ver>_amd64.deb` |
+| Arch | `sudo pacman -U cpuzeez-bin-<ver>-1-x86_64.pkg.tar.zst` |
+
 ## Privileged hardware access
 
-Like CPU-Z, some information can only come from hardware registers: MSRs, the SMBus where the SPD EEPROMs live, the Super I/O sensor chip, and memory-controller registers. CPU-Z installs its own kernel driver for this. **CpuZeeZ never ships a driver.** It uses what each OS already offers, and simply leaves out what it can't read.
+Like CPU-Z, some information can only come from hardware registers: MSRs, the SMBus where the SPD EEPROMs live, the Super I/O sensor chip, the memory controller and the AMD SMU. CPU-Z installs its own kernel driver for this. **CpuZeeZ never ships a driver.** It uses what each OS already offers, and simply leaves out what it can't read.
 
 | | Without privileges | With privileges |
 |---|---|---|
-| **Windows** | CPU, caches, topology, DMI, BIOS, PCI list and links, chipset names, memory type/size/channels, storage, USB, GPUs, monitors, OS, timers, bench | **+ PawnIO** (run as administrator): real core clocks (APERF/MPERF), P-states, preferred cores, SPD, AMD memory timings, Super I/O voltages/temps/fans, CPU temperatures and power, AMD SMU limits, DIMM temperatures |
-| **Linux** | All of the above, plus hwmon sensors (`k10temp`, `coretemp`, `nct6775`, `it87`, …), cpufreq clocks, RAPL power, and SPD when `ee1004`/`spd5118` are bound | **+ root**: MSRs (`modprobe msr`), full PCI config space, SPD over `i2c-dev`, Super I/O via `/dev/port`, AMD SMN/UMC timings, SMU table via the optional `ryzen_smu` module |
-| **macOS** | CPU (sysctl / CPUID), caches, clusters, SMBIOS (Intel) or IODeviceTree (Apple Silicon), PCI (IOKit), GPU and Metal, displays (EDID), storage, USB, SMC temperatures, fans and power, battery, bench | Nothing more: macOS doesn't allow third-party register access, and Apple Silicon has no SPD, MSRs or Super I/O |
+| **Windows** | CPU, caches, topology, DMI, BIOS, PCI list and links, chipset names, memory type/size/channels, NVMe SMART, network, batteries, GPUs (NVML/NVAPI/ADL) with temperatures and clocks, monitors, OS, timers, benchmarks | **+ PawnIO** (run as administrator): real core clocks (APERF/MPERF), P-states, preferred cores, SPD, memory timings, Super I/O voltages/temperatures/fans, CPU temperatures and power, AMD SMU, Intel PCH temperature, DIMM temperatures, ATA SMART thresholds |
+| **Linux** | All of the above, plus hwmon sensors (`k10temp`, `coretemp`, `nct6775`, `it87`, `amdgpu`…), cpufreq clocks, RAPL power, and SPD when `ee1004`/`spd5118` are bound | **+ root**: MSRs (`modprobe msr`), full PCI config space, SPD over `i2c-dev`, Super I/O via `/dev/port`, AMD SMN/UMC, Intel MCHBAR, SMART via ioctls, and the SMU table via the optional `ryzen_smu` module |
+| **macOS** | CPU (sysctl / CPUID), caches, clusters, SMBIOS (Intel) or IODeviceTree (Apple Silicon), memory size and type, PCI (IOKit), GPU and Metal, displays (EDID), storage, USB, network, SMC temperatures/fans/power, battery health, benchmarks | Nothing more: macOS doesn't allow third-party register access, and Apple Silicon has no SPD, MSRs or Super I/O |
 
 ### Windows: PawnIO
 
@@ -138,7 +187,7 @@ sudo cpuzeez                # full detail; without sudo you still get most of it
 
 ## Usage
 
-Run `cpuzeez` with no arguments to open the GUI. Every CPU-Z option works:
+Run `cpuzeez` with no arguments to open the app. All of CPU-Z's command-line options work, plus a few new ones:
 
 | Option | What it does |
 |---|---|
@@ -146,25 +195,28 @@ Run `cpuzeez` with no arguments to open the GUI. Every CPU-Z option works:
 | `-html=FILE` | HTML report (light/dark aware) |
 | `-json=FILE` / `-jsontxt=FILE` | JSON report (the same tree as TXT) |
 | `-console` | Print the TXT report to stdout |
-| `-bench` | Single- and multi-threaded benchmark, saved as `<hostname>.txt` |
+| `-bench` | CPU benchmark (single and multi thread), saved as `<hostname>.txt` and to the history |
+| `-membench` | Memory and cache latency and bandwidth (`-membench=quick` for a short run) |
+| `-sensors` | Print every sensor once, with its id |
+| `-log=FILE[,SECONDS]` | Log every sensor to CSV each second until SECONDS or Ctrl+C |
+| `-diff=OLD.json,NEW.json` | Compare two reports (`NEW` can be `now`; add `,all` to include live values) |
 | `-core=N` | Print core #N's clock and exit |
 | `-coremask=HEX` | Restrict `-bench` to these logical CPUs |
 | `-checkupdate` | Check GitHub for a newer release |
-| `-screenshots=DIR` | Render every GUI tab to PNG and exit (docs/CI) |
+| `-screenshots=DIR` | Render every page to PNG and exit (docs/CI) |
 
 GUI keys, as in CPU-Z:
-- **F5** saves the current tab as `.bmp`.
+- **F5** saves the current page as `.bmp`.
 - **F6** copies it to the clipboard.
 - **F7** saves a `.cvf` file (our JSON report).
 
-### `cpuzeez.ini`
+### `cpuzeez.ini` and settings
 
-Put it next to the executable. It accepts the same keys as `cpuz.ini`, and CPU-Z's UTF-16 file is read as is:
+`cpuzeez.ini` sits next to the executable and holds the hardware-probe switches. It uses the same keys as `cpuz.ini`, and CPU-Z's own UTF-16 file is read as is:
 
 ```ini
 [CPU-Z]
 PCI=1          ; 0 also disables chipset, SPD and SMBus
-MaxPCIBus=256
 DMI=1
 Sensor=1
 SMBus=1
@@ -173,32 +225,20 @@ LPCIO=1
 Display=1
 UseDisplayAPI=1 ; NVML / NVAPI / ADL
 SMART=1
-TextFontSize=0  ; 0 = default
 CheckUpdates=1  ; update notice at startup
 ```
 
-Debugging a new mainboard: `CPUZEEZ_EC_DUMP=1 cpuzeez -txt=board` adds the Nuvoton EC register page to the report. That makes it easy to map fan and voltage inputs for boards we don't know yet.
+Interface preferences live in the per-user data folder, editable on the **Settings** page:
+- language, theme, tray icon, close to tray;
+- sensor sampling period, graph history, warning temperature.
 
-## Updates
+The folder is `%APPDATA%\CpuZeeZ`, `~/Library/Application Support/CpuZeeZ` or `~/.config/cpuzeez`. It also holds the benchmark history (`history.json`) and the sensor logs.
 
-**Update notice.** At startup CpuZeeZ asks GitHub's releases API whether a newer version exists. That is one anonymous `GET`; nothing about your machine is sent.
-- If there is one, a bar at the top of the window offers **Download**, which fetches the installer for your OS and CPU, and **What's new**.
-- You can also check on demand with *About ▸ Check for updates*, or from a terminal with `cpuzeez -checkupdate`.
-- To turn it off, set `CheckUpdates=0` in `cpuzeez.ini`.
-- It uses the system `curl`, which ships with Windows 10+, macOS and desktop Linux distros.
-
-**Upgrading** means installing the new version over the old one:
-
-| Platform | How |
-|---|---|
-| Windows | Run the new `.msi`. It upgrades in place: same folder, a single entry in *Installed apps*, PATH and shortcut kept. Installing an older version over a newer one is refused. CI installs one MSI, upgrades it and checks the downgrade block on every push. |
-| macOS | Drag the new `CpuZeeZ.app` over the old one, or run the new `.pkg` |
-| Debian / Ubuntu | `sudo apt install ./cpuzeez_<ver>_amd64.deb` |
-| Arch | `sudo pacman -U cpuzeez-bin-<ver>-1-x86_64.pkg.tar.zst` |
+Mapping a new mainboard's sensors: `CPUZEEZ_EC_DUMP=1 cpuzeez -txt=board` adds the raw Super I/O registers and the unmapped inputs to the report. See [docs/boards.md](docs/boards.md).
 
 ## Feature coverage
 
-The full spec, built from CPU-Z's own report and readme, is [FEATURES.md](FEATURES.md).
+The full spec, built from CPU-Z's own report and readme, is [FEATURES.md](FEATURES.md). What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
 
 Legend:
 - ✅ implemented and verified on the reference machine (Windows natively; Linux under WSL2, which only exposes what a VM can see)
@@ -206,91 +246,102 @@ Legend:
 - 🔑 needs admin/root (see above)
 - ❌ not possible on that platform
 
-| CPU-Z feature | Windows | Linux | macOS |
+| Feature | Windows | Linux | macOS |
 |---|---|---|---|
-| Processor name, vendor, family/model/stepping, brand, instruction sets | ✅ | ✅ | ☑️ (ARM: sysctl / MIDR) |
-| Codename, package, process, stepping name, TDP, Tjmax | ✅ | ✅ | ☑️ |
+| Processor name, vendor, family/model/stepping, brand, instruction sets | ✅ | ✅ | ✅ (CI; ARM via sysctl / MIDR) |
+| Codename, package, process, stepping name, TDP, Tjmax | ✅ | ✅ | ✅ (CI) |
 | Topology tree, CCD/CCX, hybrid P/E/LP cores, CPU groups (>64 threads) | ✅ | ✅ | ☑️ (perf levels) |
-| Caches: size, ways, line, instances, sharing | ✅ | ✅ | ☑️ |
-| Thread dumps: raw CPUID per thread | ✅ | ✅ | ☑️ (x86) |
-| MSR dump, P-states (FID/VID), preferred cores (CPPC) | ✅🔑 | ☑️🔑 | ❌ |
-| Core clock: APERF/MPERF, or OS, or measured | ✅🔑 / measured | ✅ measured / ☑️ cpufreq | ☑️ measured |
-| AMD SMU: version, PPT/TDC/EDC | ✅🔑 | ☑️🔑 (`ryzen_smu`) | ❌ |
+| Caches: size, ways, line, instances, sharing | ✅ | ✅ | ✅ (CI) |
+| Thread dumps: raw CPUID and MSRs per thread | ✅ (MSR 🔑) | ✅ (MSR 🔑) | ☑️ (x86) |
+| P-states, preferred cores (CPPC), measured BCLK | ✅🔑 | ☑️🔑 | ❌ |
+| Core clock: APERF/MPERF, or OS, or measured | ✅🔑 / measured | ✅ measured / ☑️ cpufreq | ✅ measured (CI) |
+| AMD SMU: per-core/L3/SoC temperatures, VDDCR rails, PPT/TDC/EDC, FCLK/UCLK/MCLK, Fmax, per-core max ratio | ✅🔑 (Zen 4 verified) | ☑️🔑 (`ryzen_smu`) | ❌ |
 | CPU temperatures, VID, package/core power (RAPL), per-core clocks | ✅🔑 | ☑️ hwmon / 🔑 | ☑️ SMC |
 | Timers: ACPI, perf, system | ✅ | ✅ | ☑️ |
 | BIOS: UEFI, date, AGESA / microcode | ✅ | ✅ | ☑️ (iBoot) |
 | DMI / SMBIOS: every type CPU-Z shows | ✅ | ☑️🔑 (partial without root) | ☑️ Intel / synthesized on ARM |
-| Chipset: northbridge/southbridge + revision, graphic interface link | ✅ | ☑️ | ☑️ |
-| Memory type, size, channels | ✅ | ✅ | ☑️ |
-| Memory frequency, CL/tRCD/tRP/tRAS/tRC, ratio | ✅🔑 AMD (Intel: planned²) | ☑️🔑 AMD (Intel: planned²) | ❌ |
+| Chipset: northbridge/southbridge + revision, bus specification, graphic interface link | ✅ | ☑️ | ☑️ |
+| Memory type, size, channels | ✅ | ✅ | ☑️ (incl. Apple Silicon) |
+| Memory frequency, CL/tRCD/tRP/tRAS/tRC/tRFC, CR, uncore/fabric | ✅🔑 AMD · ☑️🔑 Intel | ☑️🔑 | ❌ |
 | SPD: all fields, JEDEC/XMP/EXPO tables, hex dump | ✅🔑 | ☑️ (`spd5118`/`ee1004`) / 🔑 | ❌ (soldered memory) |
 | DIMM temperatures | ✅🔑 | ☑️ | ❌ |
 | LPCIO: Super I/O vendor, model, IDs, config registers | ✅🔑 | ☑️🔑 | ❌ |
-| Hardware monitors: voltages, temperatures, fans (Super I/O) | ✅🔑 (Nuvoton EC verified) | ☑️ hwmon | ☑️ SMC |
+| Mainboard sensors: voltages, temperatures, fans | ✅🔑 (NCT6687 verified) | ☑️ hwmon | ☑️ SMC |
+| Chipset temperature | ✅🔑 (AMD via Super I/O) · ☑️ Intel PCH | ☑️ | ❌ |
+| GPU: specs, clocks, power/thermal limits, VRAM and vendor, link, driver | ✅ (NVML, NVAPI, ADL, DXGI) | ✅ (DRM, NVML) | ☑️ (Metal) |
+| GPU sensors: temperature, hot spot, memory junction, fans, power, load, throttling | ✅ | ☑️ | ❌ |
+| Monitors (EDID) | ✅ | ✅ | ☑️ |
 | PCI device list, IDs, names, links | ✅ | ✅ | ☑️ |
 | PCI capabilities decode and config hex dump | ❌¹ | ✅ (full with root) | ❌ |
-| Storage: model, serial, firmware, capacity, bus, link, RPM, SMART, volumes | ✅ | ✅ | ☑️ |
-| USB devices | ✅ | ☑️ | ☑️ |
-| Graphics: GPU specs, clocks, power/thermal limits, VRAM, link, driver | ✅ (NVML, NVAPI, ADL, DXGI) | ✅ (DRM, NVML) | ☑️ (Metal) |
-| Monitors (EDID) | ✅ | ✅ | ☑️ |
-| NPU / AI devices | ✅ | ☑️ (`/sys/class/accel`) | ☑️ (ANE) |
+| Storage: model, serial, firmware, capacity, bus, link, volumes | ✅ | ✅ | ☑️ |
+| SMART: health, attributes, temperature, wear, hours, data read/written | ✅ (ATA thresholds 🔑) | ☑️🔑 | ☑️ (`smartctl` if installed) |
+| Battery health: design vs full capacity, wear, cycles | ☑️ | ☑️ | ☑️ |
+| Network adapters: link, MAC, IPs, gateway, DNS, driver, Wi-Fi | ✅ | ✅ | ☑️ |
+| USB devices, NPU / AI devices | ✅ | ✅ | ☑️ |
 | Software: OS, edition, build, install date, DirectX / Vulkan / Metal | ✅ | ✅ | ☑️ |
-| Register spaces | ✅ | ☑️ | ❌ |
-| TXT / HTML / JSON reports, console, `-core`, `-coremask` | ✅ | ✅ | ☑️ |
-| Bench (ST/MT, threads, SIMD variant, core set), Stress CPU | ✅ | ✅ | ☑️ |
-| Clocks and Timers windows, F5/F6/F7, minimized clock title | ✅ | ✅ | ☑️ |
+| Sensors page, CSV log, throttling detection, tray / mini monitor | ✅ | ✅ (mini monitor; tray needs a StatusNotifier host) | ☑️ |
+| CPU benchmark, memory/cache benchmark, history, stress test | ✅ | ✅ | ✅ (CI) |
+| Reports (TXT/HTML/JSON), compare reports, F5/F6/F7 | ✅ | ✅ | ✅ (CI) |
 
 ¹ No PawnIO module offers generic PCI configuration access on Windows. Device IDs, names and links still come from the OS.
-² MCHBAR register access is already implemented (PawnIO `IntelMCHBAR`, Linux `/dev/mem`). What's missing is the per-generation timing-register decode.
 
 ### Deliberately not included
 
 - **Online validation** (valid.x86.fr, Validator Statistics). It is CPUID's service, so CpuZeeZ doesn't submit to it. Share the HTML/JSON report instead.
-- **CPU-Z's benchmark algorithm and reference scores.** They are CPUID's work. CpuZeeZ's benchmark is its own, and its scores are not comparable with CPU-Z's.
+- **CPU-Z's benchmark algorithm and reference scores.** They are CPUID's work. CpuZeeZ's benchmarks are its own, and their scores are not comparable with CPU-Z's.
 - **Obsolete targets:** Itanium/IA-64, Windows 9x, and CPUs older than i686. None of today's target OSes run on them.
 
 ## Accuracy: side by side with CPU-Z
 
-On the reference machine (Ryzen 9 7900X, MSI PRO X870-P WIFI, Windows 11 25H2), `cpuzeez -txt` was compared section by section with `cpuz.exe -txt`:
+On the reference machine (Ryzen 9 7900X, MSI PRO X870-P WIFI, Windows 11 25H2), `cpuzeez -txt` was compared section by section with `cpuz.exe -txt`.
 
-- **Same output as CPU-Z:**
-  - **CPU and topology:**
-    - APIC topology tree (2 CCDs, APIC IDs 0–27), instruction sets (`MMX (+), SSE … AVX512 (DQ, BW, VL, CD, IFMA, VBMI, VBMI2, VNNI, BITALG, VPOPCNTDQ, BF16), FMA3, SHA`).
-    - Caches (`12 x 32 KB`, `12 x 1024 KB`, `2 x 32 MB`), microcode `0xA601209`, codename/package/stepping/TDP (`Raphael`, `Socket AM5 (LGA1718)`, `RPL-B2`, `170 W`).
-    - P-states (`FID 0x8BC - VID 0xC9 (47.00x - 1.256 V)`), preferred cores (`2 (#0, #1)`), SMU version (`84.79.225`), PPT/TDC/EDC.
-  - **Firmware and memory:**
-    - BIOS/AGESA (`ComboAm5PI 1.2.0.2b`).
-    - Memory timings (DDR5, `30-36-36-76`, tRC 112, 1:30).
-    - **SPD:** the 2 × 1024 raw bytes read live are byte-identical to CPU-Z's, and so is every decoded field and the JEDEC/XMP 3.0/EXPO tables.
-  - **Sensors and buses:**
-    - LPCIO registers, NCT6687 voltages and fans.
-    - DMI tables, storage, USB, GPUs (RTX 4060 `AD107-400`, 3072 cores, limits, clocks), monitor EDID, OS line.
-  - **Timers:** `3.580 MHz`, `10.000 MHz`, `1.000 KHz`.
-- **Intentional differences:**
-  - **BIOS ROM size:** we print `32768 KB`. The SMBIOS extended ROM-size field says 32 MB; CPU-Z ignores it and shows `16384 KB`.
-  - **RTX 4060 TMUs:** we print `96`, the public spec (24 SMs × 4); CPU-Z prints 192.
-  - **Memory frequency:** we print `3000.0 MHz`. We use the nominal 100 MHz reference clock, while CPU-Z measures it (`2998.8 MHz` at 99.96 MHz).
-- **Not yet decoded:** Zen 4 SMU per-core/L3/SoC temperatures and VDDCR rails, per-core max ratio, Uncore frequency, PCIe "Bus Specification" on Windows, and Intel memory timings.
+**Same output as CPU-Z:**
+- **CPU and topology:**
+  - APIC tree, instruction sets, caches, microcode.
+  - Codename, package and stepping (`Raphael`, `Socket AM5 (LGA1718)`, `RPL-B2`).
+  - P-states (`47.00x - 1.256 V`), preferred cores.
+- **AMD SMU:**
+  - Version `84.79.225`, `PMTV 00540004`, PPT/TDC/EDC 230 W / 160 A / 225 A, `Max Frequency 5700 MHz`.
+  - VDDCR_VDD/SOC/MISC rails and the per-core / L3 / SoC temperature layout.
+- **Chipset and memory:**
+  - `Bus Specification PCI-Express 5.0 (32.0 GT/s)`.
+  - DDR5 timings `30-36-36-76`, tRC 112, ratio 1:30, `Memory Max Frequency 2800.0 MHz`.
+- **SPD:** the 2 × 1024 bytes read live are byte-identical to CPU-Z's, and so is every decoded field.
+- **Super I/O:** the NCT6687 registers, voltages, temperatures and fans (`Fan 15 SYS 2`, `Fan 16 SYS 1`).
+- **DMI, storage, USB, GPUs and software:**
+  - RTX 4060 `AD107-400`, 3072 cores, memory vendor `Samsung`, limits and clocks.
+  - The monitor EDID and the OS line.
+- **Timers.**
+
+**Intentional differences:**
+- **BIOS ROM size:** we print `32768 KB`, the SMBIOS extended ROM-size field; CPU-Z ignores it and shows `16384 KB`.
+- **RTX 4060 TMUs:** we print `96`, the public spec (24 SMs × 4); CPU-Z prints 192.
+- **Live values** depend on the moment: temperatures, clocks and per-core max ratios. Ratios are measured the way CPU-Z describes them (each core loaded alone), so they vary with temperature.
+- **Reference clock:** measured from TSC ÷ base ratio. It gives `Memory Frequency 2999.9 MHz` where CPU-Z shows `2998.8 MHz`.
+
+**Not decoded:**
+- The fused limits CPU-Z gets from an SMU mailbox call (`fused: …`) and the PBO scalar.
+- PCI capability decoding on Windows.
 
 ## Clean-room process
 
 CpuZeeZ was built so that no expression of CPU-Z (its code, tables or text) could end up in this project:
 
 1. **Black-box observation.** CPU-Z's documented `-txt` option produced its own report of a test machine. That report shows what CPU-Z reports and in which format, not how it does it.
-2. **Feature inventory.** The readme and the exported string and RTTI class names of `cpuz.exe`, inspected with [REA](https://github.com/morluto/rea) and Ghidra, list which features and hardware families exist (e.g. "Nuvoton NCT6687 hardware monitor", "XMP profile"). **No function was decompiled or translated.**
-3. **Spec.** Both were condensed into [FEATURES.md](FEATURES.md): what is shown, per OS, with feasibility.
+2. **Feature inventory.** The readme and the exported string and RTTI class names of `cpuz.exe`, inspected with [REA](https://github.com/morluto/rea) and Ghidra, list which features and hardware families exist. **No function was decompiled or translated.**
+3. **Spec.** Both were condensed into [FEATURES.md](FEATURES.md).
 4. **Implementation from public sources only:**
-   - CPU and firmware: Intel SDM, AMD APM/PPR, DMTF SMBIOS.
+   - CPU and firmware: Intel SDM and datasheets, AMD APM/PPR, DMTF SMBIOS.
    - Memory: JEDEC SPD annexes, JEP106, Intel XMP and AMD EXPO layouts.
    - Buses and displays: PCI/PCIe specs, VESA EDID.
+   - Drives: NVMe and ATA SMART.
    - Chips and GPUs: chip datasheets, NVML/ADL/DXGI/IOKit docs, Linux sysfs ABIs.
-   - CPU/GPU spec tables: vendors' public pages.
-   - The implementers worked from the spec, not from the binary.
-5. **Verification against behaviour.** The output was compared with CPU-Z's report on the same hardware (see above). Where they differ, we follow the public spec.
+   - Community documentation for undocumented-but-public interfaces (AMD PM table cell layouts, NVAPI function IDs, board sensor labels), used as facts and rewritten in our own code.
+5. **Verification against behaviour.** The output was compared with CPU-Z's report on the same hardware. Where they differ, we follow the public spec.
 
 ## Building from source
 
-Requires Rust 1.89+ (`rustup`). There are no system libraries to install, on Linux included: the GUI loads X11/Wayland/OpenGL at runtime.
+Requires Rust 1.89+ (`rustup`). There are no system libraries to install, on Linux included: the GUI loads X11/Wayland/OpenGL at runtime, and the Linux tray icon talks D-Bus in pure Rust.
 
 ```bash
 git clone https://github.com/joaoregis/cpuzeez
@@ -307,42 +358,46 @@ cargo build --release --no-default-features
 
 The last command builds the CLI only, without the GUI.
 
-CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)):
+CI ([`ci.yml`](.github/workflows/ci.yml)):
 - **Native runners:** Windows, Ubuntu x64/arm64 and macOS arm64/x64. Each job runs rustfmt, clippy and the tests, then the binary itself (every report format, `-core`, `-bench`, GUI screenshots).
 - **Containers:** Debian, Ubuntu 22.04 and Arch Linux.
+- **MSI test:** install, upgrade in place, downgrade block and uninstall.
 
-Release ([`.github/workflows/release.yml`](.github/workflows/release.yml)): pushing a `v*` tag builds the MSI (WiX), the DMG/PKG (universal binary), the `.deb` (cargo-deb) and the Arch package (makepkg), and attaches them to a GitHub release.
+Release ([`release.yml`](.github/workflows/release.yml)): pushing a `v*` tag builds the MSI (WiX), the DMG/PKG (universal binary, signatures verified), the `.deb` (cargo-deb) and the Arch package (makepkg). It attaches them to a GitHub release whose notes are this version's [CHANGELOG](CHANGELOG.md) section.
 
 ## Architecture
 
 ```
 src/
-├── main.rs        CLI (CPU-Z options), Ctx (config + hardware backend + caches), section order
-├── report.rs      report tree (Field / Group / Hex) → TXT, HTML, JSON
-├── config.rs      cpuzeez.ini (same keys as cpuz.ini)
-├── hw/            privileged access: trait Hw { rdmsr, pci_read, io, smn, smbus, smu, mchbar }
-│   ├── windows.rs   PawnIO backend
-│   └── linux.rs     /dev/cpu/*/msr, sysfs PCI, /dev/port, i2c-dev, ryzen_smu, /dev/mem
+├── main.rs        CLI (CPU-Z options + -sensors/-log/-membench/-diff), Ctx, section order
+├── report.rs      report tree (Field / Group / Hex) → TXT, HTML, JSON (and back, for diffs)
+├── config.rs      cpuzeez.ini              settings.rs   per-user GUI preferences + data folder
+├── hw/            privileged access: trait Hw { rdmsr, pci_read, io, smn, smbus, smu, mchbar, pch }
 ├── cpu/           CPUID (x86.rs), ARM (arm.rs), clocks, names database (db.rs)
-├── smbios.rs      SMBIOS parser + DMI section          bios.rs     BIOS section
-├── pci/           enumeration per OS + capability decoder     chipset.rs  NB/SB, memory timings
-├── spd/           SPD decoders, JEP106, SMBus/SPD5118 reading
-├── sensors/       Super I/O, CPU (SMN/RAPL/SMU), hwmon, SMC, PDH
-├── gpu/           DXGI/NVML/NVAPI/ADL/DRM/Metal, GPU spec table, EDID      npu.rs
-├── storage.rs  usb.rs  software.rs  timers.rs  bench.rs
-└── gui/           egui front-end (tabs, Clocks/Timers, F5/F6/F7, -screenshots)
+├── smbios.rs  bios.rs  chipset.rs (+ chipset/intel.rs, chipset/macos.rs)  pci/  spd/
+├── sensors/       Super I/O + board maps, AMD SMU (amd_pm.rs), RAPL, hwmon, SMC, PDH
+├── telemetry.rs   sampler: series, min/max/avg, CSV, throttling detection
+├── gpu/  npu.rs  storage.rs (+ storage/smart.rs)  battery.rs  network.rs  usb.rs  software.rs
+├── bench.rs  membench.rs  history.rs  diff.rs  timers.rs  update.rs
+└── gui/           egui front-end:
+                   theme.rs + widgets.rs  design system
+                   pages: overview, sensors, stress, devices, tools, settings_ui
+                   tray.rs, plot.rs, i18n.rs (en / pt-BR / es)
 ```
 
-Every probe returns report sections. The GUI, the TXT/HTML/JSON writers and `-console` all read that same tree, so the GUI and the report always agree.
+Every probe returns report sections. The GUI, the TXT/HTML/JSON writers and `-console` all read that same tree, so the app and the report always agree.
 
 ## Contributing
 
 Issues and PRs are welcome, especially:
-- **New mainboards:** attach `CPUZEEZ_EC_DUMP=1 cpuzeez -txt=board` output, plus your board's sensor labels.
+- **New mainboards:** use the [board sensors issue template](.github/ISSUE_TEMPLATE/board-sensors.yml) with `CPUZEEZ_EC_DUMP=1 cpuzeez -txt=board` output.
 - **CPUs and GPUs missing from the tables** (`src/cpu/db.rs`, `src/gpu/db.rs`): cite a public source.
-- **Reports from macOS and from Intel systems.**
+- **Reports from real macOS hardware and from Intel systems**, especially for the Intel memory-timing decoders.
+- **Translations** (`PT_BR` / `ES` tables at the end of each `src/gui/*.rs` file; adding a language is one table per file).
 
 Please keep the clean-room rule: **don't contribute anything derived from CPU-Z's binary**. Work from public documentation.
+
+Thanks to [@vinicius741](https://github.com/vinicius741) for the macOS signing and Apple Silicon memory fixes ([#1](https://github.com/joaoregis/cpuzeez/pull/1), [#2](https://github.com/joaoregis/cpuzeez/pull/2)).
 
 ## License
 

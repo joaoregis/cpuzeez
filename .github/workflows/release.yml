@@ -153,9 +153,18 @@ jobs:
         with: { path: dist, merge-multiple: true }
       - name: Checksums
         run: cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Release notes (this version's CHANGELOG section + install notes)
+        run: |
+          VER=${TAG#v}
+          awk -v v="## [$VER]" 'index($0, v) == 1 { on = 1; next } on && /^## \[/ { exit } on' CHANGELOG.md > notes.md
+          test -s notes.md || { echo "CHANGELOG.md has no section for $VER"; exit 1; }
+          printf '\n---\n\n' >> notes.md
+          cat packaging/RELEASE_NOTES.md >> notes.md
+          printf '\nFull changelog: [CHANGELOG.md](https://github.com/%s/blob/%s/CHANGELOG.md)\n' "$GITHUB_REPOSITORY" "$TAG" >> notes.md
+          cat notes.md
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$TAG" dist/* --title "CpuZeeZ ${TAG#v}" --notes-file packaging/RELEASE_NOTES.md --verify-tag || \
-          gh release upload "$TAG" dist/* --clobber
+          gh release create "$TAG" dist/* --title "CpuZeeZ ${TAG#v}" --notes-file notes.md --verify-tag || \
+          { gh release upload "$TAG" dist/* --clobber && gh release edit "$TAG" --notes-file notes.md; }
