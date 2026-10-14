@@ -78,9 +78,9 @@ Cada [release](https://github.com/joaoregis/cpuzeez/releases) traz um instalador
 | Arch Linux | `cpuzeez-bin-<ver>-1-x86_64.pkg.tar.zst` | `sudo pacman -U cpuzeez-bin-*.pkg.tar.zst` |
 | Qualquer Linux (glibc 2.35+) | `cpuzeez-<ver>-linux-<arch>.tar.gz` | Binário, arquivo `.desktop` e ícone |
 
-> **Binários sem assinatura.** Os instaladores não têm assinatura de código, porque isso exige certificado pago.
+> **Sem certificado do publicador.** Os instaladores não têm assinatura com certificado do publicador, porque isso exige certificado pago. Os executáveis macOS usam assinatura ad-hoc, que não identifica o desenvolvedor nem fornece notarização da Apple.
 > - **Windows:** o SmartScreen pode mostrar "O Windows protegeu o computador". Clique em *Mais informações → Executar assim mesmo*.
-> - **macOS:** na primeira vez, clique com o botão direito no app → *Abrir*, ou rode `xattr -dr com.apple.quarantine /Applications/CpuZeeZ.app`.
+> - **macOS:** o Gatekeeper pode bloquear o app ou o `.pkg` porque a Apple não consegue verificar o desenvolvedor. Confira o download com `SHA256SUMS.txt`, tente abrir uma vez e feche o aviso. Vá a *Ajustes do Sistema → Privacidade e Segurança → Abrir Mesmo Assim* e confirme *Abrir*. Para o `.pkg`, conclua a instalação e repita para o app se aparecer outro aviso. No macOS 11–12, a opção fica em *Preferências do Sistema → Segurança e Privacidade → Geral*. Clicar com o botão direito → *Abrir* não contorna mais essa verificação no macOS 15 ou posterior. Veja as [instruções da Apple](https://support.apple.com/pt-br/102445). A assinatura ad-hoc sozinha não elimina o aviso; para isso, as releases precisam de assinatura Developer ID e notarização da Apple.
 
 Com Rust instalado, também dá para usar `cargo install --git https://github.com/joaoregis/cpuzeez`.
 
