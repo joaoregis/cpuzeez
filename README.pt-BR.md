@@ -58,7 +58,13 @@ Ubuntu 24.04 (WSLg, Wayland), na mesma máquina, NVIDIA via NVML:
 
 ### macOS
 
-O CI gera capturas de todas as abas nos runners macOS do GitHub (Apple Silicon e Intel) a cada push; veja `docs/screenshots/macos/`.
+Geradas pelo CI nos runners macOS do GitHub (máquinas virtuais, então alguns campos mostram o que o hypervisor expõe):
+
+| Apple Silicon: CPU | Apple Silicon: Caches | Apple Silicon: Graphics |
+|---|---|---|
+| ![CPU no macOS ARM](docs/screenshots/macos/cpu.png) | ![Caches no macOS ARM](docs/screenshots/macos/caches.png) | ![Graphics no macOS ARM](docs/screenshots/macos/graphics.png) |
+| **Mac Intel: CPU** | **Mac Intel: Mainboard** | **Mac Intel: Bench** |
+| ![CPU no Mac Intel](docs/screenshots/macos-intel/cpu.png) | ![Mainboard no Mac Intel](docs/screenshots/macos-intel/mainboard.png) | ![Bench no Mac Intel](docs/screenshots/macos-intel/bench.png) |
 
 ## Instalação
 

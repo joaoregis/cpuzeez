@@ -77,7 +77,13 @@ Ubuntu 24.04 (WSLg, Wayland), same machine, NVIDIA through NVML:
 
 ### macOS
 
-The CI captures every tab on GitHub's macOS runners (Apple Silicon and Intel) on each push; see `docs/screenshots/macos/`.
+Captured by CI on GitHub's macOS runners (virtual machines, so some fields are what the hypervisor exposes):
+
+| Apple Silicon: CPU | Apple Silicon: Caches | Apple Silicon: Graphics |
+|---|---|---|
+| ![macOS ARM CPU tab](docs/screenshots/macos/cpu.png) | ![macOS ARM Caches tab](docs/screenshots/macos/caches.png) | ![macOS ARM Graphics tab](docs/screenshots/macos/graphics.png) |
+| **Intel Mac: CPU** | **Intel Mac: Mainboard** | **Intel Mac: Bench** |
+| ![macOS Intel CPU tab](docs/screenshots/macos-intel/cpu.png) | ![macOS Intel Mainboard tab](docs/screenshots/macos-intel/mainboard.png) | ![macOS Intel Bench tab](docs/screenshots/macos-intel/bench.png) |
 
 ## Install
 
