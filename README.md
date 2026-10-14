@@ -98,9 +98,9 @@ Every [release](https://github.com/joaoregis/cpuzeez/releases) ships an installe
 | Arch Linux | `cpuzeez-bin-<ver>-1-x86_64.pkg.tar.zst` | `sudo pacman -U cpuzeez-bin-*.pkg.tar.zst` |
 | Any Linux (glibc 2.35+) | `cpuzeez-<ver>-linux-<arch>.tar.gz` | Binary, `.desktop` file and icon |
 
-> **Unsigned binaries.** The installers are not code-signed, because that needs a paid certificate.
+> **No publisher certificate.** The installers are not signed with a publisher certificate, because that needs a paid certificate. macOS executables use ad-hoc signatures, which do not identify the developer or provide Apple notarization.
 > - **Windows:** SmartScreen may say "Windows protected your PC". Click *More info → Run anyway*.
-> - **macOS:** right-click the app → *Open* the first time, or run `xattr -dr com.apple.quarantine /Applications/CpuZeeZ.app`.
+> - **macOS:** Gatekeeper may block the app or `.pkg` because Apple cannot verify the developer. After checking your download against `SHA256SUMS.txt`, try opening it once, dismiss the alert, then go to *System Settings → Privacy & Security → Open Anyway* and confirm *Open*. For the `.pkg`, finish installing and repeat for the app if prompted. On macOS 11–12 this is under *System Preferences → Security & Privacy → General*. Right-click → *Open* no longer bypasses this check on macOS 15 and later. See [Apple's instructions](https://support.apple.com/en-us/102445). Ad-hoc signing alone does not remove this warning; releases need a Developer ID signature and Apple notarization for that.
 
 With Rust installed you can also run `cargo install --git https://github.com/joaoregis/cpuzeez`.
 
