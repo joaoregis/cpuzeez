@@ -164,6 +164,8 @@ fn apply(style: &mut egui::Style, p: &Palette, dark: bool) {
     s.window_margin = Margin::same(16);
     s.menu_margin = Margin::same(8);
     s.combo_width = 140.0;
+    // Solid bars reserve their width, so content never slides under them.
+    s.scroll = egui::style::ScrollStyle::solid();
     s.scroll.bar_width = 8.0;
     style.text_styles = [
         (TextStyle::Small, FontId::proportional(11.5)),

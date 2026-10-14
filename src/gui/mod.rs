@@ -1,8 +1,8 @@
-//! CPU-Z style window: CPU, Caches, Mainboard, Memory, SPD, Graphics, Devices,
-//! Bench, About tabs; Tools ▸ Clocks / Timers / Settings / Benchmark history /
-//! Compare reports / Save report; F5 BMP, F6 clipboard, F7 .cvf (our JSON).
-//! Every tab reads the same report tree as `-txt`. UI text goes through
-//! `i18n::tr` (English keys; tables at the end of each file).
+//! Modern layout: a sidebar with pages (Overview, Processor, Mainboard, Memory,
+//! Graphics, Devices, Sensors, Benchmarks, Tools, Settings, About) built from
+//! the design system in `theme`/`widgets`. Every page reads the same report
+//! tree as `-txt`. F5 BMP, F6 clipboard, F7 .cvf (our JSON). UI text goes
+//! through `i18n::tr` (English keys; tables at the end of each file).
 
 mod bench_tab;
 mod bmp;
@@ -29,31 +29,55 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use theme::icon;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Tab {
-    Cpu,
-    Caches,
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Page {
+    Overview,
+    Processor,
     Mainboard,
     Memory,
-    Spd,
     Graphics,
     Devices,
-    Bench,
+    Sensors,
+    Benchmarks,
+    Tools,
+    Settings,
     About,
 }
 
-/// English names: translated when shown, used as-is for screenshot/BMP file names.
-const TABS: [(Tab, &str); 9] = [
-    (Tab::Cpu, "CPU"),
-    (Tab::Caches, "Caches"),
-    (Tab::Mainboard, "Mainboard"),
-    (Tab::Memory, "Memory"),
-    (Tab::Spd, "SPD"),
-    (Tab::Graphics, "Graphics"),
-    (Tab::Devices, "Devices"),
-    (Tab::Bench, "Bench"),
-    (Tab::About, "About"),
+/// (page, icon, English name: translated when shown, used as-is for file names).
+const NAV: [(Page, &str, &str); 9] = [
+    (Page::Overview, icon::SQUARES_FOUR, "Overview"),
+    (Page::Processor, icon::CPU, "Processor"),
+    (Page::Mainboard, icon::CIRCUITRY, "Mainboard"),
+    (Page::Memory, icon::MEMORY, "Memory"),
+    (Page::Graphics, icon::GRAPHICS_CARD, "Graphics"),
+    (Page::Devices, icon::HARD_DRIVES, "Devices"),
+    (Page::Sensors, icon::THERMOMETER, "Sensors"),
+    (Page::Benchmarks, icon::GAUGE, "Benchmarks"),
+    (Page::Tools, icon::TOOLBOX, "Tools"),
 ];
+const NAV_BOTTOM: [(Page, &str, &str); 2] =
+    [(Page::Settings, icon::GEAR_SIX, "Settings"), (Page::About, icon::INFO, "About")];
+
+fn page_name(p: Page) -> &'static str {
+    NAV.iter().chain(NAV_BOTTOM.iter()).find(|n| n.0 == p).map_or("Overview", |n| n.2)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum BenchView {
+    Cpu,
+    Memory,
+    Stress,
+    History,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ToolView {
+    Compare,
+    Clocks,
+    Timers,
+    Reports,
+}
 
 enum Shot {
     Clipboard,
@@ -64,36 +88,31 @@ enum Shot {
 /// One `-screenshots` capture.
 #[derive(Clone, Copy)]
 enum Step {
-    Tab(Tab),
-    Clocks,
-    /// gui/sensors.rs captures: 0 = Sensors window, 1 = stress monitor.
-    Monitor(u8),
-    Settings,
-    History,
-    Compare,
-    MemBench,
-    /// The About tab in Brazilian Portuguese, to show the translations.
+    Page(Page),
+    Bench(BenchView),
+    Tool(ToolView),
+    /// The About page in Brazilian Portuguese, to show the translations.
     AboutPt,
 }
 
 const SHOTS: [(&str, Step); 17] = [
-    ("cpu", Step::Tab(Tab::Cpu)),
-    ("caches", Step::Tab(Tab::Caches)),
-    ("mainboard", Step::Tab(Tab::Mainboard)),
-    ("memory", Step::Tab(Tab::Memory)),
-    ("spd", Step::Tab(Tab::Spd)),
-    ("graphics", Step::Tab(Tab::Graphics)),
-    ("devices", Step::Tab(Tab::Devices)),
-    ("bench", Step::Tab(Tab::Bench)),
-    ("about", Step::Tab(Tab::About)),
-    ("clocks", Step::Clocks),
-    ("sensors", Step::Monitor(0)),
-    ("stress", Step::Monitor(1)),
-    ("settings", Step::Settings),
-    ("history", Step::History),
-    ("compare", Step::Compare),
-    ("membench", Step::MemBench),
+    ("overview", Step::Page(Page::Overview)),
+    ("processor", Step::Page(Page::Processor)),
+    ("mainboard", Step::Page(Page::Mainboard)),
+    ("memory", Step::Page(Page::Memory)),
+    ("graphics", Step::Page(Page::Graphics)),
+    ("devices", Step::Page(Page::Devices)),
+    ("sensors", Step::Page(Page::Sensors)),
+    ("bench", Step::Bench(BenchView::Cpu)),
+    ("membench", Step::Bench(BenchView::Memory)),
+    ("stress", Step::Bench(BenchView::Stress)),
+    ("history", Step::Bench(BenchView::History)),
+    ("compare", Step::Tool(ToolView::Compare)),
+    ("clocks", Step::Tool(ToolView::Clocks)),
+    ("settings", Step::Page(Page::Settings)),
+    ("about", Step::Page(Page::About)),
     ("about-pt", Step::AboutPt),
+    ("overview-light", Step::Page(Page::Overview)),
 ];
 
 /// `-screenshots=DIR`: visit every tab and tool window, save a PNG of each,
@@ -120,15 +139,15 @@ struct App {
     ctx: Arc<Ctx>,
     report: Arc<Mutex<Option<Vec<Section>>>>,
     live: Arc<Mutex<Live>>,
-    tab: Tab,
+    page: Page,
+    /// Reload history.json when the History view is opened.
+    history_dirty: bool,
+    bench_view: BenchView,
+    tool_view: ToolView,
     core: usize,
     slot: usize,
     gpu: usize,
     show_clocks: Arc<Mutex<bool>>,
-    show_timers: bool,
-    show_settings: bool,
-    show_history: bool,
-    show_compare: bool,
     status: String,
     shot: Option<Shot>,
     auto: Option<AutoShots>,
@@ -163,6 +182,7 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
     // One copy of the settings (the monitor's), edited by the Settings page.
     // Screenshots are reproducible: default settings, English.
     let mut mon = sensors::Monitor::new(ctx.clone());
+    mon.pages = true;
     if shots.is_some() {
         mon.settings = Default::default();
     }
@@ -172,8 +192,8 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         viewport: egui::ViewportBuilder::default()
             .with_title(crate::DISPLAY_NAME)
             .with_icon(app_icon())
-            .with_inner_size([520.0, 560.0])
-            .with_min_inner_size([460.0, 440.0]),
+            .with_inner_size([1120.0, 760.0])
+            .with_min_inner_size([860.0, 560.0]),
         ..Default::default()
     };
     let theme = mon.settings.theme;
@@ -181,15 +201,14 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         ctx,
         report,
         live,
-        tab: Tab::Cpu,
+        page: Page::Overview,
+        history_dirty: true,
+        bench_view: BenchView::Cpu,
+        tool_view: ToolView::Compare,
         core: 0,
         slot: 0,
         gpu: 0,
         show_clocks,
-        show_timers: false,
-        show_settings: false,
-        show_history: false,
-        show_compare: false,
         status: String::new(),
         shot: None,
         auto: shots.map(|dir| {
@@ -268,53 +287,45 @@ impl eframe::App for App {
         self.minimized_title(&ectx);
 
         let report = self.report.lock().unwrap().clone();
+        // Tray menu / monitor shortcuts navigate instead of opening windows.
+        if std::mem::take(&mut self.mon.show_sensors) {
+            self.page = Page::Sensors;
+        }
+        if std::mem::take(&mut self.mon.show_stress) {
+            self.page = Page::Benchmarks;
+            self.bench_view = BenchView::Stress;
+        }
+        *self.show_clocks.lock().unwrap() = self.page == Page::Tools && self.tool_view == ToolView::Clocks;
+        let p = theme::palette(ui);
+        egui::Panel::left("nav")
+            .exact_size(theme::SIDEBAR_WIDTH)
+            .resizable(false)
+            .show_separator_line(false)
+            .frame(egui::Frame::default().fill(p.sidebar).inner_margin(egui::Margin::symmetric(10, 14)))
+            .show(ui, |ui| self.sidebar(ui));
         self.update_banner(ui);
-        egui::Panel::top("tabs").show(ui, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.spacing_mut().item_spacing.x = 2.0;
-                for (t, name) in TABS {
-                    ui.selectable_value(&mut self.tab, t, tr(name));
-                }
-            });
-        });
-        egui::Panel::bottom("status").show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(format!("{} {}", crate::DISPLAY_NAME, crate::VERSION)).weak());
-                if ui.button(tr("Sensors")).clicked() {
-                    self.mon.show_sensors = true;
-                }
-                ui.menu_button(tr("Tools"), |ui| self.tools_menu(ui, &report));
-                if ui.button(icon::GEAR_SIX).on_hover_text(tr("Settings")).clicked() {
-                    self.show_settings = !self.show_settings;
-                }
-                ui.label(RichText::new(&self.status).small());
-            });
-        });
-        egui::CentralPanel::default().show(ui, |ui| {
-            let Some(r) = report.as_deref() else {
-                ui.centered_and_justified(|ui| {
-                    ui.horizontal(|ui| {
-                        ui.spinner();
-                        ui.label(tr("Reading hardware…"));
+        egui::CentralPanel::default()
+            .frame(egui::Frame::default().fill(p.bg).inner_margin(egui::Margin::symmetric(24, 18)))
+            .show(ui, |ui| {
+                let Some(r) = report.as_deref() else {
+                    ui.centered_and_justified(|ui| {
+                        ui.horizontal(|ui| {
+                            ui.spinner();
+                            ui.label(tr("Reading hardware…"));
+                        });
                     });
-                });
-                return;
-            };
-            egui::ScrollArea::vertical().show(ui, |ui| match self.tab {
-                Tab::Cpu => self.cpu_tab(ui, r),
-                Tab::Caches => self.caches_tab(ui),
-                Tab::Mainboard => mainboard_tab(ui, r),
-                Tab::Memory => memory_tab(ui, r),
-                Tab::Spd => self.spd_tab(ui, r),
-                Tab::Graphics => self.graphics_tab(ui, r),
-                Tab::Devices => self.devices.page(ui, &self.ctx),
-                Tab::Bench => self.bench.ui(ui, &self.ctx, &mut self.mon),
-                Tab::About => self.about_tab(ui, r),
+                    return;
+                };
+                if self.page == Page::Sensors {
+                    // Full-height dashboard with its own scrolling table and charts.
+                    self.page_body(ui, r);
+                } else {
+                    egui::ScrollArea::vertical()
+                        .auto_shrink([false, false])
+                        .id_salt(page_name(self.page))
+                        .show(ui, |ui| self.page_body(ui, r));
+                }
             });
-        });
-        self.clocks_window(&ectx);
-        self.timers_window(&ectx, report.as_deref());
-        self.tool_windows(&ectx, report.as_deref());
         self.mon.frame(&ectx);
         self.take_screenshot(&ectx);
         self.auto_shots(&ectx, report.as_deref());
@@ -343,28 +354,18 @@ fn shown<'a>(key: &str, v: &'a str) -> &'a str {
     if private { "••••••••" } else { v }
 }
 
-/// A titled box of label/value rows (labels translated, private values masked).
+/// A card of label/value rows (labels translated, private values masked).
 fn boxed(ui: &mut egui::Ui, title: &str, rows: &[(&str, String)]) {
-    ui.group(|ui| {
-        ui.set_width(ui.available_width());
-        ui.label(RichText::new(tr(title)).strong());
-        // Fixed label column; values get the rest and wrap instead of widening the window.
-        let label_w = 170.0_f32.min(ui.available_width() * 0.45);
-        let value_w = (ui.available_width() - label_w - 16.0).max(80.0);
-        egui::Grid::new(title)
-            .num_columns(2)
-            .spacing([12.0, 3.0])
-            .striped(true)
-            .min_col_width(label_w.min(value_w))
-            .max_col_width(value_w.max(label_w))
-            .show(ui, |ui| {
-                for (k, v) in rows {
-                    ui.label(tr(k));
-                    value(ui, if v.is_empty() { "-" } else { shown(k, v) });
-                    ui.end_row();
-                }
-            });
-    });
+    let rows: Vec<(&str, String)> = rows.iter().map(|(k, v)| (tr(k), shown(k, v).to_string())).collect();
+    widgets::card(ui, "", tr(title), |ui| widgets::kv_list(ui, &rows));
+    ui.add_space(theme::GAP);
+}
+
+/// Section label between cards.
+fn heading(ui: &mut egui::Ui, text: &str) {
+    ui.add_space(6.0);
+    ui.label(RichText::new(text).text_style(egui::TextStyle::Heading).color(theme::palette(ui).text));
+    ui.add_space(4.0);
 }
 
 fn sec<'a>(r: &'a [Section], t: &str) -> Option<&'a Section> {
@@ -453,63 +454,185 @@ fn update_bar(ui: &mut egui::Ui, rel: &Release, installer: &mut Option<Installer
 }
 
 impl App {
-    fn tools_menu(&mut self, ui: &mut egui::Ui, report: &Option<Vec<Section>>) {
-        self.mon.menu(ui);
-        ui.separator();
-        if ui.button(tr("Clocks")).clicked() {
-            *self.show_clocks.lock().unwrap() = true;
+    fn sidebar(&mut self, ui: &mut egui::Ui) {
+        let p = theme::palette(ui);
+        let logo = self.logo_texture(ui);
+        ui.horizontal(|ui| {
+            ui.image((logo, egui::vec2(28.0, 28.0)));
+            ui.label(RichText::new(crate::DISPLAY_NAME).font(egui::FontId::new(17.0, theme::semibold())).color(p.text));
+        });
+        ui.add_space(14.0);
+        ui.spacing_mut().item_spacing.y = 2.0;
+        for (pg, ic, name) in NAV {
+            if widgets::sidebar_item(ui, ic, tr(name), self.page == pg).clicked() {
+                self.page = pg;
+            }
         }
-        if ui.button(tr("Timers")).clicked() {
-            self.show_timers = true;
-        }
-        ui.separator();
-        if ui.button(format!("{} {}", icon::CLOCK_COUNTER_CLOCKWISE, tr("Benchmark history"))).clicked() {
-            self.history.reload();
-            self.show_history = true;
-        }
-        if ui.button(format!("{} {}", icon::GIT_DIFF, tr("Compare reports"))).clicked() {
-            self.show_compare = true;
-        }
-        if ui.button(format!("{} {}", icon::GEAR_SIX, tr("Settings"))).clicked() {
-            self.show_settings = true;
-        }
-        ui.separator();
-        if ui.button(tr("Save Report as .TXT")).clicked() {
-            self.save(report, "txt");
-        }
-        if ui.button(tr("Save Report as .HTML")).clicked() {
-            self.save(report, "html");
-        }
-        if ui.button(tr("Save .cvf (JSON)")).clicked() {
-            self.save(report, "cvf");
+        ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+            ui.label(RichText::new(format!("v{}", crate::VERSION)).small().color(p.text_muted));
+            if !self.status.is_empty() {
+                ui.add(egui::Label::new(RichText::new(&self.status).small().color(p.text_secondary)).wrap());
+            }
+            ui.add_space(6.0);
+            for (pg, ic, name) in NAV_BOTTOM.iter().rev() {
+                if widgets::sidebar_item(ui, ic, tr(name), self.page == *pg).clicked() {
+                    self.page = *pg;
+                }
+            }
+        });
+    }
+
+    fn logo_texture(&mut self, ui: &egui::Ui) -> egui::TextureId {
+        self.logo
+            .get_or_insert_with(|| {
+                let icon = decode_png(include_bytes!("../../assets/icon-128.png")).unwrap_or_default();
+                let img =
+                    egui::ColorImage::from_rgba_unmultiplied([icon.width as usize, icon.height as usize], &icon.rgba);
+                ui.ctx().load_texture("logo", img, egui::TextureOptions::LINEAR)
+            })
+            .id()
+    }
+
+    fn page_body(&mut self, ui: &mut egui::Ui, r: &[Section]) {
+        let c = crate::cpu::get(&self.ctx);
+        let core_mhz = self.live.lock().unwrap().mhz.first().copied().flatten();
+        match self.page {
+            Page::Overview => {
+                let tel = self.mon.tel();
+                overview::page(ui, &self.ctx, r, &tel, core_mhz);
+            }
+            Page::Processor => {
+                let sub = [c.info.codename.clone(), c.info.package.clone(), c.info.technology.clone()]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>()
+                    .join(" · ");
+                widgets::page_header(ui, &c.name, &sub, |_| {});
+                self.cpu_tab(ui, r);
+                heading(ui, tr("Caches"));
+                self.caches_tab(ui);
+            }
+            Page::Mainboard => {
+                let board =
+                    format!("{} {}", sgi(r, "DMI", "DMI Baseboard", "vendor"), sgi(r, "DMI", "DMI Baseboard", "model"));
+                widgets::page_header(ui, tr("Mainboard"), board.trim(), |_| {});
+                mainboard_tab(ui, r);
+            }
+            Page::Memory => {
+                let k = |key: &str| sget(r, "Chipset", key);
+                let sub = [k("Memory Type"), k("Memory Size"), k("Channels")]
+                    .into_iter()
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(" · ");
+                widgets::page_header(ui, tr("Memory"), &sub, |_| {});
+                memory_tab(ui, r);
+                heading(ui, "SPD");
+                self.spd_tab(ui, r);
+            }
+            Page::Graphics => {
+                widgets::page_header(ui, tr("Graphics"), "", |_| {});
+                self.graphics_tab(ui, r);
+            }
+            Page::Devices => self.devices.page(ui, &self.ctx),
+            Page::Sensors => sensors::page(ui, &mut self.mon),
+            Page::Benchmarks => {
+                widgets::page_header(
+                    ui,
+                    tr("Benchmarks"),
+                    tr("Our own workloads: scores aren't comparable with CPU-Z's"),
+                    |_| {},
+                );
+                widgets::segmented(
+                    ui,
+                    &mut self.bench_view,
+                    &[
+                        (BenchView::Cpu, icon::CPU, tr("Processor")),
+                        (BenchView::Memory, icon::MEMORY, tr("Memory")),
+                        (BenchView::Stress, icon::FLAME, tr("Stress test")),
+                        (BenchView::History, icon::CLOCK_COUNTER_CLOCKWISE, tr("History")),
+                    ],
+                );
+                match self.bench_view {
+                    BenchView::Cpu => self.bench.cpu_page(ui, &self.ctx, &mut self.mon),
+                    BenchView::Memory => self.bench.memory_page(ui, &self.ctx),
+                    BenchView::Stress => stress::page(ui, &mut self.mon, true),
+                    BenchView::History => {
+                        if self.history_dirty {
+                            self.history.reload();
+                            self.history_dirty = false;
+                        }
+                        self.history.page(ui)
+                    }
+                }
+                if self.bench_view != BenchView::History {
+                    self.history_dirty = true;
+                }
+            }
+            Page::Tools => self.tools_page(ui, r),
+            Page::Settings => {
+                let tray = self.mon.settings.tray;
+                let persist = self.auto.is_none();
+                settings_ui::page(ui, &mut self.mon.settings, self.ctx.cfg.check_updates, persist);
+                if self.mon.settings.tray != tray {
+                    let on = self.mon.settings.tray;
+                    self.mon.set_tray(on, ui.ctx());
+                }
+                ui.add_space(theme::GAP);
+                widgets::card(ui, icon::MONITOR, tr("Mini monitor"), |ui| {
+                    ui.label(
+                        RichText::new(tr("A small always-on-top window with CPU, GPU and chipset temperatures."))
+                            .color(theme::palette(ui).text_secondary),
+                    );
+                    if ui.checkbox(&mut self.mon.show_mini, tr("Show the mini monitor")).changed() && self.mon.show_mini
+                    {
+                        self.mon.tel();
+                    }
+                });
+            }
+            Page::About => self.about_tab(ui, r),
         }
     }
 
-    /// Settings / History / Compare pages, hosted in windows for now.
-    fn tool_windows(&mut self, ectx: &egui::Context, report: Option<&[Section]>) {
-        let win = |id: &str, title: &str| {
-            egui::Window::new(title.to_string())
-                .id(egui::Id::new(id))
-                .default_pos([16.0, 40.0])
-                .default_size([488.0, 470.0])
-                .vscroll(true)
-        };
-        let persist = self.auto.is_none();
-        let mut open = self.show_settings;
-        let tray = self.mon.settings.tray;
-        win("settings-window", tr("Settings"))
-            .open(&mut open)
-            .show(ectx, |ui| settings_ui::page(ui, &mut self.mon.settings, self.ctx.cfg.check_updates, persist));
-        self.show_settings = open;
-        if self.mon.settings.tray != tray {
-            self.mon.set_tray(self.mon.settings.tray, ectx);
+    fn tools_page(&mut self, ui: &mut egui::Ui, r: &[Section]) {
+        widgets::page_header(ui, tr("Tools"), "", |_| {});
+        widgets::segmented(
+            ui,
+            &mut self.tool_view,
+            &[
+                (ToolView::Compare, icon::GIT_DIFF, tr("Compare reports")),
+                (ToolView::Clocks, icon::SPEEDOMETER, tr("Clocks")),
+                (ToolView::Timers, icon::TIMER, tr("Timers")),
+                (ToolView::Reports, icon::EXPORT, tr("Reports")),
+            ],
+        );
+        match self.tool_view {
+            ToolView::Compare => self.compare.page(ui, Some(r)),
+            ToolView::Clocks => self.clocks_body(ui),
+            ToolView::Timers => timers_body(ui, r),
+            ToolView::Reports => {
+                widgets::card(ui, icon::FILE_TEXT, tr("Save a report"), |ui| {
+                    ui.label(
+                        RichText::new(tr("Same format as CPU-Z's -txt / -html reports, or our JSON."))
+                            .color(theme::palette(ui).text_secondary),
+                    );
+                    ui.add_space(6.0);
+                    ui.horizontal_wrapped(|ui| {
+                        let rep = Some(r.to_vec());
+                        if widgets::primary_button(ui, &format!("{} {}", icon::FLOPPY_DISK, tr("Save .TXT"))).clicked()
+                        {
+                            self.save(&rep, "txt");
+                        }
+                        if ui.button(tr("Save .HTML")).clicked() {
+                            self.save(&rep, "html");
+                        }
+                        if ui.button(tr("Save .cvf (JSON)")).clicked() {
+                            self.save(&rep, "cvf");
+                        }
+                    });
+                });
+            }
         }
-        let mut open = self.show_history;
-        win("history-window", tr("Benchmark history")).open(&mut open).show(ectx, |ui| self.history.page(ui));
-        self.show_history = open;
-        let mut open = self.show_compare;
-        win("compare-window", tr("Compare reports")).open(&mut open).show(ectx, |ui| self.compare.page(ui, report));
-        self.show_compare = open;
     }
 
     fn cpu_tab(&mut self, ui: &mut egui::Ui, r: &[Section]) {
@@ -707,16 +830,20 @@ impl App {
     }
 
     fn about_tab(&mut self, ui: &mut egui::Ui, r: &[Section]) {
-        let logo = self.logo.get_or_insert_with(|| {
-            let icon = decode_png(include_bytes!("../../assets/icon-128.png")).unwrap_or_default();
-            let img = egui::ColorImage::from_rgba_unmultiplied([icon.width as usize, icon.height as usize], &icon.rgba);
-            ui.ctx().load_texture("logo", img, egui::TextureOptions::LINEAR)
-        });
+        let logo = self.logo_texture(ui);
         ui.horizontal(|ui| {
-            ui.image((logo.id(), egui::vec2(64.0, 64.0)));
-            ui.heading(RichText::new(format!("{} {}", crate::DISPLAY_NAME, crate::VERSION)).size(26.0));
+            ui.image((logo, egui::vec2(64.0, 64.0)));
+            ui.vertical(|ui| {
+                ui.label(
+                    RichText::new(format!("{} {}", crate::DISPLAY_NAME, crate::VERSION)).text_style(theme::title()),
+                );
+                ui.label(
+                    RichText::new(tr("Clean-room, open-source reimplementation of CPU-Z's feature set."))
+                        .color(theme::palette(ui).text_secondary),
+                );
+            });
         });
-        ui.label(tr("Clean-room, open-source reimplementation of CPU-Z's feature set."));
+        ui.add_space(theme::GAP);
         ui.label(trf("Hardware access: {}", &[&self.ctx.hw.name()]));
         let sw = sec(r, "Software")
             .map(|s| report::fields(&s.nodes).map(|(k, v)| format!("{}: {v}", tr(k))).collect::<Vec<_>>().join("\n"))
@@ -733,10 +860,12 @@ impl App {
                 self.save(&Some(r.to_vec()), "html");
             }
             if ui.button(tr("Clocks")).clicked() {
-                *self.show_clocks.lock().unwrap() = true;
+                self.page = Page::Tools;
+                self.tool_view = ToolView::Clocks;
             }
             if ui.button(tr("Timers")).clicked() {
-                self.show_timers = true;
+                self.page = Page::Tools;
+                self.tool_view = ToolView::Timers;
             }
         });
         ui.separator();
@@ -773,78 +902,49 @@ impl App {
         egui::Panel::top("update").show(ui, |ui| update_bar(ui, &rel, &mut self.installer, &mut self.update_dismissed));
     }
 
-    fn clocks_window(&mut self, ectx: &egui::Context) {
-        let mut open = *self.show_clocks.lock().unwrap();
-        if !open {
-            return;
-        }
+    fn clocks_body(&mut self, ui: &mut egui::Ui) {
         let c = crate::cpu::get(&self.ctx);
         let live = self.live.lock().unwrap();
-        egui::Window::new(tr("Clocks")).id(egui::Id::new("clocks-window")).open(&mut open).default_width(260.0).show(
-            ectx,
-            |ui| {
-                ui.label(RichText::new(trf("source: {}", &[&live.source])).small().weak());
-                egui::Grid::new("clk").striped(true).show(ui, |ui| {
-                    for (core, l) in c.logical.iter().filter(|l| l.smt == 0).enumerate() {
-                        let kind = l.kind.as_deref().map(|k| format!(" ({k})")).unwrap_or_default();
-                        ui.label(format!("{}{kind}", trf("Core #{}", &[&core])));
-                        value(
-                            ui,
-                            &live.mhz.get(l.cpu).copied().flatten().map_or("…".into(), |m| format!("{m:.1} MHz")),
-                        );
-                        ui.end_row();
-                    }
-                    let names = crate::gpu::adapters(&self.ctx);
-                    for g in &live.gpus {
-                        let name = names.get(g.adapter).map_or("GPU", |a| a.name.as_str());
-                        let opt = |v: Option<f64>, unit: &str| v.map_or(String::new(), |v| format!("{v:.0} {unit}"));
-                        ui.label(name);
-                        let mut s: Vec<String> = [
-                            opt(g.core_mhz, "MHz core"),
-                            opt(g.mem_mhz, "MHz mem"),
-                            opt(g.temp_c, "°C"),
-                            opt(g.hotspot_c, &format!("°C {}", tr("hot spot"))),
-                            opt(g.fan_rpm, "RPM"),
-                            opt(g.power_w, "W"),
-                            opt(g.load_pct, "%"),
-                        ]
-                        .into_iter()
-                        .filter(|s| !s.is_empty())
-                        .collect();
-                        if g.throttling() {
-                            s.push(tr("throttling").into());
-                        }
-                        value(ui, &s.join(", "));
-                        ui.end_row();
-                    }
-                });
-            },
-        );
-        drop(live);
-        *self.show_clocks.lock().unwrap() = open;
-    }
-
-    fn timers_window(&mut self, ectx: &egui::Context, r: Option<&[Section]>) {
-        if !self.show_timers {
-            return;
+        let mut rows: Vec<(String, String)> = Vec::new();
+        for (core, l) in c.logical.iter().filter(|l| l.smt == 0).enumerate() {
+            let kind = l.kind.as_deref().map(|k| format!(" ({k})")).unwrap_or_default();
+            let v = live.mhz.get(l.cpu).copied().flatten().map_or("…".into(), |m| format!("{m:.1} MHz"));
+            rows.push((format!("{}{kind}", trf("Core #{}", &[&core])), v));
         }
-        let mut open = true;
-        egui::Window::new(tr("Timers")).id(egui::Id::new("timers-window")).open(&mut open).show(ectx, |ui| {
-            let rows: Vec<(String, String)> = r
-                .and_then(|r| sec(r, "Timers"))
-                .map(|s| report::fields(&s.nodes).map(|(k, v)| (k.to_string(), v.to_string())).collect())
-                .unwrap_or_default();
-            if rows.is_empty() {
-                ui.label(tr("No timer information."));
+        let names = crate::gpu::adapters(&self.ctx);
+        let mut gpus: Vec<(String, String)> = Vec::new();
+        for g in &live.gpus {
+            let name = names.get(g.adapter).map_or("GPU", |a| a.name.as_str());
+            let opt = |v: Option<f64>, unit: &str| v.map_or(String::new(), |v| format!("{v:.0} {unit}"));
+            let mut s: Vec<String> = [
+                opt(g.core_mhz, "MHz core"),
+                opt(g.mem_mhz, "MHz mem"),
+                opt(g.temp_c, "°C"),
+                opt(g.hotspot_c, &format!("°C {}", tr("hot spot"))),
+                opt(g.fan_rpm, "RPM"),
+                opt(g.power_w, "W"),
+                opt(g.load_pct, "%"),
+            ]
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .collect();
+            if g.throttling() {
+                s.push(tr("throttling").into());
             }
-            for (k, v) in rows {
-                ui.horizontal(|ui| {
-                    ui.label(k);
-                    value(ui, &v);
-                });
-            }
+            gpus.push((name.to_string(), s.join(", ")));
+        }
+        let source = live.source;
+        drop(live);
+        let refs: Vec<(&str, String)> = rows.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
+        widgets::card(ui, icon::CPU, tr("Cores"), |ui| {
+            ui.label(RichText::new(trf("source: {}", &[&source])).small().color(theme::palette(ui).text_muted));
+            widgets::kv_list(ui, &refs);
         });
-        self.show_timers = open;
+        if !gpus.is_empty() {
+            ui.add_space(theme::GAP);
+            let refs: Vec<(&str, String)> = gpus.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
+            widgets::card(ui, icon::GRAPHICS_CARD, tr("Graphics"), |ui| widgets::kv_list(ui, &refs));
+        }
     }
 
     fn hotkeys(&mut self, ectx: &egui::Context) {
@@ -862,38 +962,54 @@ impl App {
 
     /// Put the UI in the state `step` captures; true when it is ready.
     fn stage_shot(&mut self, step: Step, first: bool, report: Option<&[Section]>, ectx: &egui::Context) -> bool {
-        *self.show_clocks.lock().unwrap() = matches!(step, Step::Clocks);
-        self.show_settings = matches!(step, Step::Settings);
-        self.show_history = matches!(step, Step::History);
-        self.show_compare = matches!(step, Step::Compare);
-        self.tab = Tab::Cpu;
-        if !matches!(step, Step::Monitor(_)) {
-            self.mon.show_sensors = false;
-            self.mon.show_stress = false;
-            if self.mon.stress.running() {
-                self.mon.stress.stop(None); // don't load the CPU during later captures
-            }
+        let idx = self.auto.as_ref().map_or(0, |a| a.step);
+        // The last capture shows the light theme.
+        ectx.set_theme(if SHOTS.get(idx).is_some_and(|s| s.0.ends_with("-light")) {
+            egui::ThemePreference::Light
+        } else {
+            egui::ThemePreference::Dark
+        });
+        if !matches!(step, Step::Bench(BenchView::Stress)) && self.mon.stress.running() {
+            self.mon.stress.stop(None); // don't load the CPU during later captures
         }
         match step {
-            Step::Monitor(k) => self.mon.autoshot(k, ectx),
-            Step::Tab(t) => {
-                self.tab = t;
-                match t {
-                    Tab::Bench => self.bench.autorun(&self.ctx),
-                    Tab::Devices => self.devices.loaded(&self.ctx),
+            Step::Page(pg) => {
+                self.page = pg;
+                match pg {
+                    Page::Devices => self.devices.loaded(&self.ctx),
+                    // Graphs need some history.
+                    Page::Sensors | Page::Overview => {
+                        self.auto.as_ref().is_some_and(|a| a.started.elapsed() > Duration::from_secs(9))
+                    }
                     _ => true,
                 }
             }
-            Step::Clocks | Step::Settings => true,
-            Step::History => {
-                if first {
-                    // This session's results only: nothing from the user's history.json.
-                    self.history.preview(self.bench.session_entries(&self.ctx));
+            Step::Bench(v) => {
+                self.page = Page::Benchmarks;
+                self.bench_view = v;
+                match v {
+                    BenchView::Cpu => self.bench.autorun(&self.ctx),
+                    BenchView::Memory => self.bench.autorun_memory(&self.ctx),
+                    BenchView::Stress => {
+                        if first && !self.mon.stress.running() {
+                            self.mon.start_stress(crate::os::logical_cpus());
+                        }
+                        self.mon.stress.elapsed_secs() >= 8.0
+                    }
+                    BenchView::History => {
+                        if first {
+                            // This session's results only: nothing from the user's history.json.
+                            self.history.preview(self.bench.session_entries(&self.ctx));
+                            self.history_dirty = false;
+                        }
+                        true
+                    }
                 }
-                true
             }
-            Step::Compare => {
-                if first {
+            Step::Tool(v) => {
+                self.page = Page::Tools;
+                self.tool_view = v;
+                if v == ToolView::Compare && first {
                     let path = std::env::temp_dir().join(format!("{}-screenshot-report.json", crate::NAME));
                     let _ = std::fs::write(&path, report.map(report::to_json).unwrap_or_default());
                     self.compare.current = true;
@@ -904,13 +1020,9 @@ impl App {
                 }
                 true
             }
-            Step::MemBench => {
-                self.tab = Tab::Bench;
-                self.bench.autorun_memory(&self.ctx)
-            }
             Step::AboutPt => {
                 i18n::set(i18n::Lang::PtBr);
-                self.tab = Tab::About;
+                self.page = Page::About;
                 true
             }
         }
@@ -947,7 +1059,6 @@ impl App {
         }
         a.wait = 0;
         a.step += 1;
-        self.mon.autoshot_next();
         self.shot = Some(Shot::Png(a.dir.join(format!("{name}.png"))));
         ectx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
     }
@@ -969,8 +1080,7 @@ impl App {
                 self.status = tr("Tab copied to clipboard").into();
             }
             Some(Shot::Bmp) => {
-                let name =
-                    format!("{}-{}.bmp", crate::NAME, TABS.iter().find(|t| t.0 == self.tab).map_or("tab", |t| t.1));
+                let name = format!("{}-{}.bmp", crate::NAME, page_name(self.page).to_lowercase());
                 self.status = match std::fs::write(&name, bmp::encode(&img)) {
                     Ok(()) => trf("Saved {}", &[&name]),
                     Err(e) => format!("{name}: {e}"),
@@ -1017,6 +1127,19 @@ impl App {
             Err(e) => format!("{name}: {e}"),
         };
     }
+}
+
+fn timers_body(ui: &mut egui::Ui, r: &[Section]) {
+    let rows: Vec<(String, String)> = sec(r, "Timers")
+        .map(|s| report::fields(&s.nodes).map(|(k, v)| (k.to_string(), v.to_string())).collect())
+        .unwrap_or_default();
+    widgets::card(ui, icon::TIMER, tr("Timers"), |ui| {
+        if rows.is_empty() {
+            ui.label(tr("No timer information."));
+        }
+        let refs: Vec<(&str, String)> = rows.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
+        widgets::kv_list(ui, &refs);
+    });
 }
 
 fn mainboard_tab(ui: &mut egui::Ui, r: &[Section]) {
@@ -1353,6 +1476,24 @@ pub const PT_BR: &[(&str, &str)] = &[
     ),
     ("nothing was detected", "nada foi detectado"),
     ("graphics", "gráficos"),
+    (
+        "A small always-on-top window with CPU, GPU and chipset temperatures.",
+        "Uma janela pequena, sempre visível, com as temperaturas de CPU, GPU e chipset.",
+    ),
+    ("Benchmarks", "Benchmarks"),
+    (
+        "Our own workloads: scores aren't comparable with CPU-Z's",
+        "Cargas de trabalho próprias: os scores não são comparáveis com os do CPU-Z",
+    ),
+    ("Reports", "Relatórios"),
+    (
+        "Same format as CPU-Z's -txt / -html reports, or our JSON.",
+        "Mesmo formato dos relatórios -txt / -html do CPU-Z, ou o nosso JSON.",
+    ),
+    ("Save .HTML", "Salvar .HTML"),
+    ("Save .TXT", "Salvar .TXT"),
+    ("Save a report", "Salvar um relatório"),
+    ("Show the mini monitor", "Mostrar o mini-monitor"),
 ];
 
 pub const ES: &[(&str, &str)] = &[
@@ -1560,6 +1701,24 @@ pub const ES: &[(&str, &str)] = &[
     ),
     ("nothing was detected", "no se detectó nada"),
     ("graphics", "gráficos"),
+    (
+        "A small always-on-top window with CPU, GPU and chipset temperatures.",
+        "Una ventana pequeña, siempre visible, con las temperaturas de CPU, GPU y chipset.",
+    ),
+    ("Benchmarks", "Pruebas de rendimiento"),
+    (
+        "Our own workloads: scores aren't comparable with CPU-Z's",
+        "Cargas de trabajo propias: las puntuaciones no son comparables con las de CPU-Z",
+    ),
+    ("Reports", "Informes"),
+    (
+        "Same format as CPU-Z's -txt / -html reports, or our JSON.",
+        "Mismo formato que los informes -txt / -html de CPU-Z, o nuestro JSON.",
+    ),
+    ("Save .HTML", "Guardar .HTML"),
+    ("Save .TXT", "Guardar .TXT"),
+    ("Save a report", "Guardar un informe"),
+    ("Show the mini monitor", "Mostrar el minimonitor"),
 ];
 
 #[cfg(test)]

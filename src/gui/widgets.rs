@@ -92,7 +92,10 @@ pub fn kv(ui: &mut Ui, label: &str, value: &str) {
     let w = ui.available_width();
     ui.horizontal_top(|ui| {
         let lw = (w * 0.42).clamp(90.0, 220.0);
-        ui.add_sized([lw, 20.0], egui::Label::new(RichText::new(label).color(p.text_secondary)).truncate());
+        ui.allocate_ui_with_layout(egui::vec2(lw, 20.0), Layout::left_to_right(Align::Center), |ui| {
+            ui.set_width(lw);
+            ui.add(egui::Label::new(RichText::new(label).color(p.text_secondary)).truncate());
+        });
         let v = if value.is_empty() { "–" } else { value };
         ui.with_layout(Layout::right_to_left(Align::Min).with_main_wrap(true), |ui| {
             ui.add(egui::Label::new(RichText::new(v).color(p.text)).wrap());
@@ -219,4 +222,31 @@ pub fn progress(ui: &mut Ui, frac: f32, text: &str) -> Response {
         ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(12.5), p.text);
     }
     resp
+}
+
+/// Pill-style segmented control (one choice among a few views).
+pub fn segmented<T: PartialEq + Copy>(ui: &mut Ui, current: &mut T, items: &[(T, &str, &str)]) {
+    let p = theme::palette(ui);
+    Frame::default()
+        .fill(p.sidebar)
+        .corner_radius(CornerRadius::same(theme::RADIUS_CONTROL + 2))
+        .inner_margin(Margin::same(3))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 2.0;
+                for (v, icon, label) in items {
+                    let on = *current == *v;
+                    let text =
+                        RichText::new(format!("{icon}  {label}")).color(if on { p.text } else { p.text_secondary });
+                    let b = egui::Button::new(text)
+                        .fill(if on { p.card } else { Color32::TRANSPARENT })
+                        .stroke(if on { Stroke::new(1.0, p.border) } else { Stroke::NONE })
+                        .corner_radius(CornerRadius::same(theme::RADIUS_CONTROL));
+                    if ui.add(b).clicked() {
+                        *current = *v;
+                    }
+                }
+            });
+        });
+    ui.add_space(theme::GAP);
 }

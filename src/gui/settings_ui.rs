@@ -103,10 +103,11 @@ pub fn lang_of(s: &Settings) -> i18n::Lang {
 fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
     ui.horizontal(|ui| {
         let p = theme::palette(ui);
-        ui.add_sized(
-            [220.0_f32.min(ui.available_width() * 0.5), 24.0],
-            egui::Label::new(RichText::new(label).color(p.text_secondary)),
-        );
+        let w = 220.0_f32.min(ui.available_width() * 0.5);
+        ui.allocate_ui_with_layout(egui::vec2(w, 24.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+            ui.set_width(w);
+            ui.label(RichText::new(label).color(p.text_secondary));
+        });
         add(ui);
     });
 }

@@ -99,6 +99,9 @@ pub struct Monitor {
     pub show_sensors: bool,
     pub show_stress: bool,
     pub show_mini: bool,
+    /// Sidebar layout: Sensors/Stress are pages, so `frame` only raises the
+    /// `show_*` flags (tray menu) and the app navigates instead of opening windows.
+    pub pages: bool,
     pub stress: stress::Stress,
     pub tray: tray::Tray,
     view: View,
@@ -116,6 +119,7 @@ impl Monitor {
             settings: Settings::load(),
             show_sensors: false,
             show_stress: false,
+            pages: false,
             show_mini: false,
             stress: stress::Stress::default(),
             tray: tray::Tray::default(),
@@ -240,7 +244,7 @@ impl Monitor {
 
         let size = ectx.content_rect().size();
         let default = egui::vec2(WINDOW_SIZE[0].min(size.x - 16.0), WINDOW_SIZE[1].min(size.y - 40.0));
-        if self.show_sensors {
+        if self.show_sensors && !self.pages {
             let mut open = true;
             egui::Window::new(tr("Sensors"))
                 .open(&mut open)
@@ -249,7 +253,7 @@ impl Monitor {
                 .show(ectx, |ui| page(ui, self));
             self.show_sensors = open;
         }
-        if self.show_stress {
+        if self.show_stress && !self.pages {
             let mut open = true;
             egui::Window::new(tr("Stress test")).open(&mut open).default_size(default).default_pos([8.0, 32.0]).show(
                 ectx,
