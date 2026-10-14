@@ -1,9 +1,23 @@
 //! Storage section (FEATURES.md 3.15).
 //! Windows: storage IOCTLs + CfgMgr32. Linux: /sys/block. macOS: system_profiler.
 //! Read-only everywhere: drives are opened with zero access rights (Windows) or
-//! only through sysfs / system tools, never written.
+//! only through sysfs / system tools, never written. The only commands sent are
+//! read-only queries (IDENTIFY, SMART READ DATA/THRESHOLDS, NVMe Get Log Page).
+//!
+//! SMART (when `cfg.smart`):
+//! - Windows: NVMe Health log through IOCTL_STORAGE_QUERY_PROPERTY (no admin);
+//!   ATA attributes through IOCTL_STORAGE_PREDICT_FAILURE (no admin), thresholds
+//!   and fresh values through IOCTL_ATA_PASS_THROUGH / SMART_RCV_DRIVE_DATA (admin).
+//! - Linux: NVME_IOCTL_ADMIN_CMD on /dev/nvmeN and SG_IO ATA PASS-THROUGH(16)
+//!   on /dev/sdX (root); else `smartctl -j -a` when smartmontools is installed;
+//!   else the hwmon temperature only.
+//! - macOS: `smartctl -j -a diskN` when installed (no root needed), else the
+//!   system_profiler SMART verdict.
 // Parsers stay OS-neutral so their unit tests run on every host.
 #![allow(dead_code)]
+
+mod smart;
+pub use smart::*;
 
 use crate::Ctx;
 use crate::report::{Node, Section, f, gv, section};
@@ -33,8 +47,11 @@ pub struct Drive {
     pub controller: Option<String>,
     pub link: Option<String>,
     pub volumes: Vec<Volume>,
-    /// SMART / NVMe health values (only when `cfg.smart`).
+    /// Short (key, value) health summary derived from `smart` (kept for callers
+    /// that only want a few lines).
     pub health: Vec<(String, String)>,
+    /// SMART / NVMe health (only when `cfg.smart` and the OS lets us read it).
+    pub smart: Option<Smart>,
 }
 
 const BUS: [&str; 21] = [
@@ -143,7 +160,13 @@ pub fn ata_identify(id: &[u8]) -> (Option<u32>, Vec<String>) {
 }
 
 pub fn drives(ctx: &Ctx) -> Vec<Drive> {
-    imp::probe(ctx)
+    let mut v = imp::probe(ctx);
+    for d in &mut v {
+        if let Some(s) = &d.smart {
+            d.health = s.summary();
+        }
+    }
+    v
 }
 
 fn node(d: &Drive) -> Node {
@@ -168,7 +191,9 @@ fn node(d: &Drive) -> Node {
         c.push(f("Link Speed", s));
     }
     c.extend(d.volumes.iter().map(|v| f("Volume", volume_line(v))));
-    c.extend(d.health.iter().map(|(k, v)| f(k, v)));
+    if let Some(s) = &d.smart {
+        c.push(s.node());
+    }
     gv("Drive", &d.id, c)
 }
 
@@ -432,9 +457,10 @@ mod imp {
         h.ioctl(IOCTL_STORAGE_QUERY_PROPERTY, &q, 4096)
     }
 
-    /// ATA IDENTIFY DEVICE (0xEC, data-in only) via IOCTL_ATA_PASS_THROUGH.
-    /// Needs a read/write handle, i.e. admin; returns None otherwise.
-    fn ata_pass_identify(path: &str) -> Option<Vec<u8>> {
+    /// 512-byte PIO data-in ATA command via IOCTL_ATA_PASS_THROUGH: IDENTIFY
+    /// (0xEC) or SMART (0xB0) READ DATA (0xD0) / READ THRESHOLDS (0xD1).
+    /// Needs a read/write handle, i.e. admin.
+    fn ata_cmd(h: &Handle, command: u8, features: u8) -> Option<Vec<u8>> {
         const IOCTL_ATA_PASS_THROUGH: u32 = 0x4D02C;
         // ATA_PASS_THROUGH_EX: DataBufferOffset is a ULONG_PTR.
         let (hdr, off_at) = if cfg!(target_pointer_width = "64") { (48, 24) } else { (40, 20) };
@@ -444,10 +470,43 @@ mod imp {
         q[8..12].copy_from_slice(&512u32.to_le_bytes());
         q[12..16].copy_from_slice(&3u32.to_le_bytes()); // timeout, s
         q[off_at..off_at + 4].copy_from_slice(&(hdr as u32).to_le_bytes());
-        q[hdr - 8 + 6] = 0xEC; // CurrentTaskFile.Command
-        let h = Handle::open_rw(path)?;
+        // CurrentTaskFile: features, count, lba lo/mid/hi, device, command.
+        let tf = &mut q[hdr - 8..hdr];
+        tf[0] = features;
+        tf[1] = 1;
+        if command == 0xB0 {
+            (tf[3], tf[4]) = (0x4F, 0xC2); // SMART signature
+        }
+        tf[6] = command;
         let out = h.ioctl(IOCTL_ATA_PASS_THROUGH, &q, q.len())?;
-        out.get(hdr..hdr + 512).map(<[u8]>::to_vec)
+        out.get(hdr..hdr + 512).filter(|d| d.iter().any(|&b| b != 0)).map(<[u8]>::to_vec)
+    }
+
+    /// SMART_RCV_DRIVE_DATA (legacy SMART IOCTL, admin): 0xD0 data / 0xD1 thresholds.
+    fn smart_rcv(h: &Handle, features: u8) -> Option<Vec<u8>> {
+        const SMART_RCV_DRIVE_DATA: u32 = 0x7C088;
+        // SENDCMDINPARAMS (packed): cBufferSize, IDEREGS[8], bDriveNumber, …, 33 bytes.
+        let mut q = [0u8; 33];
+        q[0..4].copy_from_slice(&512u32.to_le_bytes());
+        q[4..12].copy_from_slice(&[features, 1, 1, 0x4F, 0xC2, 0xA0, 0xB0, 0]);
+        // SENDCMDOUTPARAMS: cBufferSize(4) + DRIVERSTATUS(12) + data.
+        let out = h.ioctl(SMART_RCV_DRIVE_DATA, &q, 16 + 512)?;
+        out.get(16..528).filter(|d| d.iter().any(|&b| b != 0)).map(<[u8]>::to_vec)
+    }
+
+    /// ATA SMART: attribute values through IOCTL_STORAGE_PREDICT_FAILURE (works
+    /// on a zero-access handle), thresholds and fresh values when admin.
+    fn ata_smart(h: &Handle, rw: Option<&Handle>) -> Option<super::Smart> {
+        const IOCTL_STORAGE_PREDICT_FAILURE: u32 = 0x2D1100;
+        // STORAGE_PREDICT_FAILURE: PredictFailure (ULONG) + VendorSpecific[512].
+        let pf = h.ioctl(IOCTL_STORAGE_PREDICT_FAILURE, &[], 516).filter(|b| b.len() >= 516);
+        let fresh = rw.and_then(|rw| ata_cmd(rw, 0xB0, 0xD0).or_else(|| smart_rcv(rw, 0xD0)));
+        let data = fresh.or_else(|| pf.as_ref().map(|b| b[4..516].to_vec()))?;
+        let thr = rw.and_then(|rw| ata_cmd(rw, 0xB0, 0xD1).or_else(|| smart_rcv(rw, 0xD1)));
+        let mut s = super::ata_smart(&data, thr.as_deref())?;
+        s.passed = pf.map(|b| le32(&b, 0) == 0);
+        s.evaluate();
+        Some(s)
     }
 
     /// StorageAdapter/DeviceProtocolSpecificProperty (49/50) query.
@@ -553,14 +612,22 @@ mod imp {
                 }
                 if ctx.cfg.smart {
                     let log = protocol(&h, 50, 3, 2, 2, 512).or_else(|| protocol(&h, 49, 3, 2, 2, 512));
-                    d.health = log.map(|l| super::nvme_health(&l)).unwrap_or_default();
+                    d.smart = log.and_then(|l| super::nvme_smart(&l));
                 }
-            } else if let Some(id) = protocol(&h, 50, 2, 1, 0, 512).or_else(|| ata_pass_identify(&path)) {
-                let (rpm, feat) = ata_identify(&id);
-                d.rpm = rpm;
-                d.features = feat;
-                if rpm == Some(1) {
-                    d.ssd = true;
+            } else {
+                let rw = Handle::open_rw(&path);
+                if let Some(id) =
+                    protocol(&h, 50, 2, 1, 0, 512).or_else(|| rw.as_ref().and_then(|rw| ata_cmd(rw, 0xEC, 0)))
+                {
+                    let (rpm, feat) = ata_identify(&id);
+                    d.rpm = rpm;
+                    d.features = feat;
+                    if rpm == Some(1) {
+                        d.ssd = true;
+                    }
+                }
+                if ctx.cfg.smart && d.bus != 7 {
+                    d.smart = ata_smart(&h, rw.as_ref());
                 }
             }
             if let Some(dn) = iface_instance(&path).and_then(|id| locate(&id))
@@ -581,22 +648,6 @@ mod imp {
             })
             .collect()
     }
-}
-
-/// Temperature / wear / hours from an NVMe SMART / Health log page (LID 02h).
-pub fn nvme_health(l: &[u8]) -> Vec<(String, String)> {
-    if l.len() < 144 {
-        return Vec::new();
-    }
-    let k = u16::from_le_bytes([l[1], l[2]]) as i32;
-    let hours = u64::from_le_bytes(l[128..136].try_into().unwrap_or_default());
-    let mut v = Vec::new();
-    if k > 0 {
-        v.push(("Temperature".into(), format!("{} C", k - 273)));
-    }
-    v.push(("Percentage Used".into(), format!("{}%", l[5])));
-    v.push(("Power On Hours".into(), hours.to_string()));
-    v
 }
 
 // ---------------------------------------------------------------- Linux
@@ -656,6 +707,7 @@ pub fn unescape_mount(s: &str) -> String {
 mod imp {
     use super::*;
     use crate::os::{read_trim, read_u64};
+    use std::os::unix::fs::OpenOptionsExt;
     use std::path::Path;
 
     fn statvfs(mp: &str) -> Option<(u64, u64)> {
@@ -716,6 +768,135 @@ mod imp {
         (ctl, link)
     }
 
+    /// NVMe admin command (struct nvme_passthru_cmd, linux/nvme_ioctl.h).
+    #[repr(C)]
+    #[derive(Default)]
+    struct NvmeAdminCmd {
+        opcode: u8,
+        flags: u8,
+        rsvd1: u16,
+        nsid: u32,
+        cdw2: u32,
+        cdw3: u32,
+        metadata: u64,
+        addr: u64,
+        metadata_len: u32,
+        data_len: u32,
+        cdw10: u32,
+        cdw11: u32,
+        cdw12: u32,
+        cdw13: u32,
+        cdw14: u32,
+        cdw15: u32,
+        timeout_ms: u32,
+        result: u32,
+    }
+
+    /// Get Log Page, SMART / Health (02h), controller-wide. Needs root.
+    fn nvme_log(ctrl: &str) -> Option<Vec<u8>> {
+        use std::os::fd::AsRawFd;
+        const NVME_IOCTL_ADMIN_CMD: u32 = 0xC048_4E41; // _IOWR('N', 0x41, 72 bytes)
+        let f = std::fs::File::open(format!("/dev/{ctrl}")).ok()?;
+        let mut buf = vec![0u8; 512];
+        let mut c = NvmeAdminCmd {
+            opcode: 0x02,
+            nsid: 0xFFFF_FFFF,
+            addr: buf.as_mut_ptr() as u64,
+            data_len: 512,
+            cdw10: (127 << 16) | 0x02, // NUMDL = 512/4 - 1, LID 02h
+            timeout_ms: 3000,
+            ..NvmeAdminCmd::default()
+        };
+        // SAFETY: c and buf outlive the call; the kernel writes at most data_len bytes.
+        let r = unsafe { libc::ioctl(f.as_raw_fd(), NVME_IOCTL_ADMIN_CMD as _, &mut c) };
+        (r == 0).then_some(buf)
+    }
+
+    /// struct sg_io_hdr (scsi/sg.h).
+    #[repr(C)]
+    struct SgIoHdr {
+        interface_id: i32,
+        dxfer_direction: i32,
+        cmd_len: u8,
+        mx_sb_len: u8,
+        iovec_count: u16,
+        dxfer_len: u32,
+        dxferp: *mut libc::c_void,
+        cmdp: *const u8,
+        sbp: *mut u8,
+        timeout: u32,
+        flags: u32,
+        pack_id: i32,
+        usr_ptr: *mut libc::c_void,
+        status: u8,
+        masked_status: u8,
+        msg_status: u8,
+        sb_len_wr: u8,
+        host_status: u16,
+        driver_status: u16,
+        resid: i32,
+        duration: u32,
+        info: u32,
+    }
+
+    /// SMART READ DATA / READ THRESHOLDS through SCSI ATA PASS-THROUGH(16)
+    /// (SAT, PIO data-in, 1 sector). Needs root (O_RDWR on the disk node).
+    fn sat_smart_cmd(f: &std::fs::File, features: u8) -> Option<Vec<u8>> {
+        use std::os::fd::AsRawFd;
+        const SG_IO: u32 = 0x2285;
+        let cdb: [u8; 16] = [0x85, 4 << 1, 0x0E, 0, features, 0, 1, 0, 0, 0, 0x4F, 0, 0xC2, 0, 0xB0, 0];
+        let (mut buf, mut sense) = (vec![0u8; 512], [0u8; 32]);
+        let mut h = SgIoHdr {
+            interface_id: b'S' as i32,
+            dxfer_direction: -3, // SG_DXFER_FROM_DEV
+            cmd_len: 16,
+            mx_sb_len: sense.len() as u8,
+            iovec_count: 0,
+            dxfer_len: 512,
+            dxferp: buf.as_mut_ptr().cast(),
+            cmdp: cdb.as_ptr(),
+            sbp: sense.as_mut_ptr(),
+            timeout: 3000,
+            flags: 0,
+            pack_id: 0,
+            usr_ptr: std::ptr::null_mut(),
+            status: 0,
+            masked_status: 0,
+            msg_status: 0,
+            sb_len_wr: 0,
+            host_status: 0,
+            driver_status: 0,
+            resid: 0,
+            duration: 0,
+            info: 0,
+        };
+        // SAFETY: every pointer in h refers to a live local buffer of the stated size.
+        let r = unsafe { libc::ioctl(f.as_raw_fd(), SG_IO as _, &mut h) };
+        (r == 0 && h.status == 0 && h.host_status == 0 && h.info & 1 == 0 && buf.iter().any(|&b| b != 0)).then_some(buf)
+    }
+
+    fn sat_smart(dev: &str) -> Option<Smart> {
+        let f = std::fs::OpenOptions::new().read(true).write(true).custom_flags(libc::O_NONBLOCK).open(dev).ok()?;
+        let data = sat_smart_cmd(&f, 0xD0)?;
+        let thr = sat_smart_cmd(&f, 0xD1);
+        let mut s = ata_smart(&data, thr.as_deref())?;
+        s.evaluate();
+        Some(s)
+    }
+
+    /// Native ioctls (root), then `smartctl -j` if installed.
+    fn smart(name: &str, bus: u32) -> Option<Smart> {
+        let native = match bus {
+            17 => {
+                let n: String = name.trim_start_matches("nvme").chars().take_while(char::is_ascii_digit).collect();
+                nvme_log(&format!("nvme{n}")).and_then(|l| nvme_smart(&l))
+            }
+            11 => sat_smart(&format!("/dev/{name}")),
+            _ => None,
+        };
+        native.or_else(|| smartctl(&format!("/dev/{name}")))
+    }
+
     pub fn probe(ctx: &Ctx) -> Vec<Drive> {
         let mut names: Vec<String> = std::fs::read_dir("/sys/block")
             .map(|r| r.flatten().filter_map(|e| e.file_name().into_string().ok()).collect())
@@ -772,11 +953,16 @@ mod imp {
             if let Some(bdf) = last_bdf(&ctl_path) {
                 (d.controller, d.link) = pci_controller(bdf);
             }
-            if ctx.cfg.smart && d.bus == 17 {
-                let hw = std::fs::read_dir(dev.join("hwmon")).ok().and_then(|mut r| r.next()).and_then(|e| e.ok());
-                if let Some(t) = hw.and_then(|e| read_u64(e.path().join("temp1_input"))) {
-                    d.health.push(("Temperature".into(), format!("{} C", t / 1000)));
-                }
+            if ctx.cfg.smart {
+                d.smart = smart(&name, d.bus).or_else(|| {
+                    // Unprivileged: nvme / drivetemp hwmon temperature only.
+                    let hw = std::fs::read_dir(dev.join("hwmon")).ok().and_then(|mut r| r.next()).and_then(|e| e.ok());
+                    let t = hw.and_then(|e| read_u64(e.path().join("temp1_input")))?;
+                    let mut s =
+                        Smart { source: "hwmon".into(), temperature_c: Some(t as f64 / 1000.0), ..Smart::default() };
+                    s.evaluate();
+                    Some(s)
+                });
             }
             d.volumes = volumes(&name);
             out.push(d);
@@ -855,7 +1041,15 @@ mod imp {
                 if let Some(st) = s(it, "smart_status") {
                     d.features.insert(0, "SMART".into());
                     if ctx.cfg.smart {
-                        d.health.push(("SMART Status".into(), st));
+                        // smartctl (if installed) reads NVMe/ATA health through IOKit without root.
+                        d.smart = Some(match smartctl(&bsd) {
+                            Some(mut x) => {
+                                x.passed = x.passed.or(from_status(&st, "").passed);
+                                x.evaluate();
+                                x
+                            }
+                            None => from_status(&st, "system_profiler"),
+                        });
                     }
                 }
                 let look = |n: &str| find_key(it, n).or_else(|| par.and_then(|p| find_key(p, n)));
@@ -928,16 +1122,5 @@ mod tests {
         assert_eq!(linux_bus(s), 11);
         assert_eq!(last_bdf("/sys/devices/virtual/block/x"), None);
         assert_eq!(unescape_mount("/mnt/my\\040disk"), "/mnt/my disk");
-    }
-
-    #[test]
-    fn health() {
-        let mut l = vec![0u8; 512];
-        l[1..3].copy_from_slice(&310u16.to_le_bytes());
-        l[5] = 3;
-        l[128] = 100;
-        let h = nvme_health(&l);
-        assert_eq!(h[0].1, "37 C");
-        assert_eq!(h[2].1, "100");
     }
 }
