@@ -5,6 +5,8 @@
 mod bench_tab;
 mod bmp;
 pub mod i18n;
+pub mod theme;
+pub mod widgets;
 
 /// This file's UI strings (see i18n.rs).
 pub const PT_BR: &[(&str, &str)] = &[];
