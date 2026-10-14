@@ -22,8 +22,14 @@ static CURRENT: AtomicUsize = AtomicUsize::new(0);
 type Table = &'static [(&'static str, &'static str)];
 
 /// (pt-BR, es) tables of every GUI file.
-fn tables() -> [(Table, Table); 2] {
-    [(super::PT_BR, super::ES), (super::overview::PT_BR, super::overview::ES)]
+fn tables() -> [(Table, Table); 5] {
+    [
+        (super::PT_BR, super::ES),
+        (super::overview::PT_BR, super::overview::ES),
+        (super::sensors::PT_BR, super::sensors::ES),
+        (super::stress::PT_BR, super::stress::ES),
+        (super::tray::PT_BR, super::tray::ES),
+    ]
 }
 
 pub fn set(lang: Lang) {

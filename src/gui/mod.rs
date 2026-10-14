@@ -6,6 +6,12 @@ mod bench_tab;
 mod bmp;
 pub mod i18n;
 pub mod overview;
+// ---- monitoring (sensors / stress / tray) ----
+mod plot;
+pub mod sensors;
+pub mod stress;
+mod tray;
+// ---- end monitoring ----
 pub mod theme;
 pub mod widgets;
 
@@ -86,6 +92,8 @@ struct App {
     /// About > Check for updates: Some(result text) once finished.
     update_manual: Arc<Mutex<Option<String>>>,
     title_minimized: bool,
+    /// Sensors page, stress monitor, tray and mini monitor (gui/sensors.rs).
+    mon: sensors::Monitor,
 }
 
 pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
@@ -107,6 +115,7 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
             .with_min_inner_size([460.0, 440.0]),
         ..Default::default()
     };
+    let mon = sensors::Monitor::new(ctx.clone());
     let app = App {
         ctx,
         report,
@@ -130,6 +139,7 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         logo: None,
         update_manual: Arc::new(Mutex::new(None)),
         title_minimized: false,
+        mon,
     };
     if app.ctx.cfg.check_updates && app.auto.is_none() {
         let slot = app.update.clone();
@@ -140,6 +150,8 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         crate::DISPLAY_NAME,
         opts,
         Box::new(move |cc| {
+            // Theme text styles + Phosphor icons (the Sensors/Stress pages need them).
+            theme::install(&cc.egui_ctx);
             if font_size > 0.0 {
                 cc.egui_ctx.global_style_mut(|s| {
                     for f in s.text_styles.values_mut() {
@@ -198,7 +210,12 @@ impl eframe::App for App {
         egui::Panel::bottom("status").show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(RichText::new(format!("{} {}", crate::DISPLAY_NAME, crate::VERSION)).weak());
+                if ui.button(i18n::tr("Sensors")).clicked() {
+                    self.mon.show_sensors = true;
+                }
                 ui.menu_button("Tools", |ui| {
+                    self.mon.menu(ui);
+                    ui.separator();
                     if ui.button("Clocks").clicked() {
                         *self.show_clocks.lock().unwrap() = true;
                     }
@@ -235,12 +252,13 @@ impl eframe::App for App {
                 Tab::Memory => memory_tab(ui, r),
                 Tab::Spd => self.spd_tab(ui, r),
                 Tab::Graphics => self.graphics_tab(ui, r),
-                Tab::Bench => self.bench.ui(ui, &self.ctx),
+                Tab::Bench => self.bench.ui(ui, &self.ctx, &mut self.mon),
                 Tab::About => self.about_tab(ui, r),
             });
         });
         self.clocks_window(&ectx);
         self.timers_window(&ectx, report.as_deref());
+        self.mon.frame(&ectx);
         self.take_screenshot(&ectx);
         self.auto_shots(&ectx, report.is_some());
     }
@@ -651,21 +669,31 @@ impl App {
     fn auto_shots(&mut self, ectx: &egui::Context, loaded: bool) {
         let Some(a) = &mut self.auto else { return };
         ectx.request_repaint();
+        self.mon.tel(); // start sampling early so the Sensors shot has history
         // Let the report load and the clock sampler produce a value first.
         if !loaded || a.started.elapsed() < Duration::from_secs(3) || self.shot.is_some() {
             return;
         }
-        if a.step > TABS.len() {
+        // Tabs, Clocks, then sensors.png and stress.png (gui/sensors.rs).
+        if a.step > TABS.len() + 2 {
+            self.mon.stress.stop(None);
             ectx.send_viewport_cmd(egui::ViewportCommand::Close);
             return;
         }
         let name = if a.step < TABS.len() {
             self.tab = TABS[a.step].0;
             TABS[a.step].1.to_lowercase()
-        } else {
+        } else if a.step == TABS.len() {
             self.tab = Tab::Cpu;
             *self.show_clocks.lock().unwrap() = true;
             "clocks".to_string()
+        } else {
+            *self.show_clocks.lock().unwrap() = false;
+            let k = (a.step - TABS.len() - 1) as u8;
+            if !self.mon.autoshot(k, ectx) {
+                return;
+            }
+            ["sensors", "stress"][k as usize].to_string()
         };
         if self.tab == Tab::Bench && !self.bench.autorun(&self.ctx) {
             return;
@@ -676,6 +704,7 @@ impl App {
         }
         a.wait = 0;
         a.step += 1;
+        self.mon.autoshot_next();
         self.shot = Some(Shot::Png(a.dir.join(format!("{name}.png"))));
         ectx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
     }

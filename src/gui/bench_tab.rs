@@ -2,7 +2,7 @@
 //! core set (hybrid CPUs), and Stress CPU. Scores are cpuzeez's own workload.
 
 use crate::Ctx;
-use crate::bench::{self, Bench, Score, StressHandle, Variant};
+use crate::bench::{self, Bench, Score, Variant};
 use eframe::egui::{self, RichText};
 
 pub struct State {
@@ -13,7 +13,6 @@ pub struct State {
     mt: Option<Score>,
     running: Option<(bool, Bench)>, // (multi-thread?, run)
     queue_mt: bool,
-    stress: Option<StressHandle>,
 }
 
 impl Default for State {
@@ -26,7 +25,6 @@ impl Default for State {
             mt: None,
             running: None,
             queue_mt: false,
-            stress: None,
         }
     }
 }
@@ -51,7 +49,7 @@ fn bar(ui: &mut egui::Ui, label: &str, score: Option<Score>, best: f64, progress
 }
 
 impl State {
-    pub fn ui(&mut self, ui: &mut egui::Ui, ctx: &Ctx) {
+    pub fn ui(&mut self, ui: &mut egui::Ui, ctx: &Ctx, mon: &mut super::sensors::Monitor) {
         ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
         // Advance the ST -> MT sequence.
         if let Some((mt, b)) = &self.running
@@ -109,17 +107,20 @@ impl State {
                 self.queue_mt = false;
                 self.running = None; // dropping cancels
             }
-            let label = if self.stress.is_some() { "Stop Stress" } else { "Stress CPU" };
+            // ---- monitored stress (gui/stress.rs) ----
+            let label = if mon.stress.running() { "Stop Stress" } else { "Stress CPU" };
             if ui.add_enabled(idle, egui::Button::new(label)).clicked() {
-                match self.stress.take() {
-                    Some(h) => h.stop(),
-                    None => self.stress = Some(bench::stress(self.threads)),
+                if mon.stress.running() {
+                    mon.stress.stop(None);
+                } else {
+                    mon.start_stress(self.threads);
                 }
             }
         });
-        if self.stress.is_some() {
-            ui.label(RichText::new(format!("Stressing {} threads…", self.threads)).strong());
+        if mon.stress.running() {
+            super::stress::page(ui, mon, false);
         }
+        // ---- end monitored stress ----
         ui.separator();
         ui.label(RichText::new("cpuzeez's own workload: scores are not comparable with CPU-Z's.").small().weak());
     }
