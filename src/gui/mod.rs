@@ -797,6 +797,13 @@ fn memory_tab(ui: &mut egui::Ui, r: &[Section]) {
             ("Row Refresh Cycle Time (tRFC)", k("Row Refresh Cycle Time (tRFC)")),
         ],
     );
+    #[cfg(target_os = "macos")]
+    if k("CAS# latency (CL)").is_empty() {
+        ui.label(
+            RichText::new("macOS does not expose live DRAM timings. Dashes indicate unavailable fields.")
+                .color(Color32::GRAY),
+        );
+    }
 }
 
 fn gpu_name(n: &[Node]) -> String {

@@ -1,7 +1,10 @@
 //! Chipset section (FEATURES.md 3.8) and the data behind the Mainboard and
 //! Memory tabs (FEATURES.md 6, 7). Live DRAM timings come from the memory
 //! controller when the privileged backend can reach it (AMD UMC over SMN);
-//! otherwise only the SMBIOS view (type/size/configured speed) is shown.
+//! otherwise the SMBIOS view or macOS memory information is shown.
+#[cfg(any(target_os = "macos", test))]
+mod macos;
+
 use crate::Ctx;
 use crate::pci::{self, Device, Link, decode::speed_text};
 use crate::report::{Section, f, section};
@@ -301,6 +304,8 @@ fn memory(ctx: &Ctx, amd: bool, family: u32, bus_mhz: Option<f64>) -> Memory {
             }
         });
     }
+    #[cfg(target_os = "macos")]
+    macos::probe(&mut m);
     m
 }
 
