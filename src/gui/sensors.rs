@@ -158,7 +158,7 @@ impl Monitor {
         f(&mut self.settings);
     }
 
-    fn set_tray(&mut self, on: bool, ectx: &egui::Context) {
+    pub(super) fn set_tray(&mut self, on: bool, ectx: &egui::Context) {
         self.tray.set_enabled(on, ectx);
         if on && !self.tray.active() {
             self.show_mini = true; // no tray host: fall back to the mini window

@@ -22,13 +22,17 @@ static CURRENT: AtomicUsize = AtomicUsize::new(0);
 type Table = &'static [(&'static str, &'static str)];
 
 /// (pt-BR, es) tables of every GUI file.
-fn tables() -> [(Table, Table); 5] {
-    [
+fn tables() -> &'static [(Table, Table)] {
+    &[
         (super::PT_BR, super::ES),
         (super::overview::PT_BR, super::overview::ES),
         (super::sensors::PT_BR, super::sensors::ES),
         (super::stress::PT_BR, super::stress::ES),
         (super::tray::PT_BR, super::tray::ES),
+        (super::bench_tab::PT_BR, super::bench_tab::ES),
+        (super::settings_ui::PT_BR, super::settings_ui::ES),
+        (super::tools::PT_BR, super::tools::ES),
+        (super::devices::PT_BR, super::devices::ES),
     ]
 }
 
@@ -81,14 +85,28 @@ pub fn os_lang() -> Lang {
     Lang::En
 }
 
-/// Translate an English UI string.
-pub fn tr(en: &'static str) -> &'static str {
+/// Translate an English UI string (also works on report keys, which are not
+/// `'static`: an unknown key comes back unchanged).
+pub fn tr(en: &str) -> &str {
     let pick: fn(&(Table, Table)) -> Table = match current() {
         Lang::En => return en,
         Lang::PtBr => |t| t.0,
         Lang::Es => |t| t.1,
     };
     tables().iter().map(pick).find_map(|t| t.iter().find(|(k, _)| *k == en).map(|(_, v)| *v)).unwrap_or(en)
+}
+
+/// Translate a template and fill its `{}` placeholders in order.
+pub fn trf(en: &str, args: &[&dyn std::fmt::Display]) -> String {
+    let mut parts = tr(en).split("{}");
+    let mut out = parts.next().unwrap_or_default().to_string();
+    for (i, p) in parts.enumerate() {
+        if let Some(a) = args.get(i) {
+            out.push_str(&a.to_string());
+        }
+        out.push_str(p);
+    }
+    out
 }
 
 #[cfg(test)]
@@ -102,6 +120,26 @@ mod tests {
         assert_eq!(from_code("en-US"), Lang::En);
         set(Lang::PtBr);
         assert_eq!(tr("__never translated__"), "__never translated__");
+        assert_eq!(trf("{} of {}", &[&1, &"b"]), "1 of b");
         set(Lang::En);
+    }
+
+    /// Both languages translate the same keys, no key is listed twice, and
+    /// placeholders survive translation.
+    #[test]
+    fn tables_complete() {
+        for (pt, es) in tables() {
+            let mut a: Vec<&str> = pt.iter().map(|x| x.0).collect();
+            let mut b: Vec<&str> = es.iter().map(|x| x.0).collect();
+            a.sort_unstable();
+            b.sort_unstable();
+            let n = a.len();
+            a.dedup();
+            assert_eq!(n, a.len(), "duplicate pt-BR key");
+            assert_eq!(a, b, "pt-BR and es keys differ");
+            for (k, v) in pt.iter().chain(es.iter()) {
+                assert_eq!(k.matches("{}").count(), v.matches("{}").count(), "placeholders in {k:?}");
+            }
+        }
     }
 }
