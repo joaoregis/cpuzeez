@@ -372,7 +372,15 @@ pub fn decode(ver: u32, t: &[f32], per_group: &[usize]) -> Option<PmData> {
         let per = c.slots / c.groups;
         present = (0..c.groups).map(|g| slots.iter().any(|s| s / per == g)).collect();
         if let Some(b) = l.fmax_block {
-            d.max_mhz = slots.iter().filter_map(|s| pos(Some(b + s))).reduce(f64::max).map(|g| g * 1000.0);
+            // Per-core Fmax cells wobble a little with the boost curve; the
+            // value most cores report is the fused maximum (CPU-Z's figure).
+            let mhz: Vec<i64> =
+                slots.iter().filter_map(|s| pos(Some(b + s))).map(|g| (g * 1000.0).round() as i64).collect();
+            d.max_mhz = mhz
+                .iter()
+                .max_by_key(|m| (mhz.iter().filter(|x| x == m).count(), std::cmp::Reverse(**m)))
+                // Shown in multiplier steps (25 MHz), as CPU-Z does.
+                .map(|&m| (m as f64 / 25.0).round() * 25.0);
         }
     }
     for i in 0..l.l3_n {

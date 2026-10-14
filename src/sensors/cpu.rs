@@ -108,7 +108,21 @@ pub fn ratio_fields(ctx: &Ctx) -> Vec<Node> {
         return Vec::new();
     }
     let bclk = crate::cpu::bus_mhz(c).filter(|b| *b > 0.0).unwrap_or(100.0);
-    let peaks = PEAK_EFF.lock().map(|p| p.clone()).unwrap_or_default();
+    // Like CPU-Z: what each core reaches when it alone is loaded (APERF/MPERF
+    // over a short busy loop). Without MSR access, the session's PM peaks.
+    let loaded: Vec<f64> = c
+        .logical
+        .iter()
+        .filter(|l| l.smt == 0)
+        .map_while(|l| {
+            // A delayed MSR read can skew one window; retry readings above Fmax.
+            let fmax = pm(ctx).and_then(|d| d.max_mhz).or(c.max_mhz).unwrap_or(f64::MAX);
+            (0..3)
+                .filter_map(|_| crate::cpu::clocks::loaded_mhz(ctx, l.cpu, std::time::Duration::from_millis(150)))
+                .find(|m| *m <= fmax * 1.02 && *m > 100.0)
+        })
+        .collect();
+    let peaks = if loaded.len() == c.cores { loaded } else { PEAK_EFF.lock().map(|p| p.clone()).unwrap_or_default() };
     peaks
         .iter()
         .enumerate()
@@ -145,8 +159,8 @@ pub fn pm_monitor(ctx: &Ctx) -> Option<Monitor> {
         let val = |l: Option<amd_pm::Limit>| l.and_then(|l| l.value);
         let extra = [
             (Kind::Power, "PPT", val(d.ppt)),
-            (Kind::Power, "Package", d.socket_power),
-            (Kind::Power, "Cores", d.cores_power),
+            (Kind::Power, "Socket (SMU)", d.socket_power),
+            (Kind::Power, "Core rail (SMU)", d.cores_power),
             (Kind::Current, "TDC Limit", d.tdc.map(|l| l.limit)),
             (Kind::Current, "TDC", val(d.tdc)),
             (Kind::Current, "EDC Limit", d.edc.map(|l| l.limit)),
@@ -200,9 +214,8 @@ pub fn fields(ctx: &Ctx) -> Vec<Node> {
         if let Some(x) = d.max_mhz {
             v.push(f("Max Frequency", format!("{x:.0} MHz")));
         }
-        if let Some(x) = d.pbo_scalar {
-            v.push(f("PBO Scalar", if x.fract() == 0.0 { format!("{x:.0}") } else { format!("{x:.2}") }));
-        }
+        // PBO scalar: not shown — the candidate PM cell changes at run time,
+        // so it isn't the configured scalar.
         // CPU-Z adds ", fused : N"; the fused limits need an SMU mailbox call we don't make.
         let lims = [
             ("Package Power Tracking (PPT)", d.ppt, "W"),

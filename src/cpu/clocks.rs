@@ -85,6 +85,34 @@ fn aperf_mperf(ctx: &Ctx, cpu: usize) -> Option<f64> {
     (dm > 0).then(|| tsc * da as f64 / dm as f64 / 1e6)
 }
 
+/// MHz of `cpu` while it alone is loaded, after `warm` of load so the boost
+/// clock has settled (CPU-Z's "max ratio (effective)"). APERF/MPERF only.
+pub fn loaded_mhz(ctx: &Ctx, cpu: usize, warm: Duration) -> Option<f64> {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let tsc = tsc_hz()?;
+    let hw = &ctx.hw;
+    let (ra, rm) = if hw.rdmsr(cpu, MSR_APERF).is_some() { (MSR_APERF, MSR_MPERF) } else { (0xC000_00E8, 0xC000_00E7) };
+    hw.rdmsr(cpu, rm)?;
+    let stop = AtomicBool::new(false);
+    std::thread::scope(|s| {
+        s.spawn(|| {
+            if crate::os::pin(cpu) {
+                while !stop.load(Ordering::Relaxed) {
+                    std::hint::spin_loop();
+                }
+            }
+        });
+        std::thread::sleep(warm);
+        let a0 = hw.rdmsr(cpu, ra);
+        let m0 = hw.rdmsr(cpu, rm);
+        std::thread::sleep(Duration::from_millis(50));
+        let (a1, m1) = (hw.rdmsr(cpu, ra), hw.rdmsr(cpu, rm));
+        stop.store(true, Ordering::Relaxed);
+        let (da, dm) = (a1?.wrapping_sub(a0?), m1?.wrapping_sub(m0?));
+        (dm > 0).then(|| tsc * da as f64 / dm as f64 / 1e6)
+    })
+}
+
 /// Run on the calling thread. Warms up so boost clocks have ramped.
 pub fn add_chain_mhz(span: Duration) -> f64 {
     let _ = chain(Duration::from_millis(40));
