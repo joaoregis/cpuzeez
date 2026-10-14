@@ -1,12 +1,14 @@
 //! Chipset section (FEATURES.md 3.8) and the data behind the Mainboard and
 //! Memory tabs (FEATURES.md 6, 7). Live DRAM timings come from the memory
-//! controller when the privileged backend can reach it (AMD UMC over SMN);
-//! otherwise only the SMBIOS view (type/size/configured speed) is shown.
+//! controller when the privileged backend can reach it (AMD UMC over SMN,
+//! Intel MCHBAR, see `intel`); otherwise only the SMBIOS/SPD view is shown.
 use crate::Ctx;
 use crate::pci::{self, Device, Link, decode::speed_text};
 use crate::report::{Section, f, section};
 
-#[derive(Debug, Clone, Default)]
+mod intel;
+
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Timings {
     pub cl: u32,
     pub trcd: u32,
@@ -30,7 +32,12 @@ pub struct Memory {
     pub ratio: Option<String>,
     pub max_freq_mhz: Option<f64>,
     pub timings: Option<Timings>,
+    /// CPU-Z's "Uncore Frequency": AMD UCLK, Intel ring clock.
     pub uncore_mhz: Option<f64>,
+    /// AMD data fabric clock (FCLK).
+    pub fabric_mhz: Option<f64>,
+    /// Intel memory controller clock (QCLK, Gear 1/2/4 parts).
+    pub mc_mhz: Option<f64>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -98,8 +105,14 @@ pub fn collect(ctx: &Ctx) -> Vec<Section> {
             v.push(f("Row Refresh Cycle Time (tRFC)", rfc));
         }
     }
+    if let Some(u) = m.mc_mhz {
+        v.push(f("Memory Controller Frequency", format!("{u:.1} MHz")));
+    }
     if let Some(u) = m.uncore_mhz {
         v.push(f("Uncore Frequency", format!("{u:.1} MHz")));
+    }
+    if let Some(u) = m.fabric_mhz {
+        v.push(f("Fabric Frequency (FCLK)", format!("{u:.1} MHz")));
     }
     if v.is_empty() {
         return Vec::new();
@@ -146,14 +159,55 @@ pub fn summary(ctx: &Ctx) -> ChipsetSummary {
         .map(|l| l.max_speed)
         .max()
         .filter(|&g| (1..=6).contains(&g))
+        .or_else(|| platform_pcie_gen(amd, cpu.sig.0, cpu.sig.1))
         .map(|g| format!("PCI-Express {g}.0 ({})", speed_text(g)));
 
     let gpus: Vec<&Device> = devs.iter().filter(|d| d.class >> 16 == 0x03).collect();
     let main_gpu = gpus.iter().find(|d| !integrated_gpu(devs, d)).or(gpus.first());
     s.gfx_link = main_gpu.and_then(|d| d.pcie_link()).filter(|l| l.max_width > 0);
 
-    s.memory = memory(ctx, amd, cpu.sig.0, cpu.bus_mhz);
+    s.memory = memory(ctx, amd, cpu.sig.0, cpu.sig.1, cpu.bus_mhz);
     s
+}
+
+/// Fastest PCIe generation of the CPU's own lanes, from the vendors' public
+/// spec pages, for when no root port's Link Capabilities can be read (Windows
+/// without the driver). None where a family mixes generations or isn't listed.
+fn platform_pcie_gen(amd: bool, family: u32, model: u32) -> Option<u8> {
+    Some(match (amd, family, model) {
+        // AM5 Raphael / Dragon Range, Granite Ridge / Fire Range.
+        (true, 0x19, 0x60..=0x6F) | (true, 0x1A, 0x40..=0x4F) => 5,
+        // AM4 Matisse, Castle Peak, Vermeer/Chagall; Rembrandt, Phoenix/Hawk Point; Strix Point/Halo, Krackan.
+        (true, 0x17, 0x30..=0x3F | 0x70..=0x7F)
+        | (true, 0x19, 0x00..=0x0F | 0x20..=0x2F | 0x40..=0x4F | 0x70..=0x7F) => 4,
+        (true, 0x1A, 0x20..=0x2F | 0x60..=0x7F) => 4,
+        // Summit/Pinnacle Ridge, Raven/Picasso, Renoir/Lucienne, Cezanne/Barcelo.
+        (true, 0x17, 0x00..=0x2F | 0x60..=0x6F) | (true, 0x19, 0x50..=0x5F) => 3,
+        // Alder/Raptor Lake S/HX, Arrow Lake S/HX.
+        (false, 6, 0x97 | 0xB7 | 0xBF | 0xC6) => 5,
+        // Alder/Raptor Lake P/H/U, Tiger Lake, Rocket Lake.
+        (false, 6, 0x9A | 0xBA | 0x8C | 0x8D | 0xA7) => 4,
+        // Ivy Bridge .. Comet Lake, Ice Lake client.
+        (false, 6, 0x3A | 0x3C | 0x3D | 0x45 | 0x46 | 0x47 | 0x4E | 0x5E | 0x8E | 0x9E | 0xA5 | 0xA6 | 0x7D | 0x7E) => {
+            3
+        }
+        (false, 6, 0x2A) => 2,
+        _ => return None,
+    })
+}
+
+/// FSB:DRAM ratio text: "1:30", or "3:N" for third-step ratios.
+fn ratio_text(r: f64) -> String {
+    if (r - r.round()).abs() < 0.01 { format!("1:{}", r.round()) } else { format!("3:{}", (r * 3.0).round()) }
+}
+
+/// "Memory Max Frequency" from SPD: the slowest XMP/EXPO profile when the
+/// modules carry any, else the fastest JEDEC row. Matches CPU-Z on a kit with
+/// 3000/2800 MHz XMP+EXPO profiles and a 2400 MHz JEDEC max (it reports
+/// 2800.0 MHz); without SPD the caller keeps the SMBIOS rated speed.
+fn spd_max_mhz(mods: &[crate::spd::DecodedModule]) -> Option<f64> {
+    let prof = mods.iter().flat_map(|m| &m.profiles).map(|p| p.timing.freq).filter(|&x| x > 0.0);
+    prof.reduce(f64::min).or_else(|| mods.iter().flat_map(|m| &m.jedec).map(|t| t.freq).reduce(f64::max))
 }
 
 fn name_or_ids(d: &Device) -> String {
@@ -262,31 +316,64 @@ fn dimms(ctx: &Ctx) -> Vec<crate::smbios::MemDevice> {
     crate::smbios::memory_devices(ctx).into_iter().filter(|m| m.size_mb > 0).collect()
 }
 
-fn memory(ctx: &Ctx, amd: bool, family: u32, bus_mhz: Option<f64>) -> Memory {
+fn memory(ctx: &Ctx, amd: bool, family: u32, model: u32, bus_mhz: Option<f64>) -> Memory {
     let ds = dimms(ctx);
     let mut m = Memory::default();
     m.mem_type =
         ds.iter().map(|d| d.mem_type).find(|t| !t.is_empty() && *t != "Unknown" && *t != "Other").map(str::to_string);
     m.size_mb = ds.iter().map(|d| d.size_mb).sum();
-    let ddr5 = m.mem_type.as_deref().map_or(amd && family >= 0x19, |t| t.contains("DDR5"));
-    m.max_freq_mhz = ds.iter().map(|d| d.speed).max().filter(|&s| s > 0).map(|s| s as f64 / 2.0);
+    let mut ddr5 = m.mem_type.as_deref().map_or(amd && family >= 0x19, |t| t.contains("DDR5"));
+    m.max_freq_mhz = spd_max_mhz(&crate::spd::modules(ctx))
+        .or_else(|| ds.iter().map(|d| d.speed).max().filter(|&s| s > 0).map(|s| s as f64 / 2.0));
     m.freq_mhz = ds.iter().map(|d| d.configured_speed).max().filter(|&s| s > 0).map(|s| s as f64 / 2.0);
     let mut nch = ds.len();
+    let bclk = bus_mhz.filter(|b| (50.0..200.0).contains(b)).unwrap_or(100.0);
 
-    if ctx.cfg.chipset
-        && amd
-        && matches!(family, 0x17 | 0x19 | 0x1A)
-        && let Some(u) = amd_umc(ctx, ddr5)
-    {
-        nch = u.channels;
-        let bclk = bus_mhz.filter(|b| (50.0..200.0).contains(b)).unwrap_or(100.0);
-        m.freq_mhz = Some(u.ratio * bclk);
-        m.ratio = Some(if (u.ratio - u.ratio.round()).abs() < 0.01 {
-            format!("1:{}", u.ratio.round())
-        } else {
-            format!("3:{}", (u.ratio * 3.0).round())
-        });
-        m.timings = u.timings;
+    if ctx.cfg.chipset && amd && matches!(family, 0x17 | 0x19 | 0x1A) {
+        let umc = amd_umc(ctx, ddr5);
+        if let Some(u) = &umc {
+            nch = u.channels;
+            m.freq_mhz = Some(u.ratio * bclk);
+            m.ratio = Some(ratio_text(u.ratio));
+            m.timings = u.timings.clone();
+        }
+        // SMU PM table clocks are at the nominal 100 MHz reference.
+        if let Some(c) = crate::sensors::fabric_clocks(ctx) {
+            let at = |x: Option<f64>| x.map(|v| v * bclk / 100.0);
+            m.uncore_mhz = at(c.uclk);
+            m.fabric_mhz = at(c.fclk);
+            if umc.is_none()
+                && let Some(mc) = at(c.mclk)
+            {
+                m.freq_mhz = Some(mc);
+                m.ratio = Some(ratio_text(mc / bclk));
+            }
+        }
+    }
+    if ctx.cfg.chipset && !amd {
+        let imc = intel::layout(family, model).and_then(|l| intel::decode(l, bclk, |off| ctx.hw.mchbar_read32(off)));
+        if let Some(i) = &imc {
+            nch = i.channels;
+            if m.mem_type.is_none() {
+                m.mem_type = i.ddr.map(str::to_string);
+                ddr5 = i.ddr == Some("DDR5");
+            }
+            if let Some(d) = i.dram_mhz {
+                m.freq_mhz = Some(d);
+                m.ratio = Some(ratio_text(d / i.bclk_mhz));
+            }
+            m.timings = i.timings.clone();
+            m.mc_mhz = i.qclk_mhz;
+        }
+        // Ring clock: MSR 621h (current uncore ratio, bits 6:0) x BCLK, else
+        // SA_PERF_STATUS UCLK ratio. MSR 620h only holds the min/max limits.
+        let ref_mhz = imc.as_ref().map_or(bclk, |i| i.bclk_mhz);
+        m.uncore_mhz = ctx
+            .hw
+            .rdmsr(0, 0x621)
+            .map(|v| (v & 0x7F) as f64 * ref_mhz)
+            .filter(|&u| u > 0.0)
+            .or(imc.and_then(|i| i.ring_mhz));
     }
     if nch > 0 {
         m.channels = Some(if ddr5 {
@@ -341,12 +428,16 @@ fn decode_umc(cfg: u32, t1: u32, t2: u32, trfc: Option<u32>, ddr5: bool) -> Opti
         cr: (!ddr5).then_some(if cfg & (1 << 10) != 0 { 2 } else { 1 }),
         trfc: trfc.map(|r| r & 0x7FF).filter(|&r| r > 0),
     };
-    let sane = (5..=80).contains(&t.cl)
+    Some((ratio, sane(&t).then_some(t)))
+}
+
+/// Plausible DDR3..DDR5 primary timings (rejects unprogrammed/garbage registers).
+fn sane(t: &Timings) -> bool {
+    (5..=80).contains(&t.cl)
         && (5..=120).contains(&t.trcd)
         && (5..=120).contains(&t.trp)
         && (10..=250).contains(&t.tras)
-        && (15..=400).contains(&t.trc);
-    Some((ratio, sane.then_some(t)))
+        && (15..=400).contains(&t.trc)
 }
 
 #[cfg(test)]
@@ -379,5 +470,34 @@ mod tests {
         let t = t.unwrap();
         assert_eq!((t.cl, t.cr, t.trfc), (16, Some(2), Some(560)));
         assert!(decode_umc(0, 0, 0, None, true).is_none());
+    }
+
+    #[test]
+    fn platform_bus_and_ratio() {
+        assert_eq!(platform_pcie_gen(true, 0x19, 0x61), Some(5)); // Ryzen 9 7900X
+        assert_eq!(platform_pcie_gen(true, 0x19, 0x21), Some(4));
+        assert_eq!(platform_pcie_gen(true, 0x19, 0x50), Some(3));
+        assert_eq!(platform_pcie_gen(false, 6, 0xB7), Some(5));
+        assert_eq!(platform_pcie_gen(false, 6, 0xA7), Some(4));
+        assert_eq!(platform_pcie_gen(false, 6, 0x9E), Some(3));
+        assert_eq!(platform_pcie_gen(false, 6, 0xAA), None);
+        assert_eq!((ratio_text(30.0), ratio_text(14.666_67)), ("1:30".into(), "3:44".into()));
+    }
+
+    #[test]
+    fn max_frequency_rule() {
+        use crate::spd::{DecodedModule, Timing, decode::Profile};
+        let t = |freq| Timing { freq, ..Timing::default() };
+        let p = |freq| Profile { timing: t(freq), ..Profile::default() };
+        // The 7900X kit: JEDEC max 2400, XMP/EXPO 3000 + 2800 -> CPU-Z shows 2800.0 MHz.
+        let kit = DecodedModule {
+            jedec: vec![t(1333.0), t(2400.0)],
+            profiles: vec![p(3000.0), p(2800.0), p(3000.0), p(2800.0)],
+            ..DecodedModule::default()
+        };
+        assert_eq!(spd_max_mhz(&[kit.clone(), kit]), Some(2800.0));
+        let jedec = DecodedModule { jedec: vec![t(1600.0), t(1200.0)], ..DecodedModule::default() };
+        assert_eq!(spd_max_mhz(&[jedec]), Some(1600.0));
+        assert_eq!(spd_max_mhz(&[]), None);
     }
 }
