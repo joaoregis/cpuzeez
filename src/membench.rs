@@ -439,7 +439,8 @@ fn run(p: &Plan, sh: &Shared) -> Option<MemResult> {
     let stop = &sh.stop;
     let mut r = MemResult::default();
     std::thread::scope(|s| {
-        // Latency on its own pinned thread (the caller may be the GUI thread).
+        // Latency on its own pinned thread, so the runner (whose affinity Linux
+        // threads inherit) stays unpinned.
         s.spawn(|| {
             let _ = crate::os::pin(p.cpus[0]);
             let mut buf = alloc(*p.lat_sizes.last()?);
