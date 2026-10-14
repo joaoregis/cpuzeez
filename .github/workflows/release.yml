@@ -1,0 +1,139 @@
+name: Release
+
+# Push a tag like v0.1.0 (or run manually with a tag name) to build every
+# installer and attach them to a GitHub release.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release --locked
+      - name: Version
+        shell: bash
+        run: echo "VER=${TAG#v}" >> "$GITHUB_ENV"
+      - name: MSI (WiX)
+        shell: bash
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          wix build packaging/windows/cpuzeez.wxs -arch x64 -d Version="$VER" -d Bin=target/release/cpuzeez.exe -o "cpuzeez-$VER-windows-x64.msi"
+      - name: Portable zip
+        shell: pwsh
+        run: Compress-Archive -Path target/release/cpuzeez.exe, README.md, LICENSE-MIT, LICENSE-APACHE -DestinationPath "cpuzeez-$env:VER-windows-x64-portable.zip"
+      - uses: actions/upload-artifact@v4
+        with: { name: windows, path: "cpuzeez-*" }
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: "x86_64-apple-darwin,aarch64-apple-darwin" }
+      - run: |
+          cargo build --release --locked --target aarch64-apple-darwin
+          cargo build --release --locked --target x86_64-apple-darwin
+          echo "VER=${TAG#v}" >> "$GITHUB_ENV"
+      - name: Universal binary, .app, .dmg and .pkg
+        run: |
+          set -e
+          mkdir -p dist
+          lipo -create -output dist/cpuzeez target/aarch64-apple-darwin/release/cpuzeez target/x86_64-apple-darwin/release/cpuzeez
+          APP=dist/cpuzeez.app
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          cp dist/cpuzeez "$APP/Contents/MacOS/cpuzeez"
+          sed "s/@VERSION@/$VER/g" packaging/macos/Info.plist > "$APP/Contents/Info.plist"
+          # Ad-hoc signature: required for arm64 binaries; not a Developer ID signature.
+          codesign --force --deep -s - "$APP"
+          mkdir -p dmg && cp -R "$APP" dmg/ && ln -s /Applications dmg/Applications
+          hdiutil create -volname cpuzeez -srcfolder dmg -ov -format UDZO "cpuzeez-$VER-macos-universal.dmg"
+          mkdir -p pkgroot/Applications pkgroot/usr/local/bin
+          cp -R "$APP" pkgroot/Applications/
+          cp dist/cpuzeez pkgroot/usr/local/bin/cpuzeez
+          pkgbuild --root pkgroot --identifier io.github.joaoregis.cpuzeez --version "$VER" --install-location / "cpuzeez-$VER-macos-universal.pkg"
+          tar -C dist -czf "cpuzeez-$VER-macos-universal.tar.gz" cpuzeez
+      - uses: actions/upload-artifact@v4
+        with: { name: macos, path: "cpuzeez-*" }
+
+  linux:
+    strategy:
+      matrix:
+        include:
+          - { os: ubuntu-22.04, arch: x86_64, deb: amd64 }
+          - { os: ubuntu-24.04-arm, arch: aarch64, deb: arm64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      # Built on Ubuntu 22.04 (glibc 2.35) so the binary runs on Debian 12+, Ubuntu 22.04+ and Arch.
+      - run: |
+          cargo build --release --locked
+          echo "VER=${TAG#v}" >> "$GITHUB_ENV"
+      - name: .deb
+        run: |
+          cargo install cargo-deb --locked
+          cargo deb --no-build --no-strip -o "cpuzeez_${VER}_${{ matrix.deb }}.deb"
+      - name: tarball
+        run: |
+          mkdir -p "cpuzeez-$VER" && cp target/release/cpuzeez README.md LICENSE-MIT LICENSE-APACHE packaging/linux/cpuzeez.desktop packaging/cpuzeez.svg "cpuzeez-$VER/"
+          tar -czf "cpuzeez-$VER-linux-${{ matrix.arch }}.tar.gz" "cpuzeez-$VER"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: "linux-${{ matrix.arch }}"
+          path: |
+            cpuzeez_*.deb
+            cpuzeez-*-linux-*.tar.gz
+
+  arch:
+    needs: linux
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: linux-x86_64, path: dl }
+      - name: makepkg (repackages the release binary)
+        run: |
+          set -e
+          pacman -Syu --noconfirm --needed base-devel
+          VER=${TAG#v}
+          useradd -m builder
+          mkdir -p /home/builder/pkg && cp packaging/arch/PKGBUILD /home/builder/pkg/
+          tar -xzf dl/cpuzeez-$VER-linux-x86_64.tar.gz -C /home/builder/pkg
+          sed -i "s/@VERSION@/$VER/" /home/builder/pkg/PKGBUILD
+          chown -R builder /home/builder/pkg
+          su builder -c "cd /home/builder/pkg && makepkg --nodeps --noconfirm"
+          cp /home/builder/pkg/*.pkg.tar.zst .
+      - uses: actions/upload-artifact@v4
+        with: { name: arch, path: "*.pkg.tar.zst" }
+
+  publish:
+    needs: [windows, macos, linux, arch]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: assets, merge-multiple: true }
+      - name: Checksums
+        run: cd assets && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$TAG" assets/* --title "cpuzeez $TAG" --notes-file packaging/RELEASE_NOTES.md --verify-tag || \
+          gh release upload "$TAG" assets/* --clobber

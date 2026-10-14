@@ -1,0 +1,31 @@
+<!-- WiX v5 per-machine installer: cpuzeez.exe in Program Files, Start menu
+     shortcut, added to PATH. Build: wix build cpuzeez.wxs -d Version=x.y.z -d Bin=path\to\cpuzeez.exe -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="cpuzeez" Manufacturer="cpuzeez contributors" Version="$(Version)"
+           UpgradeCode="6F2C1A0E-4B7D-4E8A-9C35-2D1B7A9E0C41" Scope="perMachine" Compressed="yes">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of cpuzeez is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="cpuzeez">
+        <Component Id="MainExe" Guid="*">
+          <File Id="CpuzeezExe" Source="$(Bin)" KeyPath="yes" />
+          <Environment Id="PathEntry" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="set" System="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut" Guid="*">
+        <Shortcut Id="AppShortcut" Name="cpuzeez" Description="CPU, mainboard, memory and GPU information"
+                  Target="[INSTALLFOLDER]cpuzeez.exe" WorkingDirectory="INSTALLFOLDER" />
+        <RegistryValue Root="HKCU" Key="Software\cpuzeez" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <Feature Id="Main">
+      <ComponentRef Id="MainExe" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+  </Package>
+</Wix>

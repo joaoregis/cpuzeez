@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  native:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: Windows x64, os: windows-latest }
+          - { name: Ubuntu x64, os: ubuntu-latest }
+          - { name: Ubuntu arm64, os: ubuntu-24.04-arm }
+          - { name: macOS arm64, os: macos-latest }
+          - { name: macOS x64, os: macos-15-intel }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings -A dead_code  # module APIs are used per-OS
+      - run: cargo test --all-targets
+      - name: Build release
+        run: cargo build --release
+      - name: Run every report format (real hardware of the runner)
+        shell: bash
+        run: |
+          set -e
+          bin=target/release/cpuzeez
+          $bin -txt=out/report -html=out/report -json=out/report
+          $bin -console | head -n 80
+          $bin -core=0
+          test -s out/report.txt && test -s out/report.html && test -s out/report.json
+          python3 -c "import json,sys; d=json.load(open('out/report.json')); print(len(d), 'sections:', [s['title'] for s in d])"
+      - name: Benchmark smoke test
+        shell: bash
+        run: target/release/cpuzeez -bench
+      - name: GUI screenshots (every tab)
+        continue-on-error: true
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq xvfb libxkbcommon-x11-0 libgl1 libegl1 libgl1-mesa-dri >/dev/null
+            xvfb-run -a -s "-screen 0 1280x1024x24" target/release/cpuzeez -screenshots=out/screenshots
+          else
+            target/release/cpuzeez -screenshots=out/screenshots
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: report-${{ matrix.os }}
+          path: out/
+
+  distros:
+    name: ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:stable", "ubuntu:22.04", "archlinux:latest"]
+    steps:
+      - name: Install toolchain prerequisites
+        run: |
+          if command -v pacman >/dev/null; then
+            pacman -Syu --noconfirm --needed base-devel curl git python
+          else
+            apt-get update && apt-get install -y --no-install-recommends build-essential curl ca-certificates git python3
+          fi
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test
+      - run: cargo build --release
+      - name: Run
+        run: |
+          target/release/cpuzeez -txt=out/report -json=out/report
+          target/release/cpuzeez -console | head -n 60
+          python3 -c "import json; d=json.load(open('out/report.json')); print([s['title'] for s in d])"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: report-${{ strategy.job-index }}-distro
+          path: out/
+
+  headless:
+    name: CLI-only build (no GUI feature)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --no-default-features && ./target/debug/cpuzeez | head -n 20

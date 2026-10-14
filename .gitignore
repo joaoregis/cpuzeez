@@ -1,0 +1,9 @@
+/target
+/reference
+*.txt.bak
+
+/out
+/.repowise
+/ANALYSIS.md
+/.claude
+/pawnio-modules

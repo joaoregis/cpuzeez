@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=cpuzeez
+GenericName=System Information
+Comment=CPU, caches, mainboard, memory, SPD and GPU information
+Exec=cpuzeez
+Icon=cpuzeez
+Terminal=false
+Categories=System;Monitor;HardwareSettings;
+Keywords=cpu;cpuid;spd;memory;hardware;benchmark;

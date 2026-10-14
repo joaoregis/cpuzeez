@@ -1,0 +1,47 @@
+[package]
+name = "cpuzeez"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+description = "Clean-room, cross-platform reimplementation of CPU-Z's hardware information features"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/joaoregis/cpuzeez"
+readme = "README.md"
+keywords = ["cpu", "hardware", "cpuid", "spd", "system-information"]
+categories = ["command-line-utilities", "hardware-support"]
+authors = ["Joao Regis <22204842+joaoregis@users.noreply.github.com>"]
+
+[dependencies]
+eframe = { version = "0.36", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"], optional = true }
+png = { version = "0.18", optional = true }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[target."cfg(unix)".dependencies]
+libc = "0.2.190"
+
+[features]
+default = ["gui"]
+gui = ["dep:eframe", "dep:png"]
+
+
+[package.metadata.deb]
+maintainer = "Joao Regis <22204842+joaoregis@users.noreply.github.com>"
+section = "utils"
+priority = "optional"
+depends = "$auto"
+extended-description = """\
+cpuzeez shows detailed processor, cache, mainboard, memory (incl. SPD), \
+GPU, storage and sensor information, like CPU-Z, and exports TXT/HTML/JSON \
+reports. Run as root for MSR, SPD and full PCI configuration access."""
+assets = [
+  ["target/release/cpuzeez", "usr/bin/", "755"],
+  ["packaging/linux/cpuzeez.desktop", "usr/share/applications/", "644"],
+  ["packaging/cpuzeez.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+  ["README.md", "usr/share/doc/cpuzeez/", "644"],
+]
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

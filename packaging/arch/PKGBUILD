@@ -1,0 +1,24 @@
+# Repackages the prebuilt release binary (see .github/workflows/release.yml).
+pkgname=cpuzeez-bin
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc="Clean-room, cross-platform reimplementation of CPU-Z's hardware information features"
+arch=('x86_64')
+url="https://github.com/joaoregis/cpuzeez"
+license=('MIT' 'Apache-2.0')
+depends=('glibc' 'gcc-libs')
+optdepends=('libxkbcommon: GUI keyboard input under Wayland/X11'
+            'mesa: OpenGL for the GUI'
+            'i2c-tools: SPD reading via i2c-dev (run as root)')
+provides=('cpuzeez')
+conflicts=('cpuzeez')
+
+package() {
+  cd "$startdir/cpuzeez-$pkgver"
+  install -Dm755 cpuzeez "$pkgdir/usr/bin/cpuzeez"
+  install -Dm644 cpuzeez.desktop "$pkgdir/usr/share/applications/cpuzeez.desktop"
+  install -Dm644 cpuzeez.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/cpuzeez.svg"
+  install -Dm644 LICENSE-MIT "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
+  install -Dm644 LICENSE-APACHE "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}
