@@ -3,12 +3,16 @@
 //! MSR_TEMPERATURE_TARGET (0x1A2), IA32_PERF_STATUS (0x198), RAPL
 //! (0x606 units, 0x610 limits, 0x611/0x639/0x641/0x619/0x64D energy, 0x614 TDP), SDM vol. 4.
 //! AMD Zen: SMN THM_TCON_CUR_TMP (0x59800) and per-CCD temperature registers,
-//! RAPL MSRs 0xC0010299/0xC001029A/0xC001029B, HW P-state status 0xC0010293 (PPR).
+//! RAPL MSRs 0xC0010299/0xC001029A/0xC001029B, HW P-state status 0xC0010293 (PPR),
+//! and the SMU PM table (see amd_pm.rs) for per-core/L3/SoC data, rails and limits.
 
+use super::amd_pm::{self, FabricClocks, PmData};
 use super::{Kind, Monitor};
 use crate::Ctx;
 use crate::cpu::Cpu;
 use crate::report::{Node, f};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 fn is_amd(c: &Cpu) -> bool {
     c.vendor == "AuthenticAMD" || c.vendor == "HygonGenuine"
@@ -24,8 +28,9 @@ pub fn monitor(ctx: &Ctx) -> Option<Monitor> {
     let c = crate::cpu::get(ctx);
     let mut m = Monitor::new(if c.name.is_empty() { "CPU" } else { c.name.as_str() });
     let cores = core_threads(c);
+    let mut pm = None;
     if is_amd(c) {
-        amd(ctx, c, &cores, &mut m);
+        pm = amd(ctx, c, &cores, &mut m);
     } else if c.vendor == "GenuineIntel" {
         intel(ctx, &cores, &mut m);
     }
@@ -38,7 +43,145 @@ pub fn monitor(ctx: &Ctx) -> Option<Monitor> {
             m.push(Kind::Clock, format!("Core #{i}"), v, None);
         }
     }
+    for (i, l) in pm.iter().flat_map(|d| &d.l3).enumerate() {
+        if let Some(v) = l.mhz {
+            m.push(Kind::Clock, format!("L3 Cache #{i}"), v, None);
+        }
+    }
     (!m.readings.is_empty()).then_some(m)
+}
+
+/// Enabled cores per L3 domain (CCX, or CCD on Zen 3+), in order; empty when
+/// the topology doesn't say.
+fn l3_groups(c: &Cpu) -> Vec<usize> {
+    let mut m = std::collections::BTreeMap::new();
+    for l in c.logical.iter().filter(|l| l.smt == 0) {
+        if l.ccd.is_none() && l.ccx.is_none() {
+            return Vec::new();
+        }
+        *m.entry((l.package, l.ccd, l.ccx)).or_insert(0usize) += 1;
+    }
+    m.into_values().collect()
+}
+
+/// Raw SMU PM table, re-read at most every 250 ms: one report (or GUI tick)
+/// sees one snapshot, and the SMU isn't asked to refresh it per row.
+fn pm_raw(ctx: &Ctx) -> Option<(u32, Vec<f32>)> {
+    static LAST: Mutex<Option<(Instant, Option<(u32, Vec<f32>)>)>> = Mutex::new(None);
+    if !is_amd(crate::cpu::get(ctx)) {
+        return None;
+    }
+    let mut g = LAST.lock().ok()?;
+    if !matches!(&*g, Some((t, _)) if t.elapsed() < Duration::from_millis(250)) {
+        *g = Some((Instant::now(), ctx.hw.amd_smu_pm_table()));
+    }
+    g.as_ref()?.1.clone()
+}
+
+/// Peak effective clock (MHz) of every core seen this session.
+static PEAK_EFF: Mutex<Vec<f64>> = Mutex::new(Vec::new());
+
+/// Decoded PM table; None for unknown table versions.
+fn pm(ctx: &Ctx) -> Option<PmData> {
+    let (ver, t) = pm_raw(ctx)?;
+    let d = amd_pm::decode(ver, &t, &l3_groups(crate::cpu::get(ctx)))?;
+    if let Ok(mut p) = PEAK_EFF.lock() {
+        let n = p.len().max(d.cores.len());
+        p.resize(n, 0.0);
+        for (p, c) in p.iter_mut().zip(&d.cores) {
+            *p = p.max(c.eff_mhz.unwrap_or(0.0));
+        }
+    }
+    Some(d)
+}
+
+/// FCLK/UCLK/MCLK from the SMU PM table.
+pub fn fabric_clocks(ctx: &Ctx) -> Option<FabricClocks> {
+    pm(ctx).map(|d| d.clocks).filter(|c| c.fclk.or(c.uclk).or(c.mclk).is_some())
+}
+
+/// "Core N max ratio  (effective) R": peak effective clock over BCLK, in
+/// CPU-Z's quarter steps. Goes after the sensor rows in Processors Information.
+pub fn ratio_fields(ctx: &Ctx) -> Vec<Node> {
+    let c = crate::cpu::get(ctx);
+    if pm(ctx).is_none_or(|d| d.cores.iter().all(|c| c.eff_mhz.is_none())) {
+        return Vec::new();
+    }
+    let bclk = crate::cpu::bus_mhz(c).filter(|b| *b > 0.0).unwrap_or(100.0);
+    let peaks = PEAK_EFF.lock().map(|p| p.clone()).unwrap_or_default();
+    peaks
+        .iter()
+        .enumerate()
+        .map(|(i, mhz)| {
+            f(format!("Core {i} max ratio"), format!("(effective) {:.2}", (mhz / bclk * 4.0).round() / 4.0))
+        })
+        .collect()
+}
+
+/// CPU-Z's "AMD Ryzen Power Management" monitor: SMU PM table rails, PPT
+/// limit and temperatures (all numbered 0, as CPU-Z does), then the other
+/// decoded values, and the raw table under "Hardware registers".
+pub fn pm_monitor(ctx: &Ctx) -> Option<Monitor> {
+    let (ver, t) = pm_raw(ctx)?;
+    let mut m = Monitor::new("AMD Ryzen Power Management");
+    if let Some(d) = pm(ctx) {
+        for (label, v) in [("CPU VDDCR_VDD", d.vddcr_vdd), ("CPU VDDCR_SOC", d.vddcr_soc), ("CPU VDD_MISC", d.vdd_misc)]
+        {
+            if let Some(v) = v {
+                m.push(Kind::Voltage, label, v, None);
+            }
+        }
+        if let Some(p) = d.ppt {
+            m.push(Kind::Power, "PPT Limit", p.limit, Some(p.limit as u32));
+        }
+        let temps = d.cores.iter().enumerate().map(|(i, c)| (format!("Core #{i}"), Some(c.temp)));
+        let l3 = d.l3.iter().enumerate().map(|(i, l)| (format!("L3 Cache #{i}"), l.temp));
+        for (label, v) in temps.chain(l3).chain([("SoC".to_string(), d.soc_temp)]) {
+            if let Some(v) = v {
+                m.push_ch(Kind::Temperature, 0, label, v, v as u32);
+            }
+        }
+        // Not in CPU-Z's monitor; here so telemetry sees every decoded value.
+        let val = |l: Option<amd_pm::Limit>| l.and_then(|l| l.value);
+        let extra = [
+            (Kind::Power, "PPT", val(d.ppt)),
+            (Kind::Power, "Package", d.socket_power),
+            (Kind::Power, "Cores", d.cores_power),
+            (Kind::Current, "TDC Limit", d.tdc.map(|l| l.limit)),
+            (Kind::Current, "TDC", val(d.tdc)),
+            (Kind::Current, "EDC Limit", d.edc.map(|l| l.limit)),
+            (Kind::Current, "EDC", val(d.edc)),
+            (Kind::Temperature, "THM Limit", d.thm.map(|l| l.limit)),
+            (Kind::Temperature, "THM", val(d.thm)),
+            (Kind::Voltage, "VID", d.vid),
+            (Kind::Clock, "FCLK", d.clocks.fclk),
+            (Kind::Clock, "UCLK", d.clocks.uclk),
+            (Kind::Clock, "MCLK", d.clocks.mclk),
+        ];
+        for (k, label, v) in extra {
+            if let Some(v) = v {
+                m.push(k, label, v, None);
+            }
+        }
+        for (i, c) in d.cores.iter().enumerate() {
+            m.push(Kind::Power, format!("Core #{i}"), c.power, None);
+            m.push(Kind::Voltage, format!("Core #{i}"), c.volt, None);
+            if let Some(v) = c.eff_mhz {
+                m.push(Kind::Clock, format!("Core #{i} (effective)"), v, None);
+            }
+        }
+        for (i, l) in d.l3.iter().enumerate() {
+            if let Some(v) = l.mhz {
+                m.push(Kind::Clock, format!("L3 Cache #{i}"), v, None);
+            }
+        }
+    }
+    m.registers.push(f("PMT version", format!("0x{ver:X}")));
+    for (i, row) in t.chunks(10).enumerate() {
+        let vals: Vec<String> = row.iter().map(|v| format!("{v:7.2}")).collect();
+        m.registers.push(f(format!("{:03}", i * 10), vals.join(" ")));
+    }
+    Some(m)
 }
 
 /// Extra "Processors Information" fields the CPU database could not supply.
@@ -50,10 +193,26 @@ pub fn fields(ctx: &Ctx) -> Vec<Node> {
         if let Some(s) = hw.amd_smu_version() {
             v.push(f("SMU Version", format!("{}.{}.{}", (s >> 16) & 0xFF, (s >> 8) & 0xFF, s & 0xFF)));
         }
-        if let Some(l) = hw.amd_smu_pm_table().and_then(|(ver, t)| raphael(ver, &t)) {
-            v.push(f("Package Power Tracking (PPT)", format!("Current : {:.1} W", l.ppt.0)));
-            v.push(f("Thermal Design Current (TDC)", format!("Current : {:.1} A", l.tdc.0)));
-            v.push(f("Electrical Design Current (EDC)", format!("Current : {:.1} A", l.edc.0)));
+        if let Some((ver, _)) = pm_raw(ctx) {
+            v.push(f("PMTV", format!("{ver:08X}")));
+        }
+        let Some(d) = pm(ctx) else { return v };
+        if let Some(x) = d.max_mhz {
+            v.push(f("Max Frequency", format!("{x:.0} MHz")));
+        }
+        if let Some(x) = d.pbo_scalar {
+            v.push(f("PBO Scalar", if x.fract() == 0.0 { format!("{x:.0}") } else { format!("{x:.2}") }));
+        }
+        // CPU-Z adds ", fused : N"; the fused limits need an SMU mailbox call we don't make.
+        let lims = [
+            ("Package Power Tracking (PPT)", d.ppt, "W"),
+            ("Thermal Design Current (TDC)", d.tdc, "A"),
+            ("Electrical Design Current (EDC)", d.edc, "A"),
+        ];
+        for (k, l, u) in lims {
+            if let Some(l) = l {
+                v.push(f(k, format!("Current : {:.1} {u}", l.limit)));
+            }
         }
         return v;
     }
@@ -142,11 +301,12 @@ fn ccd_base(fam: u32, model: u32) -> Option<u32> {
     }
 }
 
-fn amd(ctx: &Ctx, c: &Cpu, cores: &[usize], m: &mut Monitor) {
+/// Pushes CPU-Z's AMD rows in its order; returns the PM table for the clock rows.
+fn amd(ctx: &Ctx, c: &Cpu, cores: &[usize], m: &mut Monitor) -> Option<PmData> {
     let hw = &ctx.hw;
     let (fam, model) = (c.sig.0, c.sig.1);
     if fam < 0x17 {
-        return;
+        return None;
     }
     if let Some(v) = hw.amd_smn_read(0x59800) {
         let raw = v >> 21;
@@ -165,6 +325,23 @@ fn amd(ctx: &Ctx, c: &Cpu, cores: &[usize], m: &mut Monitor) {
             k += 1;
         }
     }
+    let pm = pm(ctx);
+    if let Some(d) = &pm {
+        if let Some(max) = d.cores.iter().map(|c| c.temp).reduce(f64::max) {
+            m.push(Kind::Temperature, "Cores (Max)", max, None);
+        }
+        for (i, c) in d.cores.iter().enumerate() {
+            m.push(Kind::Temperature, format!("Core #{i}"), c.temp, None);
+        }
+        for (i, l) in d.l3.iter().enumerate() {
+            if let Some(t) = l.temp {
+                m.push(Kind::Temperature, format!("L3 Cache #{i}"), t, None);
+            }
+        }
+        if let Some(t) = d.soc_temp {
+            m.push(Kind::Temperature, "SoC", t, None);
+        }
+    }
     if let Some(s) = hw.rdmsr(0, 0xC001_0293) {
         let vid = ((s >> 14) & 0xFF) as u32;
         // Zen 4+ (SVI3) VIDs count up from 0 V, SVI2 down from 1.55 V; 6.25 mV steps.
@@ -174,45 +351,50 @@ fn amd(ctx: &Ctx, c: &Cpu, cores: &[usize], m: &mut Monitor) {
             m.push(Kind::Voltage, "VID", v, Some(vid));
         }
     }
+    if let Some(d) = &pm {
+        if !m.readings.iter().any(|r| r.label == "VID")
+            && let Some(v) = d.vid
+        {
+            m.push(Kind::Voltage, "VID", v, None);
+        }
+        for (label, v) in [("CPU VDDCR_VDD", d.vddcr_vdd), ("CPU VDDCR_SOC", d.vddcr_soc), ("CPU VDD_MISC", d.vdd_misc)]
+        {
+            if let Some(v) = v {
+                m.push(Kind::Voltage, label, v, None);
+            }
+        }
+    }
     if let Some(units) = hw.rdmsr(0, 0xC001_0299) {
         amd_rapl(ctx, units, cores, m);
     }
-    if let Some((ver, t)) = hw.amd_smu_pm_table() {
-        if let Some(l) = raphael(ver, &t) {
-            m.push(Kind::Power, "PPT Limit", l.ppt.0, Some(l.ppt.0 as u32));
+    if let Some(d) = &pm {
+        // No RAPL (e.g. Linux without the msr module): the SMU's own figures.
+        if !m.readings.iter().any(|r| r.kind == Kind::Power) {
+            if let Some(p) = d.socket_power.filter(|p| *p > 0.0) {
+                m.push(Kind::Power, "Package", p, None);
+            }
+            if let Some(p) = d.cores_power.filter(|p| *p > 0.0) {
+                m.push(Kind::Power, "Cores", p, None);
+            }
+            for (i, c) in d.cores.iter().enumerate() {
+                m.push(Kind::Power, format!("Core #{i}"), c.power, None);
+            }
         }
-        m.registers.push(f("PMT version", format!("0x{ver:X}")));
-        for (i, row) in t.chunks(10).enumerate() {
-            let vals: Vec<String> = row.iter().map(|v| format!("{v:7.2}")).collect();
-            m.registers.push(f(format!("{:03}", i * 10), vals.join(" ")));
+        if let Some(p) = d.ppt {
+            m.push(Kind::Power, "PPT Limit", p.limit, Some(p.limit as u32));
         }
     }
+    pm
 }
 
-/// AMD SMU PPT (W), TDC (A), EDC (A) as (limit, value), when the PM table layout is known.
+/// AMD SMU PPT (W), TDC (A), EDC (A) as (limit, value) for telemetry/throttle detection.
 pub fn amd_limits(ctx: &Ctx) -> Option<[(f64, f64); 3]> {
     if !is_amd(crate::cpu::get(ctx)) {
         return None;
     }
-    let (ver, t) = ctx.hw.amd_smu_pm_table()?;
-    raphael(ver, &t).map(|l| [l.ppt, l.tdc, l.edc])
-}
-
-/// (limit, value) pairs of the SMU PM table.
-struct PmLimits {
-    ppt: (f64, f64),
-    tdc: (f64, f64),
-    edc: (f64, f64),
-}
-
-/// Zen 4 desktop (PM table 0x54xxxx) layout, as read off the reference
-/// report: PPT at 2/3, TDC at 8/9, EDC at 61/62. Other layouts: unknown.
-fn raphael(ver: u32, t: &[f32]) -> Option<PmLimits> {
-    if ver >> 16 != 0x54 || t.len() < 63 {
-        return None;
-    }
-    let p = |i: usize| (t[i] as f64, t[i + 1] as f64);
-    Some(PmLimits { ppt: p(2), tdc: p(8), edc: p(61) })
+    let d = pm(ctx)?;
+    let lv = |l: Option<crate::sensors::amd_pm::Limit>| l.map(|l| (l.limit, l.value.unwrap_or(0.0)));
+    Some([lv(d.ppt)?, lv(d.tdc)?, lv(d.edc)?])
 }
 
 fn amd_rapl(ctx: &Ctx, units: u64, cores: &[usize], m: &mut Monitor) {
@@ -312,18 +494,33 @@ mod tests {
         assert_eq!(super::ccd_base(0x19, 0x50), None);
     }
 
+    /// Manual, elevated on an AMD machine (PawnIO or ryzen_smu):
+    /// `cargo test live_pm_table -- --ignored --nocapture`. Also writes
+    /// %TEMP%/cpuzeez-pm-live.txt to diff against CPU-Z's report.
     #[test]
-    fn raphael_pm_table() {
-        // First 70 values of the reference report's PM table (version 0x540004).
-        let t: Vec<f32> = "0 0 230 83.59 0 0 0 0 160 35 95 63.84 0 0 0 0 5371.21 2760.29 1.42 1.36 \
-            48.36 20.42 8.19 4.64 1 1 83.6 5.7 5.7 5.7 5.7 5.7 5.7 5.7 5.7 5.44 5.7 5.53 1.42 1.45 \
-            1.52 1.47 1.52 1.52 1.47 1.47 1.36 1.36 35.01 48.36 59 1.3 1.3 15.73 20.42 52.12 1.1 1.1 7.45 8.19 \
-            52 225 78.5 40.36 208 0 100 0 0 0"
-            .split_whitespace()
-            .map(|s| s.parse().unwrap())
-            .collect();
-        let l = super::raphael(0x540004, &t).unwrap();
-        assert_eq!((l.ppt.0, l.tdc.0, l.edc.0), (230.0, 160.0, 225.0));
-        assert!(super::raphael(0x380005, &t).is_none(), "unknown layout must not be guessed");
+    #[ignore]
+    fn live_pm_table() {
+        use crate::report::{g, section, to_txt};
+        use std::fmt::Write;
+        let ctx = crate::Ctx::new(crate::config::Config::default());
+        let c = crate::cpu::get(&ctx);
+        let groups = super::l3_groups(c);
+        let mut s = format!("{} / {}\nL3 groups {groups:?}\n", ctx.hw.name(), c.brand);
+        match ctx.hw.amd_smu_pm_table() {
+            Some((v, t)) => {
+                let _ = writeln!(s, "PM table {v:#x}, {} cells", t.len());
+                let _ = writeln!(s, "{:#?}", super::amd_pm::decode(v, &t, &groups));
+            }
+            None => s += "no PM table (needs admin + PawnIO, or root + ryzen_smu)\n",
+        }
+        let mut secs = vec![section("Processors Information", super::super::cpu_nodes(&ctx))];
+        if let Some(m) = super::pm_monitor(&ctx) {
+            let mut rows = super::super::reading_rows(&m.readings);
+            rows.push(g("Hardware registers", m.registers));
+            secs.push(section(m.name, rows));
+        }
+        s += &to_txt(&secs);
+        println!("{s}");
+        let _ = std::fs::write(std::env::temp_dir().join("cpuzeez-pm-live.txt"), s);
     }
 }
