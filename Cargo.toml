@@ -12,7 +12,7 @@ categories = ["command-line-utilities", "hardware-support"]
 authors = ["Joao Regis <22204842+joaoregis@users.noreply.github.com>"]
 
 [dependencies]
-eframe = { version = "0.36", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"], optional = true }
+eframe = { version = "0.36", default-features = false, features = ["default_fonts", "glow", "wayland", "x11", "links"], optional = true }
 egui-phosphor = { version = "0.14", optional = true }
 png = { version = "0.18", optional = true }
 serde = { version = "1.0.229", features = ["derive"] }
