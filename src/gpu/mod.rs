@@ -87,8 +87,59 @@ pub struct Probe {
     pub monitors: Vec<Monitor>,
 }
 
-/// (adapter index, core MHz, memory MHz, temperature °C, power W, load %)
-pub type LiveRow = (usize, Option<f64>, Option<f64>, Option<f64>, Option<f64>, Option<f64>);
+/// Live sensors of one adapter (Tools > Clocks, telemetry). Units: MHz, °C,
+/// RPM, %, W. Every field is optional: each vendor API exposes a different subset.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Live {
+    /// Index into `adapters(ctx)`.
+    pub adapter: usize,
+    pub core_mhz: Option<f64>,
+    pub mem_mhz: Option<f64>,
+    /// GPU core (edge) temperature.
+    pub temp_c: Option<f64>,
+    pub hotspot_c: Option<f64>,
+    pub mem_junction_c: Option<f64>,
+    pub fan_rpm: Option<f64>,
+    pub fan_pct: Option<f64>,
+    pub power_w: Option<f64>,
+    pub load_pct: Option<f64>,
+    pub mem_load_pct: Option<f64>,
+    /// Active clock limiters ("Power", "Thermal", ...): empty = not throttling,
+    /// None = the API doesn't say.
+    pub throttle: Option<Vec<&'static str>>,
+}
+
+impl Live {
+    pub fn throttling(&self) -> bool {
+        self.throttle.as_ref().is_some_and(|t| !t.is_empty())
+    }
+
+    /// Report rows, CPU-Z hardware-monitor style.
+    fn nodes(&self) -> Vec<Node> {
+        let mut n = Vec::new();
+        let rows: [(&str, Option<f64>, &str); 10] = [
+            ("Core clock", self.core_mhz, "MHz"),
+            ("Memory clock", self.mem_mhz, "MHz"),
+            ("Temperature", self.temp_c, "°C"),
+            ("Hot spot", self.hotspot_c, "°C"),
+            ("Memory junction", self.mem_junction_c, "°C"),
+            ("Fan speed", self.fan_rpm, "RPM"),
+            ("Fan", self.fan_pct, "%"),
+            ("Power", self.power_w, "W"),
+            ("GPU load", self.load_pct, "%"),
+            ("Memory load", self.mem_load_pct, "%"),
+        ];
+        for (k, v, unit) in rows {
+            if let Some(v) = v {
+                n.push(f(k, if unit == "W" { format!("{v:.1} W") } else { format!("{v:.0} {unit}") }));
+            }
+        }
+        if let Some(t) = &self.throttle {
+            n.push(f("Throttling", if t.is_empty() { "No".into() } else { t.join(", ") }));
+        }
+        n
+    }
+}
 
 static PROBE: OnceLock<Probe> = OnceLock::new();
 
@@ -155,8 +206,9 @@ pub fn monitors(ctx: &Ctx) -> &'static [Monitor] {
     &probe(ctx).monitors
 }
 
-/// Live clocks / temperature / power / load per adapter (Tools > Clocks).
-pub fn live(ctx: &Ctx) -> Vec<LiveRow> {
+/// Live clocks / temperatures / fan / power / load / throttling per adapter
+/// (Tools > Clocks, telemetry). At most one entry per adapter.
+pub fn live(ctx: &Ctx) -> Vec<Live> {
     let ads = adapters(ctx);
     if ads.is_empty() {
         return Vec::new();
@@ -171,11 +223,12 @@ pub fn live(ctx: &Ctx) -> Vec<LiveRow> {
 
 /// Map NVML per-bus readings onto adapter indices (shared by Windows/Linux).
 #[cfg(any(windows, target_os = "linux"))]
-fn nvml_live(ads: &[Adapter], out: &mut Vec<LiveRow>) {
+fn nvml_live(ads: &[Adapter], out: &mut Vec<Live>) {
     let Some(n) = nvml::get() else { return };
-    for ((bus, dev), v) in n.live() {
+    for ((bus, dev), mut l) in n.live() {
         if let Some(i) = ads.iter().position(|a| a.pci.is_some_and(|p| p.bus as u32 == bus && p.dev as u32 == dev)) {
-            out.push((i, v[0], v[1], v[2], v[3], v[4]));
+            l.adapter = i;
+            out.push(l);
         }
     }
 }
@@ -351,11 +404,18 @@ pub fn collect(ctx: &Ctx) -> Vec<Section> {
         return Vec::new();
     }
     let p = probe(ctx);
+    let live = live(ctx);
     let mut da: Vec<Node> = p
         .adapters
         .iter()
         .enumerate()
-        .map(|(i, a)| g(format!("Display adapter {i}{}", if a.primary { " (primary)" } else { "" }), adapter_nodes(a)))
+        .map(|(i, a)| {
+            let mut n = adapter_nodes(a);
+            if let Some(l) = live.iter().find(|l| l.adapter == i).map(Live::nodes).filter(|n| !n.is_empty()) {
+                n.push(g("Sensors", l));
+            }
+            g(format!("Display adapter {i}{}", if a.primary { " (primary)" } else { "" }), n)
+        })
         .collect();
     da.extend(p.extra.iter().cloned());
     da.extend(p.monitors.iter().enumerate().map(|(i, m)| g(format!("Monitor {i}"), monitor_nodes(m))));
@@ -401,9 +461,20 @@ mod tests {
         // Real hardware when present; trivially passes on GPU-less machines.
         let ctx = crate::Ctx::new(crate::config::Config::default());
         let n = adapters(&ctx).len();
-        for r in live(&ctx) {
+        let rows = live(&ctx);
+        for r in &rows {
             println!("{r:?}");
-            assert!(r.0 < n);
+            assert!(r.adapter < n);
+            assert_eq!(rows.iter().filter(|x| x.adapter == r.adapter).count(), 1, "one entry per adapter");
         }
+    }
+
+    #[test]
+    fn live_rows() {
+        let l = Live { temp_c: Some(51.0), power_w: Some(17.31), throttle: Some(vec![]), ..Default::default() };
+        let t = crate::report::to_txt(&[section("S", vec![g("Sensors", l.nodes())])]);
+        assert!(t.contains("\tTemperature\t\t51 °C\n") && t.contains("\tPower\t\t\t17.3 W\n"), "{t}");
+        assert!(t.contains("\tThrottling\t\tNo\n"), "{t}");
+        assert!(Live::default().nodes().is_empty());
     }
 }

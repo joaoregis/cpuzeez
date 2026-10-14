@@ -93,7 +93,8 @@ pub fn monitors(ctx: &Ctx) -> Vec<Monitor> {
     let mut v = Vec::new();
     // When a kernel driver owns the Super I/O we must not poke its ports too.
     if !os.iter().any(|m| superio::is_superio_name(&m.name)) {
-        v.extend(chips(ctx).iter().filter_map(|c| superio::read(ctx.hw.as_ref(), c)));
+        let (vendor, model) = board_ident(ctx);
+        v.extend(chips(ctx).iter().filter_map(|c| superio::read(ctx.hw.as_ref(), c, vendor, model)));
     }
     v.extend(os);
     // DIMM thermal sensors (DDR5 SPD5118 hub / DDR4 TSOD), one monitor per module like CPU-Z.
@@ -106,8 +107,55 @@ pub fn monitors(ctx: &Ctx) -> Vec<Monitor> {
     }
     v.extend(cpu::monitor(ctx));
     v.extend(cpu::pm_monitor(ctx));
+    v.push(chipset(ctx.hw.pch_temp_c(), &v));
     v.retain(|m| !m.readings.is_empty());
     v
+}
+
+/// The chipset's own temperatures as one "Chipset" monitor, so UIs can show
+/// CPU / GPU / Chipset side by side: the Intel PCH thermal sensor when the
+/// backend can read it (PawnIO IntelPCHThermal, Linux intel_pch_thermal),
+/// else whatever Super I/O input the board map labels Chipset/PCH (AMD
+/// boards route the Promontory diode there).
+fn chipset(pch: Option<f64>, all: &[Monitor]) -> Monitor {
+    let mut m = Monitor::new("Chipset");
+    if let Some(c) = pch {
+        m.push(Kind::Temperature, "PCH", c, None);
+        return m;
+    }
+    for src in all {
+        let pch_zone = src.name == "Intel PCH"; // Linux intel_pch_thermal zone
+        for r in src.readings.iter().filter(|r| r.kind == Kind::Temperature) {
+            let l = r.label.to_ascii_lowercase();
+            if pch_zone || l.starts_with("chipset") || l.starts_with("pch") {
+                let label = if pch_zone { "PCH".to_string() } else { r.label.clone() };
+                m.push(Kind::Temperature, label, r.value, None);
+            }
+        }
+    }
+    m
+}
+
+/// SMBIOS baseboard (vendor, product) for board sensor maps; cached because
+/// the OS fallback reads the registry/sysfs.
+fn board_ident(ctx: &Ctx) -> (&'static str, &'static str) {
+    static B: OnceLock<(String, String)> = OnceLock::new();
+    let b = B.get_or_init(|| {
+        let s = crate::smbios::board(ctx);
+        let vendor =
+            s.as_ref().and_then(|b| b.vendor.clone()).filter(|v| !v.trim().is_empty()).or_else(os_board_vendor);
+        (vendor.unwrap_or_default(), board_model(ctx).unwrap_or_default())
+    });
+    (&b.0, &b.1)
+}
+
+fn os_board_vendor() -> Option<String> {
+    #[cfg(target_os = "linux")]
+    return crate::os::read_trim("/sys/class/dmi/id/board_vendor");
+    #[cfg(windows)]
+    return crate::os::win::reg_str(r"HARDWARE\DESCRIPTION\System\BIOS", "BaseBoardManufacturer");
+    #[allow(unreachable_code)]
+    None
 }
 
 fn os_monitors(ctx: &Ctx) -> Vec<Monitor> {
@@ -330,6 +378,20 @@ mod tests {
         assert!(r.contains("\tTemperature 0\t\t70 degC (157 degF) (Package)\n"), "{r}");
         assert!(r.contains("\tPower 00\t\t79.61 W (Package)\n"), "{r}");
         assert!(r.contains("\tFan 0\t\t\t868 RPM [0x364] (SYS 1)\n"), "{r}");
+    }
+
+    #[test]
+    fn chipset_group() {
+        let mut sio = Monitor::new("ITE IT8688");
+        sio.push(Kind::Temperature, "CPU", 60.0, Some(60));
+        sio.push(Kind::Temperature, "Chipset", 48.0, Some(48));
+        sio.push(Kind::Fan, "Chipset", 2400.0, None);
+        let mut zone = Monitor::new("Intel PCH");
+        zone.push(Kind::Temperature, "", 51.0, None);
+        let c = chipset(None, &[sio.clone()]);
+        assert_eq!((c.name.as_str(), c.readings.len(), c.readings[0].value), ("Chipset", 1, 48.0));
+        assert_eq!(chipset(None, &[zone]).readings[0].label, "PCH");
+        assert_eq!(chipset(Some(45.0), &[sio]).readings.iter().map(|r| r.value).collect::<Vec<_>>(), [45.0]);
     }
 
     #[test]

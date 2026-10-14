@@ -1,7 +1,7 @@
 //! Linux: DRM sysfs (PCI IDs, link, amdgpu/i915/xe clocks and VRAM), NVML,
 //! connector EDIDs. Documented in the kernel's sysfs ABI (Documentation/ABI).
 
-use super::{Adapter, Link, LiveRow, Perf, Probe, edid};
+use super::{Adapter, Link, Live, Perf, Probe, edid};
 use crate::hw::Bdf;
 use crate::os::{read_trim, read_u64};
 use crate::report::f;
@@ -192,7 +192,7 @@ pub fn probe(use_api: bool) -> Probe {
     p
 }
 
-pub fn live(ads: &[Adapter], use_api: bool) -> Vec<LiveRow> {
+pub fn live(ads: &[Adapter], use_api: bool) -> Vec<Live> {
     let mut out = Vec::new();
     if use_api {
         super::nvml_live(ads, &mut out);
@@ -201,23 +201,44 @@ pub fn live(ads: &[Adapter], use_api: bool) -> Vec<LiveRow> {
         let Ok(dev) = std::fs::canonicalize(c.join("device")) else { continue };
         let bdf = name_of(&dev).and_then(|n| parse_bdf(&n));
         let Some(i) = ads.iter().position(|a| a.pci.is_some() && a.pci == bdf) else { continue };
-        if out.iter().any(|r| r.0 == i) {
+        if out.iter().any(|r| r.adapter == i) {
             continue;
         }
         let hw =
             std::fs::read_dir(dev.join("hwmon")).ok().and_then(|mut r| r.next()).and_then(|e| e.ok()).map(|e| e.path());
-        let hwv = |n: &str| hw.as_ref().and_then(|h| read_u64(h.join(n)));
-        let temp = hwv("temp1_input").map(|m| m as f64 / 1000.0);
-        let power = hwv("power1_average").or_else(|| hwv("power1_input")).map(|u| u as f64 / 1e6);
-        let load = read_u64(dev.join("gpu_busy_percent")).map(|v| v as f64);
-        let core = dpm(&dev.join("pp_dpm_sclk"))
+        let mut l = hw.as_deref().map(hwmon_live).unwrap_or_default();
+        l.adapter = i;
+        l.load_pct = read_u64(dev.join("gpu_busy_percent")).map(|v| v as f64);
+        l.mem_load_pct = read_u64(dev.join("mem_busy_percent")).map(|v| v as f64);
+        l.core_mhz = dpm(&dev.join("pp_dpm_sclk"))
             .and_then(|x| x.2)
             .or_else(|| freq(&c, &["gt_act_freq_mhz"]))
             .or_else(|| freq(&dev.join("tile0/gt0/freq0"), &["act_freq"]));
-        let mem = dpm(&dev.join("pp_dpm_mclk")).and_then(|x| x.2);
-        out.push((i, core, mem, temp, power, load));
+        l.mem_mhz = dpm(&dev.join("pp_dpm_mclk")).and_then(|x| x.2);
+        out.push(l);
     }
     out
+}
+
+/// GPU hwmon (amdgpu: temp1/2/3 = edge/junction/mem, fan1, pwm1, power1).
+/// Labels win over channel numbers when the driver provides them.
+fn hwmon_live(h: &Path) -> Live {
+    let v = |n: &str| read_u64(h.join(n));
+    let temp = |label: &str, ch: u32| {
+        let by_label = (1..=8).find(|i| read_trim(h.join(format!("temp{i}_label"))).as_deref() == Some(label));
+        let any_label = h.join(format!("temp{ch}_label")).exists();
+        let ch = by_label.or((!any_label).then_some(ch))?;
+        v(&format!("temp{ch}_input")).map(|m| m as f64 / 1000.0)
+    };
+    Live {
+        temp_c: temp("edge", 1),
+        hotspot_c: temp("junction", 2),
+        mem_junction_c: temp("mem", 3),
+        fan_rpm: v("fan1_input").filter(|&r| r > 0).map(|r| r as f64),
+        fan_pct: v("pwm1").map(|p| (p as f64 * 100.0 / 255.0).round()),
+        power_w: v("power1_average").or_else(|| v("power1_input")).map(|u| u as f64 / 1e6),
+        ..Default::default()
+    }
 }
 
 #[cfg(test)]
@@ -230,5 +251,28 @@ mod tests {
         std::fs::write(&p, "0: 500Mhz\n1: 1200Mhz *\n2: 2400Mhz\n").unwrap();
         assert_eq!(super::dpm(&p), Some((500.0, 2400.0, Some(1200.0))));
         let _ = std::fs::remove_file(p);
+    }
+
+    #[test]
+    fn amdgpu_hwmon() {
+        let h = std::env::temp_dir().join(format!("cpuzeez-amdgpu-{}", std::process::id()));
+        std::fs::create_dir_all(&h).unwrap();
+        for (n, v) in [
+            ("temp1_input", "45000"),
+            ("temp1_label", "edge"),
+            ("temp2_input", "61000"),
+            ("temp2_label", "junction"),
+            ("temp3_input", "58000"),
+            ("temp3_label", "mem"),
+            ("fan1_input", "1200"),
+            ("pwm1", "255"),
+            ("power1_average", "150000000"),
+        ] {
+            std::fs::write(h.join(n), v).unwrap();
+        }
+        let l = super::hwmon_live(&h);
+        assert_eq!((l.temp_c, l.hotspot_c, l.mem_junction_c), (Some(45.0), Some(61.0), Some(58.0)));
+        assert_eq!((l.fan_rpm, l.fan_pct, l.power_w), (Some(1200.0), Some(100.0), Some(150.0)));
+        let _ = std::fs::remove_dir_all(h);
     }
 }

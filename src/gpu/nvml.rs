@@ -44,7 +44,34 @@ pub struct Nvml {
     mem: Option<unsafe extern "C" fn(Dev, *mut Memory) -> R>,
     util: Option<unsafe extern "C" fn(Dev, *mut Util) -> R>,
     name: Option<unsafe extern "C" fn(Dev, *mut c_char, c_uint) -> R>,
+    /// Total energy since driver load, mJ (fallback when PowerUsage is unsupported).
+    energy: Option<unsafe extern "C" fn(Dev, *mut u64) -> R>,
+    /// nvmlClocksEventReason* / nvmlClocksThrottleReason* bit mask.
+    reasons: Option<unsafe extern "C" fn(Dev, *mut u64) -> R>,
+    fan_rpm: Option<unsafe extern "C" fn(Dev, *mut FanRpm) -> R>,
     pub driver: Option<String>,
+}
+
+/// nvmlFanSpeedInfo_v1_t (R555+): {version, fan index, RPM}.
+#[repr(C)]
+struct FanRpm {
+    version: c_uint,
+    fan: c_uint,
+    speed: c_uint,
+}
+
+/// Clock-limiting reasons that mean "throttled" (nvml.h bit values). Idle,
+/// application-clock and display-clock settings are deliberate, not throttling.
+const REASONS: [(u64, &str); 5] = [
+    (0x04, "Power"),          // SwPowerCap
+    (0x08, "HW slowdown"),    // HwSlowdown
+    (0x20, "Thermal"),        // SwThermalSlowdown
+    (0x40, "HW thermal"),     // HwThermalSlowdown
+    (0x80, "HW power brake"), // HwPowerBrakeSlowdown
+];
+
+pub fn throttle_names(bits: u64) -> Vec<&'static str> {
+    REASONS.iter().filter(|(b, _)| bits & b != 0).map(|(_, n)| *n).collect()
 }
 // SAFETY: NVML is documented as thread safe.
 unsafe impl Send for Nvml {}
@@ -98,6 +125,7 @@ fn load() -> Option<Nvml> {
         one("nvmlDeviceGetMaxPcieLinkWidth", "mlw"),
         one("nvmlDeviceGetMaxPcieLinkGeneration", "mlg"),
         one("nvmlDeviceGetPowerUsage", "power"),
+        one("nvmlDeviceGetFanSpeed", "fan"),
     ];
     let u2 = [
         two("nvmlDeviceGetClockInfo", "clock"),
@@ -120,6 +148,11 @@ fn load() -> Option<Nvml> {
         mem: sym!(lib, "nvmlDeviceGetMemoryInfo"),
         util: sym!(lib, "nvmlDeviceGetUtilizationRates"),
         name: sym!(lib, "nvmlDeviceGetName"),
+        energy: sym!(lib, "nvmlDeviceGetTotalEnergyConsumption"),
+        // Renamed in R535; the old name stays exported for compatibility.
+        reasons: sym!(lib, "nvmlDeviceGetCurrentClocksEventReasons")
+            .or_else(|| sym!(lib, "nvmlDeviceGetCurrentClocksThrottleReasons")),
+        fan_rpm: sym!(lib, "nvmlDeviceGetFanSpeedRPM"),
         driver,
         _lib: lib,
     })
@@ -200,24 +233,65 @@ impl Nvml {
             .collect()
     }
 
-    /// (bus, device) → (core MHz, mem MHz, temp °C, power W, load %).
-    pub fn live(&self) -> Vec<((u32, u32), [Option<f64>; 5])> {
+    fn u64_of(f: Option<unsafe extern "C" fn(Dev, *mut u64) -> R>, d: Dev) -> Option<u64> {
+        let mut v = 0;
+        (unsafe { f?(d, &mut v) } == 0).then_some(v)
+    }
+
+    /// (bus, device) → live sensors (adapter index left at 0 for the caller).
+    /// NVML has only the core temperature; hotspot/memory come from NVAPI.
+    pub fn live(&self) -> Vec<((u32, u32), super::Live)> {
         self.devices()
             .into_iter()
             .map(|(d, p)| {
-                let load = self.util.and_then(|f| {
+                let util = self.util.and_then(|f| {
                     let mut u = Util::default();
-                    (unsafe { f(d, &mut u) } == 0).then_some(u.gpu as f64)
+                    (unsafe { f(d, &mut u) } == 0).then_some(u)
                 });
-                let v = [
-                    self.g2(d, "clock", 0).map(f64::from),
-                    self.g2(d, "clock", 2).map(f64::from),
-                    self.g2(d, "temp", 0).map(f64::from),
-                    self.g1(d, "power").map(|mw| mw as f64 / 1000.0),
-                    load,
-                ];
-                ((p.bus, p.device), v)
+                // PowerUsage is unsupported on many GeForce cards; the energy
+                // counter (mJ) diffed over time gives the same average.
+                let power = self.g1(d, "power").map(|mw| mw as f64 / 1000.0).or_else(|| {
+                    let key = format!("nvml:{}:{}:{}", p.domain, p.bus, p.device);
+                    let e = Self::u64_of(self.energy, d)?;
+                    crate::sensors::watts(&[(key, 1e-3, u64::MAX, Some(e))], |_| Self::u64_of(self.energy, d))[0]
+                });
+                let rpm = self.fan_rpm.and_then(|f| {
+                    let mut r = FanRpm { version: std::mem::size_of::<FanRpm>() as c_uint | 1 << 24, fan: 0, speed: 0 };
+                    (unsafe { f(d, &mut r) } == 0 && r.speed > 0).then_some(r.speed as f64)
+                });
+                let l = super::Live {
+                    core_mhz: self.g2(d, "clock", 0).map(f64::from),
+                    mem_mhz: self.g2(d, "clock", 2).map(f64::from),
+                    temp_c: self.g2(d, "temp", 0).map(f64::from),
+                    fan_pct: self.g1(d, "fan").map(f64::from),
+                    fan_rpm: rpm,
+                    power_w: power,
+                    load_pct: util.as_ref().map(|u| u.gpu as f64),
+                    mem_load_pct: util.as_ref().map(|u| u.memory as f64),
+                    throttle: Self::u64_of(self.reasons, d).map(throttle_names),
+                    ..Default::default()
+                };
+                ((p.bus, p.device), l)
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn reasons() {
+        assert!(super::throttle_names(0x1 | 0x2 | 0x100).is_empty(), "idle/app/display clocks are not throttling");
+        assert_eq!(super::throttle_names(0x04 | 0x40), ["Power", "HW thermal"]);
+    }
+
+    /// Real NVML when present: which power sources this card supports.
+    #[test]
+    fn power_sources() {
+        let Some(n) = super::get() else { return };
+        for (d, p) in n.devices() {
+            let e = |f| super::Nvml::u64_of(f, d);
+            println!("bus {} power {:?} energy {:?} reasons {:?}", p.bus, n.g1(d, "power"), e(n.energy), e(n.reasons));
+        }
     }
 }

@@ -1,0 +1,54 @@
+name: Board sensor map
+description: Help label the voltages, temperatures and fans of your motherboard
+title: "Board sensors: <vendor> <model>"
+labels: ["sensors", "board-map"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! See [docs/boards.md](https://github.com/joaoregis/cpuzeez/blob/main/docs/boards.md) for the details.
+        Run CpuZeeZ elevated with `CPUZEEZ_EC_DUMP=1 cpuzeez -txt=board` (Windows: `set CPUZEEZ_EC_DUMP=1` first, as administrator with PawnIO).
+  - type: input
+    id: board
+    attributes:
+      label: Motherboard
+      description: The "Mainboard Model" line of the Monitoring section, and the board vendor.
+      placeholder: "Gigabyte Technology Co., Ltd. B550 AORUS ELITE V2"
+    validations:
+      required: true
+  - type: input
+    id: chip
+    attributes:
+      label: Super I/O chip
+      description: The LPCIO Vendor and Model lines.
+      placeholder: "ITE IT8688"
+    validations:
+      required: true
+  - type: textarea
+    id: dump
+    attributes:
+      label: board.txt
+      description: Attach board.txt, or paste the Monitoring, LPCIO and Hardware Monitors sections.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: reference
+    attributes:
+      label: Reference readings
+      description: |
+        What the board vendor's tool or the BIOS hardware-monitor page showed at the same time,
+        with the names it uses (e.g. "+12V 12.096 V", "Chipset 48 °C", "SYS_FAN2 812 RPM").
+        Fan headers you identified by unplugging fans are very welcome.
+    validations:
+      required: true
+  - type: input
+    id: tool
+    attributes:
+      label: Reference source
+      placeholder: "BIOS PC Health page / Gigabyte Control Center 25.x / ASUS Armoury Crate"
+  - type: input
+    id: version
+    attributes:
+      label: CpuZeeZ version and OS
+      placeholder: "0.2.0, Windows 11 24H2"

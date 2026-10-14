@@ -282,14 +282,20 @@ fn gpu_group(ctx: &Ctx, i: usize) -> String {
 }
 
 fn gpu(ctx: &Ctx, o: &mut Out) {
-    for (i, core, mem, temp, power, load) in crate::gpu::live(ctx) {
-        let (g, p) = (gpu_group(ctx, i), format!("gpu{i}"));
+    for l in crate::gpu::live(ctx) {
+        let (g, p) = (gpu_group(ctx, l.adapter), format!("gpu{}", l.adapter));
+        // ponytail: throttle reasons (l.throttle) aren't a numeric series; surface them when the UI has a flag slot.
         for (k, label, unit, v) in [
-            ("temp/core", "Temperature", Unit::Celsius, temp),
-            ("clock/core", "Core clock", Unit::Mhz, core),
-            ("clock/mem", "Memory clock", Unit::Mhz, mem),
-            ("power/board", "Power", Unit::Watt, power),
-            ("load/core", "Load", Unit::Percent, load),
+            ("temp/core", "Temperature", Unit::Celsius, l.temp_c),
+            ("temp/hotspot", "Hot spot", Unit::Celsius, l.hotspot_c),
+            ("temp/memjunction", "Memory junction", Unit::Celsius, l.mem_junction_c),
+            ("clock/core", "Core clock", Unit::Mhz, l.core_mhz),
+            ("clock/mem", "Memory clock", Unit::Mhz, l.mem_mhz),
+            ("power/board", "Power", Unit::Watt, l.power_w),
+            ("load/core", "Load", Unit::Percent, l.load_pct),
+            ("load/mem", "Memory load", Unit::Percent, l.mem_load_pct),
+            ("fan/rpm", "Fan", Unit::Rpm, l.fan_rpm),
+            ("fan/pct", "Fan duty", Unit::Percent, l.fan_pct),
         ] {
             if let Some(v) = v {
                 o.add(format!("{p}/{k}"), &g, label, unit, v);

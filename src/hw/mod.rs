@@ -86,7 +86,8 @@ pub trait Hw: Send + Sync {
     fn mchbar_read64(&self, _off: u32) -> Option<u64> {
         None
     }
-    /// Intel PCH (chipset) die temperature, °C.
+    /// Intel PCH (chipset) die temperature in °C. Linux gets it from the
+    /// kernel's intel_pch_thermal hwmon zone instead (sensors/hwmon.rs).
     fn pch_temp_c(&self) -> Option<f64> {
         None
     }

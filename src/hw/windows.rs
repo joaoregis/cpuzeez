@@ -260,6 +260,7 @@ struct PawnIo {
     smbus: Vec<Arc<Module>>,
     smu: Option<Module>,
     mchbar: Option<Module>,
+    pch: Option<Module>,
     pci_lock: GlobalMutex,
     isa_lock: GlobalMutex,
     smbus_lock: Arc<GlobalMutex>,
@@ -294,8 +295,16 @@ fn open_pawnio() -> Option<PawnIo> {
         smbus_modules(&vendor).iter().filter_map(|n| Module::load(lib, &dirs, n)).map(Arc::new).collect();
     let smu = (vendor == "AuthenticAMD").then(|| Module::load(lib, &dirs, "RyzenSMU")).flatten();
     let mchbar = (vendor == "GenuineIntel").then(|| Module::load(lib, &dirs, "IntelMCHBAR")).flatten();
+    // main() rejects machines without a supported PCH thermal route.
+    let pch = (vendor == "GenuineIntel").then(|| Module::load(lib, &dirs, "IntelPCHThermal")).flatten();
 
-    if msr.is_none() && sio.iter().all(Option::is_none) && smbus.is_empty() && smu.is_none() && mchbar.is_none() {
+    if msr.is_none()
+        && sio.iter().all(Option::is_none)
+        && smbus.is_empty()
+        && smu.is_none()
+        && mchbar.is_none()
+        && pch.is_none()
+    {
         return None;
     }
     let version = crate::os::win::reg_str(UNINSTALL_KEY, "DisplayVersion").unwrap_or_else(|| {
@@ -312,6 +321,7 @@ fn open_pawnio() -> Option<PawnIo> {
         smbus,
         smu,
         mchbar,
+        pch,
         pci_lock: GlobalMutex::new("Access_PCI"),
         isa_lock: GlobalMutex::new("Access_ISABUS.HTP.Method"),
         smbus_lock: Arc::new(GlobalMutex::new("Access_SMBUS.HTP.Method")),
@@ -364,7 +374,7 @@ impl Hw for PawnIo {
             mods.push("LpcIO");
         }
         mods.extend(self.smbus.iter().map(|m| m.name));
-        mods.extend(self.smu.iter().chain(&self.mchbar).map(|m| m.name));
+        mods.extend(self.smu.iter().chain(&self.mchbar).chain(&self.pch).map(|m| m.name));
         format!("PawnIO {} (modules: {})", self.version, mods.join(", "))
     }
 
@@ -427,6 +437,24 @@ impl Hw for PawnIo {
     fn mchbar_read64(&self, off: u32) -> Option<u64> {
         self.mchbar.as_ref()?.exec1("ioctl_read_qword", &[off as u64])
     }
+
+    fn pch_temp_c(&self) -> Option<f64> {
+        // ioctl_read_raw → [raw register, route]; the module leaves decoding to us.
+        let out = self.pch.as_ref()?.exec("ioctl_read_raw", &[], 2)?;
+        pch_decode(*out.first()?, *out.get(1)?)
+    }
+}
+
+/// IntelPCHThermal raw register → °C, per route:
+/// 1 = PCH thermal PCI function BAR0 TEMP (TSR bits 8:0, 0.5 °C steps, -50 °C offset);
+/// 2 = PWRMBASE + 0x1560 (bit 9 = reading valid, bits 8:0 = signed integer °C).
+fn pch_decode(raw: u64, route: u64) -> Option<f64> {
+    let t = match route {
+        1 => (raw & 0x1FF) as f64 * 0.5 - 50.0,
+        2 if raw & 0x200 != 0 => ((raw as u16) << 7) as i16 as f64 / 128.0, // sign-extend 9 bits
+        _ => return None,
+    };
+    (1.0..=125.0).contains(&t).then_some(t)
 }
 
 /// PM table cells are u64s each carrying two little-endian f32s (low first).
@@ -516,6 +544,15 @@ mod tests {
     }
 
     #[test]
+    fn pch_raw() {
+        assert_eq!(pch_decode(0x200 | 45, 2), Some(45.0));
+        assert_eq!(pch_decode(45, 2), None, "valid bit clear");
+        assert_eq!(pch_decode(0x200 | 0x1D8, 2), None, "-40 °C is out of range");
+        assert_eq!(pch_decode(190, 1), Some(45.0));
+        assert_eq!(pch_decode(190, 0), None);
+    }
+
+    #[test]
     fn pm_cells() {
         let c = (2.5f32.to_bits() as u64) << 32 | 1.0f32.to_bits() as u64;
         assert_eq!(unpack_f32(&[c]), [1.0, 2.5]);
@@ -542,6 +579,7 @@ mod tests {
             t.as_ref().map(|t| &t.1[..16.min(t.1.len())])
         );
         let _ = writeln!(s, "mchbar 0x5000: {:x?}", hw.mchbar_read32(0x5000));
+        let _ = writeln!(s, "pch temp: {:?}", hw.pch_temp_c());
         let _ = writeln!(s, "superio 0x2E id: {:x?}", {
             hw.io_out8(0x2E, 0x87);
             hw.io_out8(0x2E, 0x87);
