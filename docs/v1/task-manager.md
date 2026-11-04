@@ -33,9 +33,13 @@ python -I docs/v1/evidence/pe_strings.py C:/Windows/System32/Taskmgr.exe "Startu
 | Network (performance) | `IPHLPAPI!GetIfEntry2`, `GetAdaptersAddresses`, `NSI!NsiGetAllParameters` | Per-adapter counters |
 | Settings | Strings `AlwaysOnTop`, `DefaultStartPage`, `MinimizeOnUse`, `HideWhenMinimized`, `UpdateSpeed`, `SelectedUpdateSpeedIndex` | The Settings tab items |
 
-🔬 **Optional next step**, with REA/Ghidra under the same clean-room rule:
-- Confirm the **startup-impact thresholds**. Microsoft documents them as *High* = more than 1 s of CPU or more than 3 MB of disk I/O; *Medium* = 300 ms–1 s or 300 KB–3 MB; *Low* = below that.
-- Confirm the exact layout of the binary `StartupApproved` value.
+✅ **Confirmed (S0-X12, 2026-11-04, Windows 11 build 26200).** Observed on a real machine and checked against Microsoft's documentation, never against Microsoft's code:
+- **Startup-impact thresholds** (Microsoft's documentation): *High* = more than 1 s of CPU or more than 3 MB of disk I/O; *Medium* = 300 ms–1 s or 300 KB–3 MB; *Low* = less than 300 ms and less than 300 KB. One Microsoft support page gives 292 KB for the Low disk boundary, so we use 300 KB, following the developer documentation. Items without data show *Not measured*, as the Task Manager does.
+- **`StartupApproved` value**: 12 bytes (`REG_BINARY`) under `HKCU|HKLM\…\Explorer\StartupApproved\{Run, Run32, StartupFolder}`, named like the `Run` value or the `.lnk` file:
+  - bytes 0–3, a little-endian DWORD: bit 0 set = **disabled** (`03`); clear = **enabled** (`02`, or `06` for some system entries such as `SecurityHealth`). A missing value means enabled.
+  - bytes 4–11, a `FILETIME` (UTC) of **when it was disabled**; zero while enabled. Decoded values match the dates the entries were disabled, which gives the *date disabled* column for free.
+  - To disable, we write `03 00 00 00` + the current `FILETIME`. To enable, we write `02 00 00 00` + 8 zero bytes. Both are reversible and never touch the `Run` entry itself.
+- **WDI `StartupInfo` XML** (`%WINDIR%\System32\WDI\LogFiles\StartupInfo\<SID>_StartupInfo<N>.xml`, UTF-16, admin-only): `<Process Name PID>` with `<DiskUsage Units="bytes">`, `<CpuUsage Units="us">`, `<CommandLine>` and the parent. ⚠ **On the test machine the newest file was 15 months old.** Windows doesn't write these on every boot, so impact is often stale or missing. We show the file's date next to the impact and fall back to our own opt-in recorder (S2a), exactly as on Linux and macOS.
 
 ## 2. Navigation (decided, Q5)
 

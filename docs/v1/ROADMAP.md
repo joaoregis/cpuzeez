@@ -124,7 +124,7 @@ Goal: fix what's broken, build the shared building blocks, and set up the tests 
 | S0-X09 | **SP8** overlay GPU cost | ZeeZ Live | < 0.3 ms per game frame |
 | S0-X10 | Per-process network: ETW Kernel-Network (Win), eBPF/sock_diag (Linux), `nettop` (macOS) | System | Feasibility per OS |
 | S0-X11 | Per-process GPU on macOS (IOAccelerator `AppUsage`); "not responding" on macOS | System | Feasibility |
-| S0-X12 | Task Manager clean-room confirmations: startup-impact thresholds, `StartupApproved` format | System | Documented in task-manager §1 |
+| S0-X12 | Task Manager clean-room confirmations: startup-impact thresholds, `StartupApproved` format | System | Documented in task-manager §1. ✅ Layout and thresholds confirmed; WDI files found stale, so impact shows its date and falls back to the recorder |
 | S0-X13 | NVMe Device Self-test through Windows' protocol command path | S1 tools | Works, or a documented limit |
 | S0-X14 | SignPath Foundation eligibility; package-manager policies for unsigned builds (winget, Scoop, AUR, Homebrew) | Distribution | Decision per channel |
 
