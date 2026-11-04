@@ -96,6 +96,13 @@ jobs:
           name: report-${{ strategy.job-index }}-distro
           path: out/
 
+  deny:
+    name: Dependencies (licenses, advisories, sources)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
   headless:
     name: CLI-only build (no GUI feature)
     runs-on: ubuntu-latest

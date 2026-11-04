@@ -9,6 +9,8 @@ repository = "https://github.com/joaoregis/cpuzeez"
 readme = "README.md"
 keywords = ["cpu", "hardware", "cpuid", "spd", "system-information"]
 categories = ["command-line-utilities", "hardware-support"]
+# Installed from GitHub releases or `cargo install --git`; not published to crates.io.
+publish = false
 authors = ["Joao Regis <22204842+joaoregis@users.noreply.github.com>"]
 
 [workspace]
