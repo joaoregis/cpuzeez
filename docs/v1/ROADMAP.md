@@ -125,7 +125,7 @@ Goal: fix what's broken, build the shared building blocks, and set up the tests 
 | S0-X10 | Per-process network: ETW Kernel-Network (Win), eBPF/sock_diag (Linux), `nettop` (macOS) | System | Feasibility per OS |
 | S0-X11 | Per-process GPU on macOS (IOAccelerator `AppUsage`); "not responding" on macOS | System | Feasibility |
 | S0-X12 | Task Manager clean-room confirmations: startup-impact thresholds, `StartupApproved` format | System | Documented in task-manager §1. ✅ Layout and thresholds confirmed; WDI files found stale, so impact shows its date and falls back to the recorder |
-| S0-X13 | NVMe Device Self-test through Windows' protocol command path | S1 tools | Works, or a documented limit |
+| S0-X13 | NVMe Device Self-test through Windows' protocol command path | S1 tools | Works, or a documented limit. ✅ Supported (1903+, admin) with a ~10 min throttle, per core-pages §7.3. The first real run happens in S1-K08 with the user's consent |
 | S0-X14 | SignPath Foundation eligibility; package-manager policies for unsigned builds (winget, Scoop, AUR, Homebrew) | Distribution | Decision per channel |
 
 **S0 gate:** every 🐞 closed; the building blocks have tests and benches; existing features behave exactly as in 0.3.0 (visual regression), but run on the new architecture; every spike has an ADR. *No pre-release: nothing new for users yet.*

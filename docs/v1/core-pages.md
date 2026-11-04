@@ -121,7 +121,7 @@ What exists: CPUID, topology, caches, instructions, P-states, clocks, SMU/MSR (`
 
 | Tool | Windows | Linux | macOS |
 |---|---|---|---|
-| **SMART self-test** (short, extended, conveyance) with progress and history | 🔑 ATA pass-through · NVMe 🔬 (Windows filters *admin* commands; validate *Device Self-test*) | 🔑 ✅ | ❌ (no ATA pass-through without a third-party driver) |
+| **SMART self-test** (short, extended, conveyance) with progress and history | 🔑 ATA pass-through · NVMe 🔑 *Device Self-test* (14h) through `IOCTL_STORAGE_PROTOCOL_COMMAND`, which stornvme allows since Windows 10 1903 (S0-X13). Progress and history come from log page 06h via `IOCTL_STORAGE_QUERY_PROPERTY` (no admin). ⚠ Windows 10 2004+ answers `THROTTLED_REQUEST` for about 10 minutes after a test; the button explains the wait instead of failing. Drives may also ignore a new test for about 10 minutes | 🔑 ✅ | ❌ (no ATA pass-through without a third-party driver) |
 | Health panel: life left, TBW written vs rated TBW (entered by the user, since drives don't report it), temperature over time, error counts, alerts | ✅ | ✅ | ⚠ |
 | **Read-only surface scan** (slow and unreadable sectors) | 🔑 | 🔑 | 🔑 ⚠ |
 
