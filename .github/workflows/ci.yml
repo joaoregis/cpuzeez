@@ -105,6 +105,55 @@ jobs:
           name: report-${{ strategy.job-index }}-distro
           path: out/
 
+  visual:
+    name: Visual regression (PR vs base, same machine)
+    if: github.event_name == 'pull_request'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build this PR and its base
+        shell: bash
+        run: |
+          set -e
+          cargo build --release
+          cp target/release/cpuzeez.exe head.exe
+          git worktree add ../base "${{ github.event.pull_request.base.sha }}"
+          (cd ../base && cargo build --release --target-dir "$GITHUB_WORKSPACE/target-base")
+      - name: Same screens from both builds
+        shell: bash
+        timeout-minutes: 10
+        run: |
+          ./target-base/release/cpuzeez.exe -screenshots=out/base
+          ./head.exe -screenshots=out/head
+      - name: Compare (layout changes fail, live values don't)
+        run: python .github/scripts/shotdiff.py out/base out/head --max-diff 0.05
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-regression
+          path: out/
+
+  deb:
+    name: .deb builds, installs, runs and uninstalls
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-deb --locked
+      - run: cargo deb
+      - name: Install, run, uninstall
+        run: |
+          set -e
+          sudo apt-get install -y ./target/debian/cpuzeez_*.deb
+          cpuzeez -txt=/tmp/deb-report && test -s /tmp/deb-report.txt
+          test -f /usr/share/applications/cpuzeez.desktop
+          sudo apt-get remove -y cpuzeez
+          ! command -v cpuzeez
+
   deny:
     name: Dependencies (licenses, advisories, sources)
     runs-on: ubuntu-latest

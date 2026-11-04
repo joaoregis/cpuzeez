@@ -689,6 +689,26 @@ mod tests {
         assert_eq!(h.points("x", 0.0).len(), 3, "a shorter window trims on the next push");
     }
 
+    /// Performance budget (P6, S0-T08): the per-tick work the engine itself
+    /// adds (history push + snapshot) for 300 metrics with 10 minutes of history.
+    #[test]
+    fn tick_overhead_budget() {
+        let mut h = History::new(Duration::from_secs(600));
+        let rs: Vec<Reading> = (0..300).map(|i| r(&format!("cpu/temp/s{i}"), Unit::Celsius, i as f64)).collect();
+        for t in 0..600 {
+            h.push(t as f64, &rs); // fill the window first
+        }
+        let t0 = Instant::now();
+        let n = 50;
+        for t in 600..600 + n {
+            h.push(t as f64, &rs);
+            let _ = h.snapshot(t as f64);
+        }
+        let per_tick = t0.elapsed() / n;
+        // Debug build on a shared CI runner; a release build is ~10x faster.
+        assert!(per_tick < Duration::from_millis(20), "{per_tick:?} per tick");
+    }
+
     #[test]
     fn stats_reset_keeps_graph() {
         let mut h = History::new(Duration::from_secs(100));

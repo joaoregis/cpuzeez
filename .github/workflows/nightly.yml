@@ -1,0 +1,23 @@
+name: Nightly
+
+# Long-running checks that don't fit in every push (S0-T10).
+on:
+  schedule:
+    - cron: "41 2 * * *"
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "Soak duration in minutes"
+        default: "60"
+
+jobs:
+  soak:
+    name: Soak (sampler for an hour, memory and fds must plateau)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release
+      - run: python3 .github/scripts/soak.py target/release/cpuzeez ${{ inputs.minutes || 60 }}
