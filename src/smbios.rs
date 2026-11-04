@@ -148,10 +148,6 @@ pub fn bios(ctx: &Ctx) -> Option<Bios> {
     bios_info(get(ctx)?)
 }
 
-pub fn system(ctx: &Ctx) -> Option<System> {
-    system_info(get(ctx)?)
-}
-
 pub fn board(ctx: &Ctx) -> Option<Board> {
     board_info(get(ctx)?)
 }

@@ -94,7 +94,6 @@ pub fn palette_ctx(ctx: &egui::Context) -> &'static Palette {
 pub const RADIUS_CONTROL: u8 = 8;
 pub const RADIUS_CARD: u8 = 12;
 pub const PAD_CARD: i8 = 14;
-pub const PAD_PAGE: f32 = 20.0;
 pub const GAP: f32 = 12.0;
 pub const SIDEBAR_WIDTH: f32 = 196.0;
 

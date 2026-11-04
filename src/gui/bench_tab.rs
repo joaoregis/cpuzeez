@@ -193,18 +193,6 @@ pub fn bytes_text(b: f64) -> String {
 }
 
 impl State {
-    pub fn ui(&mut self, ui: &mut egui::Ui, ctx: &Ctx, mon: &mut super::sensors::Monitor) {
-        ui.horizontal(|ui| {
-            ui.selectable_value(&mut self.mode, Mode::Cpu, tr("CPU"));
-            ui.selectable_value(&mut self.mode, Mode::Memory, tr("Memory"));
-        });
-        ui.separator();
-        match self.mode {
-            Mode::Cpu => self.cpu_page(ui, ctx, mon),
-            Mode::Memory => self.memory_page(ui, ctx),
-        }
-    }
-
     /// CPU benchmark (existing CPU-Z style layout) with the monitored stress.
     pub fn cpu_page(&mut self, ui: &mut egui::Ui, ctx: &Ctx, mon: &mut super::sensors::Monitor) {
         ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
