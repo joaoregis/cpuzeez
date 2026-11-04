@@ -129,6 +129,9 @@ jobs:
           ./target-base/release/cpuzeez.exe -screenshots=out/base
           ./head.exe -screenshots=out/head
       - name: Compare (layout changes fail, live values don't)
+        # An intended visual change is declared with the 'visual-change' label;
+        # the diff is still produced and uploaded for review.
+        continue-on-error: ${{ contains(github.event.pull_request.labels.*.name, 'visual-change') }}
         run: python .github/scripts/shotdiff.py out/base out/head --max-diff 0.05
       - if: always()
         uses: actions/upload-artifact@v4
