@@ -259,12 +259,12 @@ pub mod win {
     }
 }
 
-#[cfg(test)]
+// macOS has no pinning, so nothing to test there.
+#[cfg(all(test, any(windows, target_os = "linux")))]
 mod tests {
     use super::*;
 
     #[test]
-    #[cfg(any(windows, target_os = "linux"))]
     fn on_cpu_runs_on_the_calling_thread() {
         let me = std::thread::current().id();
         let last = logical_cpus() - 1;
