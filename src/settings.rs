@@ -83,6 +83,12 @@ pub fn dir() -> Option<PathBuf> {
             .map(|p| p.join(crate::NAME))
     }?;
     std::fs::create_dir_all(&base).ok()?;
+    // Logs and history are private: only this user may read the folder (P1).
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&base, std::fs::Permissions::from_mode(0o700));
+    }
     Some(base)
 }
 

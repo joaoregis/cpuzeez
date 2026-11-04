@@ -91,6 +91,12 @@ fn pick(assets: &[Asset], suffixes: &[String]) -> Option<Asset> {
     suffixes.iter().find_map(|s| assets.iter().find(|a| a.name.ends_with(s.as_str())).cloned())
 }
 
+/// The startup check runs only when cpuzeez.ini allows it and the user opted
+/// in on the first-run screen or in Settings (P1). Not asked yet = no check.
+pub fn startup_check_allowed(ini_allows: bool, opted_in: Option<bool>) -> bool {
+    ini_allows && opted_in == Some(true)
+}
+
 /// SemVer precedence: "major.minor.patch", then pre-releases below the release
 /// they precede, ordered identifier by identifier (`beta.2` > `beta.1`, `rc.1` > `beta.9`).
 pub fn newer(current: &str, latest: &str) -> bool {
@@ -417,6 +423,43 @@ mod tests {
         assert!(!newer("0.1.0", "0.1.0"));
         assert!(newer("0.2.0-rc1", "0.2.0"));
         assert!(!newer("0.2.0", "0.2.0-rc1"));
+    }
+
+    #[test]
+    fn startup_check_is_opt_in() {
+        assert!(!startup_check_allowed(true, None), "not asked yet: no request");
+        assert!(!startup_check_allowed(true, Some(false)));
+        assert!(!startup_check_allowed(false, Some(true)), "CheckUpdates=0 wins");
+        assert!(startup_check_allowed(true, Some(true)));
+    }
+
+    /// P1: this module is the app's only network path. A socket, an HTTP
+    /// client or a `curl` call anywhere else fails this test.
+    #[test]
+    fn update_is_the_only_network_path() {
+        fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    walk(&p, out);
+                } else if p.extension().is_some_and(|x| x == "rs") {
+                    out.push(p);
+                }
+            }
+        }
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut files = Vec::new();
+        walk(&root.join("src"), &mut files);
+        walk(&root.join("crates"), &mut files);
+        assert!(files.len() > 50, "found the sources");
+        let net =
+            ["TcpStream", "UdpSocket", "TcpListener", "\"curl\"", "reqwest", "ureq::", "hyper::", "ToSocketAddrs"];
+        for f in files.iter().filter(|f| !f.ends_with("update.rs")) {
+            let src = std::fs::read_to_string(f).unwrap_or_default();
+            for n in net {
+                assert!(!src.contains(n), "{} uses {n}: only update.rs may reach the network", f.display());
+            }
+        }
     }
 
     #[test]

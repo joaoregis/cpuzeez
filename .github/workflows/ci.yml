@@ -46,6 +46,15 @@ jobs:
           $bin -core=0
           test -s out/report.txt && test -s out/report.html && test -s out/report.json
           python3 -c "import json,sys; d=json.load(open('out/report.json')); print(len(d), 'sections:', [s['title'] for s in d])"
+      - name: Works with no network at all (P1)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -e
+          # A network namespace with only loopback, down: any connection attempt fails.
+          sudo unshare -n -- target/release/cpuzeez -txt=out/nonet -json=out/nonet
+          sudo unshare -n -- target/release/cpuzeez -sensors | head -n 5
+          test -s out/nonet.txt && test -s out/nonet.json
       - name: Benchmark smoke test
         shell: bash
         run: target/release/cpuzeez -bench

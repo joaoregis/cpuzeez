@@ -547,7 +547,7 @@ impl App {
 
     /// The update check, only when the user opted in and cpuzeez.ini allows it (P1).
     fn check_updates_if_allowed(&self) {
-        if self.ctx.cfg.check_updates && self.mon.settings.update_check == Some(true) {
+        if crate::update::startup_check_allowed(self.ctx.cfg.check_updates, self.mon.settings.update_check) {
             let slot = self.update.clone();
             std::thread::spawn(move || *slot.lock().unwrap() = crate::update::check());
         }
