@@ -1,0 +1,15 @@
+[package]
+name = "cpuzeez-platform"
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.89"
+description = "CpuZeeZ per-OS adapters: OS helpers, CPUID and the privileged hardware backends (PawnIO, Linux kernel interfaces)."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/joaoregis/cpuzeez"
+publish = false
+
+[dependencies]
+cpuzeez-core = { path = "../core" }
+
+[target."cfg(unix)".dependencies]
+libc = "0.2.190"

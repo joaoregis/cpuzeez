@@ -14,11 +14,9 @@ mod gpu;
 #[cfg(feature = "gui")]
 mod gui;
 mod history;
-mod hw;
 mod membench;
 mod network;
 mod npu;
-mod os;
 mod pci;
 mod sensors;
 mod settings;
@@ -36,6 +34,7 @@ use std::sync::OnceLock;
 
 // Pure logic lives in cpuzeez-core (docs/adr/0011); these keep the old `crate::` paths.
 pub use cpuzeez_core::{DISPLAY_NAME, NAME, config, report};
+pub use cpuzeez_platform::{hw, os};
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const REPO_URL: &str = env!("CARGO_PKG_REPOSITORY");
 

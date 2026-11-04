@@ -503,6 +503,7 @@ name = "cpuzeez"
 version = "0.3.0"
 dependencies = [
  "cpuzeez-core",
+ "cpuzeez-platform",
  "eframe",
  "egui-phosphor",
  "ksni",
@@ -520,6 +521,14 @@ version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "cpuzeez-platform"
+version = "0.3.0"
+dependencies = [
+ "cpuzeez-core",
+ "libc",
 ]
 
 [[package]]

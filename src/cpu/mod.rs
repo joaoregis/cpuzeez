@@ -6,7 +6,7 @@ mod arm;
 pub mod clocks;
 pub use cpuzeez_core::cpu::db;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-pub mod x86;
+pub use cpuzeez_platform::cpu::x86;
 
 use crate::Ctx;
 use crate::report::{Node, Section, f, g, gv, section};
