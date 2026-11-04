@@ -3,7 +3,7 @@
      "Hardware access" feature (off by default) that runs the bundled PawnIO
      installer. Inputs come from .github/scripts/fetch_pawnio.sh OUT:
      wix build cpuzeez.wxs -ext WixToolset.UI.wixext -arch x64 -d Version=x.y.z -d Bin=path\to\cpuzeez.exe
-       -d IconFile=assets\cpuzeez.ico -d PawnIo=OUT
+       -d IconFile=assets\cpuzeez.ico -d PawnIo=ABSOLUTE\PATH\TO\OUT (Files/@Include resolves a relative path against this file's folder)
      Silent installs pick it with ADDLOCAL=ALL (or ADDLOCAL=Main,HardwareAccess). -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package Name="CpuZeeZ" Manufacturer="CpuZeeZ contributors" Version="$(Version)"

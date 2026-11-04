@@ -8,9 +8,13 @@ use std::sync::Mutex;
 pub fn open() -> Box<dyn Hw> {
     // msr needs `modprobe msr` and root; probe once so name() is honest.
     let msr = File::open("/dev/cpu/0/msr").is_ok();
-    let port = OpenOptions::new().read(true).write(true).open("/dev/port").ok();
+    // Legacy x86 I/O ports (Super I/O). Elsewhere /dev/port reaches whatever
+    // the platform maps there, and probing it can take the process down.
+    let port = X86.then(|| OpenOptions::new().read(true).write(true).open("/dev/port").ok()).flatten();
     Box::new(Linux { msr, port, smn: Mutex::new(()) })
 }
+
+const X86: bool = cfg!(any(target_arch = "x86", target_arch = "x86_64"));
 
 struct Linux {
     msr: bool,
@@ -131,8 +135,9 @@ impl Hw for Linux {
     }
 
     fn phys_read(&self, addr: u64, buf: &mut [u8]) -> bool {
-        // Works only for ranges STRICT_DEVMEM allows (e.g. BIOS area).
-        File::open("/dev/mem").and_then(|f| f.read_exact_at(buf, addr)).is_ok()
+        // Works only for ranges STRICT_DEVMEM allows (e.g. BIOS area). The
+        // callers want the x86 legacy BIOS area, which isn't RAM on ARM.
+        X86 && File::open("/dev/mem").and_then(|f| f.read_exact_at(buf, addr)).is_ok()
     }
 
     fn amd_smn_read(&self, addr: u32) -> Option<u32> {

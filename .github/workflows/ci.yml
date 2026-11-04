@@ -155,7 +155,7 @@ jobs:
           cpuzeez -txt=/tmp/deb-report && test -s /tmp/deb-report.txt
           test -f /usr/share/applications/cpuzeez.desktop
           sudo apt-get remove -y cpuzeez
-          ! command -v cpuzeez
+          test ! -e /usr/bin/cpuzeez  # not `command -v`: bash's hash table still remembers it
 
   deny:
     name: Dependencies (licenses, advisories, sources)
@@ -190,7 +190,7 @@ jobs:
           wix extension add -g WixToolset.UI.wixext/5.0.2
           for v in 1.0.0-beta.1 1.0.0-rc.1 1.0.0 1.0.1; do
             msi=$(python .github/scripts/pkgver.py "$v" | sed -n 's/^MSI_VER=//p')
-            wix build packaging/windows/cpuzeez.wxs -ext WixToolset.UI.wixext -arch x64 -d Version=$msi -d Bin=target/release/cpuzeez.exe -d IconFile=assets/cpuzeez.ico -d PawnIo=pawnio -o cz-$v.msi
+            wix build packaging/windows/cpuzeez.wxs -wx -ext WixToolset.UI.wixext -arch x64 -d Version=$msi -d Bin=target/release/cpuzeez.exe -d IconFile=assets/cpuzeez.ico -d PawnIo="$(pwd -W)/pawnio" -o cz-$v.msi
           done
       - name: Upgrade in place along the chain, refuse downgrade, uninstall cleanly
         shell: pwsh
