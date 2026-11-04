@@ -115,6 +115,60 @@ pub fn relaunch(args: &[String]) -> Pending {
     }
 }
 
+/// Run this program elevated with `args` and wait for it: per-action
+/// elevation (one prompt per action). Returns the elevated copy's exit code.
+pub fn run(args: &[String]) -> Result<i32, Outcome> {
+    let exe = std::env::current_exe().map_err(|e| Outcome::Failed(e.to_string()))?;
+    #[cfg(windows)]
+    return win::runas_wait(&exe, args);
+    #[cfg(target_os = "linux")]
+    {
+        let pkexec = which("pkexec").ok_or(Outcome::Unsupported)?;
+        let st = std::process::Command::new(pkexec)
+            .arg(exe)
+            .args(args)
+            .status()
+            .map_err(|e| Outcome::Failed(e.to_string()))?;
+        return match st.code() {
+            Some(126 | 127) => Err(Outcome::Cancelled),
+            Some(c) => Ok(c),
+            None => Err(Outcome::Failed("killed".into())),
+        };
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // The standard authorization prompt; -128 is the user's Cancel.
+        let cmd = std::iter::once(exe.display().to_string())
+            .chain(args.iter().cloned())
+            .map(|a| sh_quote(&a))
+            .collect::<Vec<_>>()
+            .join(" ");
+        // AppleScript string literal: escape backslashes, then double quotes.
+        let lit = cmd.replace('\\', "\\\\").replace('"', "\\\"");
+        let script = format!("do shell script \"{lit}\" with administrator privileges");
+        let o = std::process::Command::new("osascript")
+            .args(["-e", &script])
+            .output()
+            .map_err(|e| Outcome::Failed(e.to_string()))?;
+        if o.status.success() {
+            return Ok(0);
+        }
+        let err = String::from_utf8_lossy(&o.stderr);
+        return Err(if err.contains("-128") { Outcome::Cancelled } else { Outcome::Failed(err.trim().to_string()) });
+    }
+    #[allow(unreachable_code)]
+    {
+        let _ = (exe, args);
+        Err(Outcome::Unsupported)
+    }
+}
+
+/// POSIX shell single-quoting.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn sh_quote(a: &str) -> String {
+    format!("'{}'", a.replace('\'', r"'\''"))
+}
+
 /// Called by the elevated copy once it is up: tells the waiting original.
 pub fn signal_handoff(marker: &str) {
     let _ = std::fs::write(marker, b"ok");
@@ -159,9 +213,13 @@ mod win {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Foundation::{CloseHandle, ERROR_CANCELLED, GetLastError, HANDLE};
     use windows_sys::Win32::Security::{GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation};
-    use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
-    use windows_sys::Win32::UI::Shell::{SEE_MASK_NOASYNC, SHELLEXECUTEINFOW, ShellExecuteExW};
-    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    use windows_sys::Win32::System::Threading::{
+        GetCurrentProcess, GetExitCodeProcess, INFINITE, OpenProcessToken, WaitForSingleObject,
+    };
+    use windows_sys::Win32::UI::Shell::{
+        SEE_MASK_NOASYNC, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW, ShellExecuteExW,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{SW_HIDE, SW_SHOWNORMAL};
 
     fn wide(s: impl AsRef<std::ffi::OsStr>) -> Vec<u16> {
         s.as_ref().encode_wide().chain(Some(0)).collect()
@@ -185,6 +243,37 @@ mod win {
             ) != 0;
             CloseHandle(token);
             ok && e.TokenIsElevated != 0
+        }
+    }
+
+    /// UAC prompt, run `exe args` elevated and hidden, wait for its exit code.
+    pub fn runas_wait(exe: &std::path::Path, args: &[String]) -> Result<i32, Outcome> {
+        let (verb, file) = (wide("runas"), wide(exe));
+        let params = wide(args.iter().map(|a| quote_arg(a)).collect::<Vec<_>>().join(" "));
+        // SAFETY: buffers outlive the call; the process handle is waited on and closed.
+        unsafe {
+            let mut info: SHELLEXECUTEINFOW = std::mem::zeroed();
+            info.cbSize = std::mem::size_of::<SHELLEXECUTEINFOW>() as u32;
+            info.fMask = SEE_MASK_NOASYNC | SEE_MASK_NOCLOSEPROCESS;
+            info.lpVerb = verb.as_ptr();
+            info.lpFile = file.as_ptr();
+            info.lpParameters = params.as_ptr();
+            info.nShow = SW_HIDE;
+            if ShellExecuteExW(&mut info) == 0 {
+                return Err(if GetLastError() == ERROR_CANCELLED {
+                    Outcome::Cancelled
+                } else {
+                    Outcome::Failed(std::io::Error::last_os_error().to_string())
+                });
+            }
+            if info.hProcess.is_null() {
+                return Err(Outcome::Failed("no process handle".into()));
+            }
+            WaitForSingleObject(info.hProcess, INFINITE);
+            let mut code = 1u32;
+            GetExitCodeProcess(info.hProcess, &mut code);
+            CloseHandle(info.hProcess);
+            Ok(code as i32)
         }
     }
 
@@ -224,6 +313,12 @@ mod tests {
         assert_eq!(quote_arg("say \"hi\""), "\"say \\\"hi\\\"\"");
         // Trailing backslashes are doubled before the closing quote.
         assert_eq!(quote_arg("a dir\\"), "\"a dir\\\\\"");
+    }
+
+    #[test]
+    fn posix_quoting() {
+        assert_eq!(sh_quote("/Applications/CpuZeeZ.app/x"), "'/Applications/CpuZeeZ.app/x'");
+        assert_eq!(sh_quote("it's"), r"'it'\''s'");
     }
 
     #[test]

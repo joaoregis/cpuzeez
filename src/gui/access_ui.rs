@@ -6,10 +6,13 @@ use super::i18n::{tr, trf};
 use super::theme::{self, icon};
 use super::widgets;
 use crate::Ctx;
+use crate::executor::Done;
+use cpuzeez_core::actions::{Action, KernelModule};
 use cpuzeez_core::availability::{Capability, Gap, Need};
 use cpuzeez_platform::elevation::{self, Outcome, Pending};
 use eframe::egui::{self, CornerRadius, Frame, Margin, RichText, Stroke};
 use std::collections::BTreeSet;
+use std::sync::{Arc, Mutex};
 
 pub const PT_BR: &[(&str, &str)] = &[
     ("Some information isn't available", "Algumas informações não estão disponíveis"),
@@ -26,6 +29,9 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Waiting for permission…", "Aguardando permissão…"),
     ("Administrator rights were not granted.", "A permissão de administrador não foi concedida."),
     ("Could not restart: {}", "Não foi possível reiniciar: {}"),
+    ("Enable {}", "Ativar {}"),
+    ("Enabled. Restart CpuZeeZ to use it.", "Ativado. Reinicie o CpuZeeZ para usar."),
+    ("Could not enable it: {}", "Não foi possível ativar: {}"),
     ("per-core temperatures, clocks and power", "temperaturas, clocks e consumo por núcleo"),
     ("mainboard voltages, fans and temperatures", "tensões, ventoinhas e temperaturas da placa-mãe"),
     (
@@ -56,6 +62,9 @@ pub const ES: &[(&str, &str)] = &[
     ("Waiting for permission…", "Esperando permiso…"),
     ("Administrator rights were not granted.", "No se concedieron los permisos de administrador."),
     ("Could not restart: {}", "No se pudo reiniciar: {}"),
+    ("Enable {}", "Activar {}"),
+    ("Enabled. Restart CpuZeeZ to use it.", "Activado. Reinicia CpuZeeZ para usarlo."),
+    ("Could not enable it: {}", "No se pudo activar: {}"),
     ("per-core temperatures, clocks and power", "temperaturas, relojes y consumo por núcleo"),
     ("mainboard voltages, fans and temperatures", "voltajes, ventiladores y temperaturas de la placa base"),
     (
@@ -80,6 +89,8 @@ pub struct Access {
     hidden: BTreeSet<&'static str>,
     pending: Option<Pending>,
     message: Option<String>,
+    /// An action running off the UI thread (its elevation prompt blocks).
+    running: Option<Arc<Mutex<Option<Done>>>>,
     /// The elevated copy is up: the app should close.
     pub restarted: bool,
 }
@@ -89,8 +100,31 @@ impl Access {
         self.gaps.get_or_insert_with(|| crate::access::gaps(ctx))
     }
 
-    /// Call every frame: finishes a pending "Restart as administrator".
+    /// Run `a` (with its own elevation prompt if needed) off the UI thread.
+    fn start(&mut self, a: Action) {
+        let slot = Arc::new(Mutex::new(None));
+        let s = slot.clone();
+        std::thread::spawn(move || *s.lock().unwrap_or_else(|e| e.into_inner()) = Some(crate::executor::run(&a)));
+        self.running = Some(slot);
+        self.message = None;
+    }
+
+    /// Call every frame: finishes a pending restart or action.
     pub fn frame(&mut self, ectx: &egui::Context) {
+        if let Some(slot) = &self.running {
+            let done = slot.lock().unwrap_or_else(|e| e.into_inner()).take();
+            match done {
+                None => ectx.request_repaint_after(std::time::Duration::from_millis(200)),
+                Some(d) => {
+                    self.running = None;
+                    self.message = match d {
+                        Done::Ok(_) => Some(tr("Enabled. Restart CpuZeeZ to use it.").into()),
+                        Done::Cancelled => Some(tr("Administrator rights were not granted.").into()),
+                        Done::Failed(e) => Some(trf("Could not enable it: {}", &[&e])),
+                    };
+                }
+            }
+        }
         let Some(p) = &mut self.pending else { return };
         match p.poll() {
             None => ectx.request_repaint_after(std::time::Duration::from_millis(200)),
@@ -185,6 +219,17 @@ impl Access {
                             }
                         }
                     }
+                    for m in gaps
+                        .iter()
+                        .filter_map(|g| if let Need::KernelModule(m) = g.need { kernel_module(m) } else { None })
+                        .collect::<BTreeSet<_>>()
+                    {
+                        if self.running.is_some() {
+                            ui.spinner();
+                        } else if ui.button(trf("Enable {}", &[&m.name()])).clicked() {
+                            self.start(Action::LoadKernelModule { module: m });
+                        }
+                    }
                     if !driver.is_empty() && ui.button(tr("How to install PawnIO")).clicked() {
                         ui.ctx().open_url(egui::OpenUrl::new_tab(PAWNIO_DOC)); // opens only on this click (P1)
                     }
@@ -195,6 +240,11 @@ impl Access {
             });
         ui.add_space(theme::GAP);
     }
+}
+
+/// The allow-listed module behind a kernel-module need.
+fn kernel_module(name: &str) -> Option<KernelModule> {
+    [KernelModule::Msr, KernelModule::I2cDev].into_iter().find(|m| m.name() == name)
 }
 
 /// The capabilities each page shows, for its banner.

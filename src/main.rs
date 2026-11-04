@@ -11,6 +11,7 @@ mod bios;
 mod chipset;
 mod cpu;
 mod diff;
+mod executor;
 mod gpu;
 #[cfg(feature = "gui")]
 mod gui;
@@ -99,6 +100,8 @@ fn main() {
     for a in std::env::args().skip(1) {
         let (k, v) = a.split_once('=').map_or((a.as_str(), ""), |(k, v)| (k, v));
         match k.to_ascii_lowercase().trim_start_matches('-') {
+            // Per-action elevation: runs one allow-listed action and exits (executor.rs).
+            "elevated-op" => std::process::exit(executor::elevated_main(v)),
             "txt" => outs.push(Out::Txt(v.into())),
             "html" => outs.push(Out::Html(v.into())),
             "json" => outs.push(Out::Json(v.into())),
