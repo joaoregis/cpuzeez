@@ -4,6 +4,7 @@
 use super::i18n::{self, tr};
 use super::theme::{self, icon};
 use super::widgets;
+use crate::report::Section;
 use crate::settings::{Settings, Theme};
 use eframe::egui::{self, RichText};
 
@@ -51,6 +52,13 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Sensor logs", "Logs de sensores"),
     ("Benchmark history", "Histórico de benchmarks"),
     ("Action log", "Registro de ações"),
+    ("App log", "Log do app"),
+    ("Diagnostics bundles", "Pacotes de diagnóstico"),
+    ("Create diagnostics bundle", "Criar pacote de diagnóstico"),
+    (
+        "A folder with the app log and this computer's report, with serial numbers, MAC and IP addresses removed. It stays here; attach it to an issue only if you want to.",
+        "Uma pasta com o log do app e o relatório deste computador, sem números de série, endereços MAC e IP. Ela fica aqui; anexe a um issue só se quiser.",
+    ),
     ("{} files · {}", "{} arquivos · {}"),
     ("Delete", "Apagar"),
     ("Confirm", "Confirmar"),
@@ -107,6 +115,13 @@ pub const ES: &[(&str, &str)] = &[
     ("Sensor logs", "Registros de sensores"),
     ("Benchmark history", "Historial de pruebas"),
     ("Action log", "Registro de acciones"),
+    ("App log", "Registro de la app"),
+    ("Diagnostics bundles", "Paquetes de diagnóstico"),
+    ("Create diagnostics bundle", "Crear paquete de diagnóstico"),
+    (
+        "A folder with the app log and this computer's report, with serial numbers, MAC and IP addresses removed. It stays here; attach it to an issue only if you want to.",
+        "Una carpeta con el registro de la app y el informe de este equipo, sin números de serie ni direcciones MAC e IP. Se queda aquí; adjúntala a un issue solo si quieres.",
+    ),
     ("{} files · {}", "{} archivos · {}"),
     ("Delete", "Borrar"),
     ("Confirm", "Confirmar"),
@@ -134,7 +149,7 @@ pub fn lang_of(s: &Settings) -> i18n::Lang {
 
 /// A label + control row inside a card.
 /// Privacy & data: what is kept, its size, deleting it, retention, the action log.
-fn privacy(ui: &mut egui::Ui, s: &mut Settings, dir: &std::path::Path) {
+fn privacy(ui: &mut egui::Ui, s: &mut Settings, dir: &std::path::Path, report: Option<&[Section]>) {
     use crate::data::{self, Category};
     let p = theme::palette(ui);
     ui.label(
@@ -196,6 +211,20 @@ fn privacy(ui: &mut egui::Ui, s: &mut Settings, dir: &std::path::Path) {
     }
     ui.data_mut(|d| d.insert_temp(armed_id, arm));
     ui.add_space(4.0);
+    ui.horizontal(|ui| {
+        if ui.add_enabled(report.is_some(), egui::Button::new(tr("Create diagnostics bundle"))).clicked()
+            && let Some(r) = report
+        {
+            match crate::applog::diagnostics_bundle(r) {
+                Ok(d) => {
+                    crate::update::open_path(&d);
+                }
+                Err(e) => crate::applog::warn(&format!("diagnostics bundle: {e}")),
+            }
+        }
+    });
+    ui.label(RichText::new(tr("A folder with the app log and this computer's report, with serial numbers, MAC and IP addresses removed. It stays here; attach it to an issue only if you want to.")).small().color(p.text_muted));
+    ui.add_space(4.0);
     egui::CollapsingHeader::new(tr("Recent actions")).id_salt("audit").show(ui, |ui| {
         let log = crate::executor::audit_log();
         if log.is_empty() {
@@ -232,7 +261,7 @@ fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
 
 /// The Settings page. `updates_allowed` is false when cpuzeez.ini turns update
 /// checks off; `persist` = save changes (off while taking screenshots).
-pub fn page(ui: &mut egui::Ui, s: &mut Settings, updates_allowed: bool, persist: bool) {
+pub fn page(ui: &mut egui::Ui, s: &mut Settings, updates_allowed: bool, persist: bool, report: Option<&[Section]>) {
     let before = serde_json::to_string(s).unwrap_or_default();
     if s.read_only {
         widgets::pill(
@@ -309,7 +338,7 @@ pub fn page(ui: &mut egui::Ui, s: &mut Settings, updates_allowed: bool, persist:
     ui.add_space(theme::GAP);
 
     if let Some(dir) = crate::settings::dir() {
-        widgets::card(ui, icon::LOCK_SIMPLE, tr("Privacy & data"), |ui| privacy(ui, s, &dir));
+        widgets::card(ui, icon::LOCK_SIMPLE, tr("Privacy & data"), |ui| privacy(ui, s, &dir, report));
     }
 
     if !s.tray {

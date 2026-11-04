@@ -13,13 +13,23 @@ pub enum Category {
     BenchmarkHistory,
     /// Actions the app ran, such as loading a kernel module (`audit.log`).
     AuditLog,
+    /// The app's own log (`logs/app.log`): startup, warnings, crashes.
+    AppLog,
+    /// Diagnostics bundles the user created (`diagnostics/`).
+    Diagnostics,
     /// Preferences (`settings.json`); deleting them resets the app.
     Settings,
 }
 
 impl Category {
-    pub const ALL: [Category; 4] =
-        [Category::SensorLogs, Category::BenchmarkHistory, Category::AuditLog, Category::Settings];
+    pub const ALL: [Category; 6] = [
+        Category::SensorLogs,
+        Category::BenchmarkHistory,
+        Category::AuditLog,
+        Category::AppLog,
+        Category::Diagnostics,
+        Category::Settings,
+    ];
 
     /// English key, translated by the GUI.
     pub fn label(self) -> &'static str {
@@ -27,6 +37,8 @@ impl Category {
             Category::SensorLogs => "Sensor logs",
             Category::BenchmarkHistory => "Benchmark history",
             Category::AuditLog => "Action log",
+            Category::AppLog => "App log",
+            Category::Diagnostics => "Diagnostics bundles",
             Category::Settings => "Settings",
         }
     }
@@ -41,6 +53,14 @@ impl Category {
                 .unwrap_or_default(),
             Category::BenchmarkHistory => existing(&[dir.join("history.json"), dir.join("history.json.bad")]),
             Category::AuditLog => existing(&[dir.join("audit.log")]),
+            Category::AppLog => existing(&[dir.join("logs/app.log"), dir.join("logs/app.log.1")]),
+            Category::Diagnostics => std::fs::read_dir(dir.join("diagnostics"))
+                .map(|rd| {
+                    rd.flatten()
+                        .flat_map(|b| std::fs::read_dir(b.path()).into_iter().flatten().flatten().map(|e| e.path()))
+                        .collect()
+                })
+                .unwrap_or_default(),
             Category::Settings => existing(&[dir.join("settings.json")]),
         }
     }
@@ -72,6 +92,9 @@ pub fn delete_in(dir: &Path, cat: Category) -> std::io::Result<usize> {
     let f = cat.files(dir);
     for p in &f {
         std::fs::remove_file(p)?;
+    }
+    if cat == Category::Diagnostics && dir.join("diagnostics").exists() {
+        std::fs::remove_dir_all(dir.join("diagnostics"))?; // the now-empty bundle folders
     }
     Ok(f.len())
 }

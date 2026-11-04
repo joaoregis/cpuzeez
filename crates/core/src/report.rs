@@ -33,6 +33,38 @@ pub fn section(title: impl Into<String>, nodes: Vec<Node>) -> Section {
     Section { title: title.into(), nodes }
 }
 
+/// Values that identify this machine or network: serials, UUIDs, MAC and IP
+/// addresses, gateways, DNS servers, Wi-Fi names. Masked in screenshots and in
+/// diagnostics bundles.
+pub fn is_private(key: &str) -> bool {
+    let k = key.to_ascii_lowercase();
+    let first = k.split_whitespace().next().unwrap_or_default();
+    k.contains("serial")
+        || k.contains("uuid")
+        || ["mac", "ipv4", "ipv6", "ip", "gateway", "dns", "ssid"].contains(&first)
+}
+
+/// A copy with private values replaced and raw dumps (which can hold serials) removed.
+pub fn masked(sections: &[Section]) -> Vec<Section> {
+    fn mask(nodes: &[Node]) -> Vec<Node> {
+        nodes
+            .iter()
+            .filter_map(|n| match n {
+                Node::Field { key, value } if is_private(key) && !value.is_empty() => {
+                    Some(Node::Field { key: key.clone(), value: "(hidden)".into() })
+                }
+                Node::Field { .. } => Some(n.clone()),
+                Node::Group { title, value, children } => {
+                    let value = if is_private(title) && !value.is_empty() { "(hidden)".into() } else { value.clone() };
+                    Some(Node::Group { title: title.clone(), value, children: mask(children) })
+                }
+                Node::Hex { .. } => None,
+            })
+            .collect()
+    }
+    sections.iter().map(|s| Section { title: s.title.clone(), nodes: mask(&s.nodes) }).collect()
+}
+
 impl Section {
     /// First field named `key` anywhere in this section (GUI lookup).
     pub fn get(&self, key: &str) -> Option<&str> {
@@ -218,6 +250,24 @@ pub fn to_json(report: &[Section]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn masking_hides_identifiers_and_raw_dumps() {
+        let r = vec![section(
+            "Storage",
+            vec![
+                f("Serial number", "WD-123"),
+                f("MAC address", "00:11:22:33:44:55"),
+                f("Model", "WD Green"),
+                gv("UUID", "abcd", vec![f("IPv4 address", "192.168.0.2")]),
+                hex("SPD dump", vec![1, 2, 3]),
+            ],
+        )];
+        let t = to_txt(&masked(&r));
+        assert!(!t.contains("WD-123") && !t.contains("00:11:22") && !t.contains("192.168") && !t.contains("abcd"));
+        assert!(t.contains("WD Green") && t.contains("(hidden)") && !t.contains("SPD dump"));
+        assert!(!is_private("Model") && is_private("Product serial") && is_private("ip"));
+    }
     #[test]
     fn txt_layout() {
         let r = vec![section("CPU", vec![f("Name", "X"), g("Cache", vec![f("L1", "32 KB")])])];

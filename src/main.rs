@@ -5,6 +5,7 @@
 #![allow(clippy::type_complexity, clippy::field_reassign_with_default)]
 
 mod access;
+mod applog;
 mod battery;
 mod bench;
 mod bios;
@@ -94,6 +95,7 @@ const USAGE: &str = "usage: cpuzeez [-txt=FILE] [-html=FILE] [-json=FILE] [-json
 [-bench] [-membench] [-core=ID] [-coremask=HEX] [-sensors] [-log=FILE[,SECONDS]] [-diff=OLD.json,NEW.json|now] [-checkupdate] [-screenshots=DIR]\nWith no output option the GUI opens.";
 
 fn main() {
+    applog::install_panic_hook();
     let mut outs = Vec::new();
     let (mut console, mut bench, mut core, mut coremask) = (false, false, None, None);
     let mut shots: Option<std::path::PathBuf> = None;
@@ -138,6 +140,13 @@ fn main() {
         #[cfg(feature = "gui")]
         {
             os::hide_own_console();
+            applog::info(&format!(
+                "start {DISPLAY_NAME} {VERSION} on {} {}, hardware access: {}, elevated: {}",
+                std::env::consts::OS,
+                std::env::consts::ARCH,
+                ctx.hw.name(),
+                cpuzeez_platform::elevation::is_elevated()
+            ));
             if let Some(m) = &handoff {
                 cpuzeez_platform::elevation::signal_handoff(m);
             }

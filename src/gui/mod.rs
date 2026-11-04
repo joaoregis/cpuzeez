@@ -350,12 +350,7 @@ fn shown<'a>(key: &str, v: &'a str) -> &'a str {
     if !MASK_PRIVATE.load(std::sync::atomic::Ordering::Relaxed) || v.is_empty() {
         return v;
     }
-    let k = key.to_ascii_lowercase();
-    let first = k.split_whitespace().next().unwrap_or_default();
-    let private = k.contains("serial")
-        || key.contains("UUID")
-        || ["mac", "ipv4", "ipv6", "ip", "gateway", "dns", "ssid"].contains(&first);
-    if private { "••••••••" } else { v }
+    if report::is_private(key) { "••••••••" } else { v }
 }
 
 /// A card of label/value rows (labels translated, private values masked).
@@ -510,7 +505,7 @@ impl App {
                 let s = &self.mon.settings;
                 let (tray, sampling) = (s.tray, (s.sample_ms, s.graph_seconds));
                 let persist = self.auto.is_none();
-                settings_ui::page(ui, &mut self.mon.settings, self.ctx.cfg.check_updates, persist);
+                settings_ui::page(ui, &mut self.mon.settings, self.ctx.cfg.check_updates, persist, Some(r));
                 if self.mon.settings.tray != tray {
                     let on = self.mon.settings.tray;
                     self.mon.set_tray(on, ui.ctx());
