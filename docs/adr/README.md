@@ -16,3 +16,4 @@ Short records of decisions and why they were made. The full reasoning lives in [
 | [0010](0010-pre-releases-for-testers.md) | Pre-releases for testers | Q10 |
 | [0011](0011-workspace-split-by-layer.md) | Workspace split by layer | engineering |
 | [0012](0012-no-code-injection-ever.md) | No code injection, ever | P4 |
+| [0013](0013-gui-renders-with-glow-and-falls-back-to-wgpu.md) | The GUI renders with glow and falls back to wgpu | Q6c, S0-X01 |

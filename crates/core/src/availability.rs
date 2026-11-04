@@ -86,6 +86,8 @@ pub struct Facts {
     pub elevated: bool,
     /// Windows: PawnIO is installed (whether or not it could be opened).
     pub driver_installed: bool,
+    /// Windows: PawnIO's modules were found (they ship in `pawnio-modules`).
+    pub driver_modules: bool,
     pub intel: bool,
     /// The privileged backend's abilities (`hw::Caps`).
     pub msr: bool,
@@ -126,6 +128,9 @@ fn need(os: Os, f: &Facts, cap: Capability) -> Option<Need> {
             }
             Some(if !f.driver_installed {
                 Need::Driver
+            } else if !f.driver_modules {
+                // Restarting as admin wouldn't help.
+                Need::Unsupported("PawnIO's modules are missing: put the pawnio-modules folder next to cpuzeez.exe")
             } else if !f.elevated {
                 Need::Elevation
             } else {
@@ -162,7 +167,14 @@ mod tests {
     fn windows_driver_then_elevation_then_modules() {
         let none = Facts { intel: true, ..Default::default() };
         assert!(caps(&none, Os::Windows).iter().all(|(_, n)| *n == Need::Driver), "no PawnIO: install it");
-        let installed = Facts { driver_installed: true, ..none };
+        let no_modules = Facts { driver_installed: true, ..none };
+        assert!(
+            caps(&no_modules, Os::Windows)
+                .iter()
+                .all(|(_, n)| matches!(n, Need::Unsupported(r) if r.contains("pawnio-modules"))),
+            "installed without modules: say so, don't ask for admin"
+        );
+        let installed = Facts { driver_installed: true, driver_modules: true, ..none };
         assert!(caps(&installed, Os::Windows).iter().all(|(_, n)| *n == Need::Elevation), "installed: run as admin");
         let full = Facts { elevated: true, msr: true, superio: true, smbus: true, imc: true, pch: true, ..installed };
         assert!(gaps(Os::Windows, &full).is_empty());

@@ -14,6 +14,7 @@ fn facts(ctx: &Ctx) -> Facts {
     Facts {
         elevated: cpuzeez_platform::elevation::is_elevated(),
         driver_installed: crate::hw::driver_installed(),
+        driver_modules: crate::hw::driver_modules_found(),
         intel: crate::cpu::get(ctx).vendor == "GenuineIntel",
         msr: c.msr,
         superio: c.superio,

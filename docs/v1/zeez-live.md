@@ -138,7 +138,7 @@ Mixing them confuses comparisons. We use the **percentile** by default, offer th
 - eframe 0.36 already supports undecorated, transparent, click-through, always-on-top windows (`ViewportBuilder::with_transparent / with_mouse_passthrough / with_window_level / with_decorations`).
 - The overlay is a **deferred viewport** with its own repaint cycle. It keeps working with the main window hidden in the tray (today's mini monitor is *immediate* and depends on the main window).
 - It repaints **only when a value changes**: text at 1–10 Hz, the frame-time graph at up to 30 Hz (configurable).
-- Whether glow or wgpu renders it is decided by the renderer spike in [dependencies.md](dependencies.md).
+- Renderer: glow, falling back to wgpu ([ADR 0013](../adr/0013-gui-renders-with-glow-and-falls-back-to-wgpu.md)). On Windows, glow plus click-through needs one `SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA)` call after the window opens. Without it the window is invisible.
 
 ### 3.3 Collecting hardware data without hurting the game
 

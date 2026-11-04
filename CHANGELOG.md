@@ -23,10 +23,15 @@ generated from its section below.
   - The driver is installed only on request: the MSI's optional *Hardware access* feature (unticked by default), or *Install hardware access* in the app's banner. The app re-checks the installer's hash before running it, and logs the action in the local audit log.
   - The modules are installed next to the app, so nothing is left to download by hand.
   - [THIRD_PARTY.md](THIRD_PARTY.md) and *About › Third-party components* list what is bundled and under which license.
+- **The GUI opens on machines without a working OpenGL driver**, such as VMs, Remote Desktop and missing GPU drivers. If OpenGL fails, CpuZeeZ restarts its window on wgpu (DX12/WARP, Vulkan or Metal). `CZ_RENDERER=wgpu` forces it ([ADR 0013](docs/adr/0013-gui-renders-with-glow-and-falls-back-to-wgpu.md)).
 
 ### Changed
 
 - README (English and pt-BR): the install section now explains why the builds are unsigned (a paid certificate the project can't fund yet), what the SmartScreen/Gatekeeper warning means, and how to verify a download with `SHA256SUMS.txt`.
+
+### Fixed
+
+- With PawnIO installed but its modules missing, the banner said "PawnIO has no module for this CPU". It now says the `pawnio-modules` folder is missing.
 
 ## [0.3.0] - 2026-10-14
 

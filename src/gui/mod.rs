@@ -188,12 +188,15 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
     }
     i18n::set(if shots.is_some() { i18n::Lang::En } else { settings_ui::lang_of(&mon.settings) });
 
-    let opts = eframe::NativeOptions {
+    // OpenGL (glow) by default: it uses far less memory than wgpu (ADR 0013).
+    // CZ_RENDERER=wgpu forces wgpu, e.g. to work around a broken GL driver.
+    let opts = |renderer| eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title(crate::DISPLAY_NAME)
             .with_icon(app_icon())
             .with_inner_size([1120.0, 760.0])
             .with_min_inner_size([860.0, 560.0]),
+        renderer,
         ..Default::default()
     };
     let theme = mon.settings.theme;
@@ -236,23 +239,48 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         }
     }
     let font_size = app.ctx.cfg.text_font_size;
-    if let Err(e) = eframe::run_native(
-        crate::DISPLAY_NAME,
-        opts,
-        Box::new(move |cc| {
-            // Theme text styles + Phosphor icons.
-            theme::install(&cc.egui_ctx);
-            cc.egui_ctx.set_theme(settings_ui::theme_pref(theme));
-            if font_size > 0.0 {
-                cc.egui_ctx.global_style_mut(|s| {
-                    for f in s.text_styles.values_mut() {
-                        f.size = font_size;
-                    }
-                });
-            }
-            Ok(Box::new(app))
-        }),
-    ) {
+    // Shared so a second attempt can still hand it over: the renderer fails
+    // before eframe asks for the app.
+    let app = std::rc::Rc::new(std::cell::RefCell::new(Some(app)));
+    let run = |renderer| {
+        let app = app.clone();
+        eframe::run_native(
+            crate::DISPLAY_NAME,
+            opts(renderer),
+            Box::new(move |cc| {
+                // Theme text styles + Phosphor icons.
+                theme::install(&cc.egui_ctx);
+                cc.egui_ctx.set_theme(settings_ui::theme_pref(theme));
+                if font_size > 0.0 {
+                    cc.egui_ctx.global_style_mut(|s| {
+                        for f in s.text_styles.values_mut() {
+                            f.size = font_size;
+                        }
+                    });
+                }
+                let app = app.borrow_mut().take().ok_or("the app was already started")?;
+                Ok(Box::new(app))
+            }),
+        )
+    };
+    let wgpu_only = std::env::var("CZ_RENDERER").as_deref() == Ok("wgpu");
+    // eframe panics (rather than erring) on some GL failures.
+    let attempt = |renderer| {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(renderer)))
+            .unwrap_or_else(|_| Err(eframe::Error::AppCreation("the renderer panicked".into())))
+    };
+    let mut r = attempt(if wgpu_only { eframe::Renderer::Wgpu } else { eframe::Renderer::Glow });
+    if let Err(e) = &r
+        && !wgpu_only
+        && app.borrow().is_some()
+    {
+        // VMs, Remote Desktop and machines without a GPU driver have no usable
+        // OpenGL; wgpu gets DX12 (with WARP software rendering), Vulkan or Metal.
+        crate::applog::warn(&format!("OpenGL renderer failed ({e}); retrying with wgpu"));
+        r = attempt(eframe::Renderer::Wgpu);
+    }
+    if let Err(e) = r {
+        crate::applog::warn(&format!("GUI failed to start: {e}"));
         eprintln!("GUI failed to start ({e}); use -console or -txt=FILE");
     }
 }

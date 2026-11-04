@@ -121,6 +121,14 @@ pub fn driver_installed() -> bool {
     false
 }
 
+/// Windows: PawnIO's module blobs are present (`pawnio-modules` next to the exe).
+pub fn driver_modules_found() -> bool {
+    #[cfg(windows)]
+    return windows::modules_found();
+    #[allow(unreachable_code)]
+    false
+}
+
 /// Best backend available on this machine right now.
 pub fn detect() -> Box<dyn Hw> {
     #[cfg(target_os = "linux")]

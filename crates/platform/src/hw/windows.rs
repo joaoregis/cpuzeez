@@ -62,6 +62,25 @@ pub fn installed() -> bool {
     install_dir().is_some_and(|d| d.join("PawnIOLib.dll").is_file())
 }
 
+/// Where module blobs are looked for, in order.
+fn module_dirs() -> Vec<PathBuf> {
+    let exe_dir = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf));
+    let dir = install_dir();
+    exe_dir
+        .map(|d| d.join("pawnio-modules"))
+        .into_iter()
+        .chain(dir.iter().flat_map(|d| [d.clone(), d.join("modules")]))
+        .collect()
+}
+
+/// At least one module blob (`*.bin`) is where we look for them.
+pub fn modules_found() -> bool {
+    module_dirs().iter().any(|d| {
+        std::fs::read_dir(d)
+            .is_ok_and(|r| r.flatten().any(|e| e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("bin"))))
+    })
+}
+
 impl Lib {
     /// Loaded once and never freed: modules hold handles for the process lifetime.
     fn load(dir: &Path) -> Option<&'static Lib> {
@@ -283,11 +302,8 @@ fn open_pawnio() -> Option<PawnIo> {
 
 #[cfg(target_arch = "x86_64")]
 fn open_pawnio() -> Option<PawnIo> {
-    let dir = install_dir()?;
-    let lib = Lib::load(&dir)?;
-    let exe_dir = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf));
-    let dirs: Vec<PathBuf> =
-        exe_dir.map(|d| d.join("pawnio-modules")).into_iter().chain([dir.clone(), dir.join("modules")]).collect();
+    let lib = Lib::load(&install_dir()?)?;
+    let dirs = module_dirs();
 
     let vendor = crate::cpu::x86::vendor();
     let msr = msr_modules(&vendor).iter().find_map(|n| Module::load(lib, &dirs, n));

@@ -46,6 +46,10 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("live memory timings", "timings da memória em tempo real"),
     ("chipset temperature", "temperatura do chipset"),
     ("PawnIO has no module for this CPU or chipset", "o PawnIO não tem módulo para esta CPU ou chipset"),
+    (
+        "PawnIO's modules are missing: put the pawnio-modules folder next to cpuzeez.exe",
+        "faltam os módulos do PawnIO: coloque a pasta pawnio-modules ao lado do cpuzeez.exe",
+    ),
     ("no supported Super I/O chip or kernel driver", "nenhum chip Super I/O ou driver de kernel compatível"),
     ("the kernel gives no access to it on this machine", "o kernel não dá acesso a isso nesta máquina"),
     ("macOS doesn't allow third-party register access", "o macOS não permite acesso de terceiros aos registradores"),
@@ -84,6 +88,10 @@ pub const ES: &[(&str, &str)] = &[
     ("live memory timings", "latencias de la memoria en vivo"),
     ("chipset temperature", "temperatura del chipset"),
     ("PawnIO has no module for this CPU or chipset", "PawnIO no tiene módulo para esta CPU o chipset"),
+    (
+        "PawnIO's modules are missing: put the pawnio-modules folder next to cpuzeez.exe",
+        "faltan los módulos de PawnIO: coloca la carpeta pawnio-modules junto a cpuzeez.exe",
+    ),
     ("no supported Super I/O chip or kernel driver", "ningún chip Super I/O ni controlador del kernel compatible"),
     ("the kernel gives no access to it on this machine", "el kernel no da acceso a esto en esta máquina"),
     ("macOS doesn't allow third-party register access", "macOS no permite el acceso de terceros a los registros"),
