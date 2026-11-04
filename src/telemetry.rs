@@ -698,6 +698,11 @@ impl Telemetry {
         lock(&self.gpu_live).clone()
     }
 
+    /// Mean read time per source, slowest first.
+    pub fn costs(&self) -> Vec<(&'static str, u64, Duration)> {
+        self.engine.costs()
+    }
+
     /// Sources that failed recently: (name, error).
     pub fn failures(&self) -> Vec<(&'static str, String)> {
         self.engine.failures()
@@ -794,6 +799,9 @@ pub fn cli_log(ctx: Ctx, file: &str, seconds: Option<u64>) {
     }
     tel.stop_csv();
     eprintln!("\nwrote {}", path.display());
+    let costs: Vec<String> =
+        tel.costs().iter().map(|(n, k, t)| format!("{n} {:.1} ms x{k}", t.as_secs_f64() * 1e3)).collect();
+    eprintln!("source read time (mean): {}", costs.join(", "));
 }
 
 #[cfg(test)]

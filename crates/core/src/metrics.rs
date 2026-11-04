@@ -324,6 +324,8 @@ struct Inner {
     /// Latest readings of each slow source, carried into fast ticks.
     slow_latest: Mutex<HashMap<&'static str, Vec<Reading>>>,
     failures: Mutex<HashMap<&'static str, String>>,
+    /// Per-source read time: (reads, total).
+    costs: Mutex<HashMap<&'static str, (u64, Duration)>>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -352,7 +354,14 @@ impl Inner {
             return None;
         }
         let mut out = Vec::new();
-        match catch_unwind(AssertUnwindSafe(|| s.read(&mut out))) {
+        let t = Instant::now();
+        let r = catch_unwind(AssertUnwindSafe(|| s.read(&mut out)));
+        {
+            let mut costs = lock(&self.costs);
+            let e = costs.entry(name).or_default();
+            (e.0, e.1) = (e.0 + 1, e.1 + t.elapsed());
+        }
+        match r {
             Ok(()) => {
                 lock(&self.failures).remove(name);
                 out.retain(|r| r.value.is_finite());
@@ -387,6 +396,7 @@ impl Engine {
             hooks: Mutex::new(Vec::new()),
             slow_latest: Mutex::new(HashMap::new()),
             failures: Mutex::new(HashMap::new()),
+            costs: Mutex::new(HashMap::new()),
         });
         let (fast, slow): (Vec<_>, Vec<_>) = sources.into_iter().partition(|s| s.class() == Class::Fast);
         let t0 = Instant::now();
@@ -442,6 +452,15 @@ impl Engine {
     /// Run `h` after every tick that produced readings, on the sampler thread.
     pub fn add_hook(&self, h: Hook) {
         lock(&self.inner.hooks).push(h);
+    }
+
+    /// Average time per read of each source so far: (name, reads, mean),
+    /// slowest first. The performance budget (P6) is checked against this.
+    pub fn costs(&self) -> Vec<(&'static str, u64, Duration)> {
+        let mut v: Vec<_> =
+            lock(&self.inner.costs).iter().map(|(k, (n, t))| (*k, *n, *t / (*n).max(1) as u32)).collect();
+        v.sort_by_key(|a| std::cmp::Reverse(a.2));
+        v
     }
 
     /// Sources that panicked recently: (name, message).

@@ -79,7 +79,7 @@ Goal: fix what's broken, build the shared building blocks, and set up the tests 
 | S0-T05 | **GUI interaction tests** with `egui_kittest` | 🧪 | At least one test per existing page, as the template |
 | S0-T06 | **Visual regression** from the `-screenshots` set (light and dark, with tolerance) | 🧪 | Diffs fail CI |
 | S0-T07 | **Fuzz** targets: SMBIOS, SPD, EDID, CSV import, session/report JSON, elevated-op parser | 🧪 | Scheduled runs; corpus committed |
-| S0-T08 | **Performance benches** with thresholds: engine tick, overlay frame, 10k-row table frame | 🧪 | Regressions fail CI |
+| S0-T08 | **Performance benches** with thresholds: engine tick, overlay frame, 10k-row table frame. Per-source read time is already recorded (`Engine::costs`, printed after `-log`) | 🧪 | Regressions fail CI |
 | S0-T09 | **Security tests**: no network without opt-in (unit test + a Linux job in a network namespace with no network), executor allow-list, data-folder permissions | 🧪 | Required checks |
 | S0-T10 | **Soak** runner (nightly): sampler + overlay + capture for N hours | 🧪 | Flat memory, handles and fds |
 | S0-T11 | **Packaging tests** extended: clean-Windows start, PawnIO checkbox, `.deb`/Arch install, pre-release version mapping | 🧪 | Required on release-touching PRs |
@@ -144,6 +144,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 | S1-D02 | Per-adapter network throughput, errors and drops | 🧱 | task-manager §4 | Same |
 | S1-D03 | Memory composition (commit, pools, standby, compressed, *wired*), page file/swap | 🧱 | task-manager §4 | Same |
 | S1-D04 | GPU per-engine utilization (adapter level) | 🧱 | zeez-live §4 | Same |
+| S1-D05 | **Split the `cpu+board` source by device** (CPU, Super I/O, DIMMs, SMU, chipset) so a lease reads only what it needs, and find the ~170 ms of waiting per read (measured 2026-11-04 on the reference machine, elevated: 193 ms mean latency but ~19 ms of CPU) | 🐞 | P6, measurement below | Overlay lease "cpu temp + clock" reads < 5 ms per tick |
 
 ### S1.2 Shared page patterns
 
@@ -271,3 +272,12 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 | Startup "Advanced" view with enable/disable | task-manager §6 |
 | Drive optimization: defrag/ReTrim/fstrim through the OS engines | core-pages §7.4 |
 | Code signing and notarization, when funded or through a free OSS program | dependencies §3.1, Q9 |
+
+## Measurements
+
+| Date | Machine | What | Result |
+|---|---|---|---|
+| 2026-11-04 | Ryzen 9 7900X, Windows 11, elevated, PawnIO 2.2.0 (AMDFamily17, LpcIO, SmbusPIIX4, RyzenSMU) | Sampler CPU after warm-up, every sensor (168) read at 1 Hz (`-log`), 40 s window | 0.3.0: 3.24% of one core · S0: **2.42%** |
+| 2026-11-04 | same | Mean read time per source (S0) | cpu+board 193 ms (≈19 ms CPU), storage 61 ms every 10 s, gpu 1.5 ms, memory and battery ≈0 |
+| 2026-11-04 | same | First pass (`-sensors`), one-time initialization | SMBus detection 1.1 s, OS counters 0.34 s, CPU monitor 0.2–0.5 s |
+
