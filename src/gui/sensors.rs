@@ -107,8 +107,6 @@ pub struct Monitor {
     view: View,
     quitting: bool,
     started: bool,
-    /// `-screenshots`: when the current capture step began.
-    shot_since: Option<Instant>,
 }
 
 impl Monitor {
@@ -126,7 +124,6 @@ impl Monitor {
             view: View::default(),
             quitting: false,
             started: false,
-            shot_since: None,
         }
     }
 
@@ -169,31 +166,6 @@ impl Monitor {
         }
         if on {
             self.tel();
-        }
-    }
-
-    /// Tools-menu entries.
-    pub fn menu(&mut self, ui: &mut egui::Ui) {
-        if ui.button(tr("Sensors")).clicked() {
-            self.show_sensors = true;
-        }
-        if ui.button(tr("Stress test")).clicked() {
-            self.show_stress = true;
-        }
-        if ui.checkbox(&mut self.show_mini, tr("Mini monitor")).changed() && self.show_mini {
-            self.tel();
-        }
-        let mut on = self.settings.tray;
-        if ui.checkbox(&mut on, tr("Tray icon")).changed() {
-            self.set_setting(|s| s.tray = on);
-            self.set_tray(on, ui.ctx());
-        }
-        if let Some(e) = &self.tray.error {
-            ui.label(RichText::new(format!("{}: {e}", tr("Tray unavailable"))).small().weak());
-        }
-        let mut ctt = self.settings.close_to_tray;
-        if ui.add_enabled(self.settings.tray, egui::Checkbox::new(&mut ctt, tr("Close to tray"))).changed() {
-            self.set_setting(|s| s.close_to_tray = ctt);
         }
     }
 
@@ -309,35 +281,6 @@ impl Monitor {
             keep
         });
         self.show_mini = keep;
-    }
-
-    /// `-screenshots`: step 0 = Sensors window with ≥5 s of samples, step 1 =
-    /// stress monitor after ~8 s of load. True once ready to capture.
-    pub fn autoshot(&mut self, step: u8, ectx: &egui::Context) -> bool {
-        let since = *self.shot_since.get_or_insert_with(|| {
-            ectx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(760.0, 720.0)));
-            Instant::now()
-        });
-        // Open the window once the resize has landed so it gets the full size.
-        if since.elapsed() < Duration::from_millis(600) {
-            return false;
-        }
-        let tel_age = self.tel.as_ref().map_or(Duration::ZERO, |t| t.1.elapsed());
-        if step == 0 {
-            self.tel();
-            self.show_sensors = true;
-            return tel_age >= Duration::from_secs(5) && since.elapsed() > Duration::from_secs(1);
-        }
-        self.show_sensors = false;
-        self.show_stress = true;
-        if !self.stress.running() {
-            self.start_stress(crate::os::logical_cpus());
-        }
-        self.stress.elapsed_secs() >= 8.0
-    }
-
-    pub fn autoshot_next(&mut self) {
-        self.shot_since = None;
     }
 }
 
