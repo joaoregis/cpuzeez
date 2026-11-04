@@ -77,6 +77,7 @@ These help us decide how ZeeZ Live will measure FPS on macOS (spike SP6). There'
 | E2 | While E1 runs, in another terminal: `log stream --style compact --predicate 'process == "<App process name>"' \| grep -i -E "hud\|fps\|frame" \| head -50` | Do any lines with FPS/frame times appear? Paste a few |
 | E3 | Same as E1, but also add `MTL_HUD_LOG_ENABLED=1` | Any difference in E2's output? |
 | E4 | Put that game in **fullscreen** (its own Space), then open CpuZeeZ's mini monitor | Does the mini monitor show over the fullscreen game, or only on the desktop? |
+| E5 | `nettop -P -L 1 -x -J bytes_in,bytes_out \| head -n 15` (for the per-process network column, spike S0-X10) | Does it print per-process byte counts without `sudo`? Remove any process names you'd rather not share |
 
 ## 7. Send back
 

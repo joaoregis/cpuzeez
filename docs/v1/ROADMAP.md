@@ -122,7 +122,7 @@ Goal: fix what's broken, build the shared building blocks, and set up the tests 
 | S0-X07 | **SP6** Metal HUD log; ScreenCaptureKit FPS cost | ZeeZ Live | Feasibility + cost |
 | S0-X08 | **SP7** PawnIO × kernel anti-cheats (Vanguard, FACEIT…) | ZeeZ Live | Compatibility list |
 | S0-X09 | **SP8** overlay GPU cost | ZeeZ Live | < 0.3 ms per game frame |
-| S0-X10 | Per-process network: ETW Kernel-Network (Win), eBPF/sock_diag (Linux), `nettop` (macOS) | System | Feasibility per OS |
+| S0-X10 | Per-process network: ETW Kernel-Network (Win), eBPF/sock_diag (Linux), `nettop` (macOS) | System | Feasibility per OS. ✅ task-manager §3: ETW (admin), sock_diag TCP_INFO (no eBPF), `nettop` sidecar. macOS needs a check on the Mac (docs/testing/macos.md) |
 | S0-X11 | Per-process GPU on macOS (IOAccelerator `AppUsage`); "not responding" on macOS | System | Feasibility |
 | S0-X12 | Task Manager clean-room confirmations: startup-impact thresholds, `StartupApproved` format | System | Documented in task-manager §1. ✅ Layout and thresholds confirmed; WDI files found stale, so impact shows its date and falls back to the recorder |
 | S0-X13 | NVMe Device Self-test through Windows' protocol command path | S1 tools | Works, or a documented limit. ✅ Supported (1903+, admin) with a ~10 min throttle, per core-pages §7.3. The first real run happens in S1-K08 with the user's consent |
