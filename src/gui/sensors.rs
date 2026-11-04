@@ -111,14 +111,15 @@ pub struct Monitor {
 
 impl Monitor {
     pub fn new(ctx: Arc<Ctx>) -> Monitor {
+        let settings = Settings::load();
         Monitor {
             ctx,
             tel: None,
-            settings: Settings::load(),
+            show_mini: settings.mini,
+            settings,
             show_sensors: false,
             show_stress: false,
             pages: false,
-            show_mini: false,
             stress: stress::Stress::default(),
             tray: tray::Tray::default(),
             view: View::default(),
@@ -127,13 +128,34 @@ impl Monitor {
         }
     }
 
+    /// Sampling period and graph history from the settings.
+    fn sampling(&self) -> (Duration, Duration) {
+        let s = &self.settings;
+        (Duration::from_millis(s.sample_ms.max(100)), Duration::from_secs(s.graph_seconds.max(60)))
+    }
+
     /// The shared sampler, started on first use.
     pub fn tel(&mut self) -> Telemetry {
-        let s = &self.settings;
-        let (period, keep) =
-            (Duration::from_millis(s.sample_ms.max(100)), Duration::from_secs(s.graph_seconds.max(60)));
+        let (period, keep) = self.sampling();
         let ctx = self.ctx.clone();
         self.tel.get_or_insert_with(|| (Telemetry::start(ctx, period, keep), Instant::now())).0.clone()
+    }
+
+    /// Apply changed sampling settings to a sampler that is already running.
+    pub fn apply_sampling(&self) {
+        if let Some((tel, _)) = &self.tel {
+            let (period, keep) = self.sampling();
+            tel.set_period(period);
+            tel.set_keep(keep);
+        }
+    }
+
+    /// Show or hide the mini monitor and remember it.
+    pub fn set_mini(&mut self, on: bool) {
+        if on != self.show_mini {
+            self.show_mini = on;
+            self.set_setting(|s| s.mini = on);
+        }
     }
 
     /// CPU Tjmax, else the configured warning temperature.
@@ -291,7 +313,9 @@ impl Monitor {
             });
             keep
         });
-        self.show_mini = keep;
+        if !keep {
+            self.set_mini(false);
+        }
     }
 }
 

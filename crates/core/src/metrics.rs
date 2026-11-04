@@ -259,6 +259,11 @@ impl History {
         self.series.iter_mut().for_each(Buf::reset);
     }
 
+    /// Change how much history is kept; applies from the next push.
+    pub fn set_keep(&mut self, keep: Duration) {
+        self.keep = keep.as_secs_f64();
+    }
+
     pub fn snapshot(&self, t: f64) -> Snapshot {
         let stats: Vec<Stat> = self
             .series
@@ -423,6 +428,11 @@ impl Engine {
 
     pub fn set_period(&self, period: Duration) {
         self.inner.period_ms.store(clamp_period(period), Ordering::Relaxed);
+    }
+
+    /// Change how much history is kept per metric.
+    pub fn set_keep(&self, keep: Duration) {
+        lock(&self.inner.history).set_keep(keep);
     }
 
     pub fn period(&self) -> Duration {
@@ -595,6 +605,9 @@ mod tests {
         assert!(h.series(|_| false)[0].points.is_empty(), "points only on request");
         let snap = h.snapshot(30.0);
         assert_eq!(snap.get("x").map(|s| (s.current, s.at)), Some((30.0, 30.0)));
+        h.set_keep(Duration::from_secs(2));
+        h.push(31.0, &[r("x", Unit::Celsius, 31.0)]);
+        assert_eq!(h.points("x", 0.0).len(), 3, "a shorter window trims on the next push");
     }
 
     #[test]

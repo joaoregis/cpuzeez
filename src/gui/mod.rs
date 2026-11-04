@@ -175,6 +175,7 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
     mon.pages = true;
     if shots.is_some() {
         mon.settings = Default::default();
+        mon.show_mini = false;
     }
     i18n::set(if shots.is_some() { i18n::Lang::En } else { settings_ui::lang_of(&mon.settings) });
 
@@ -459,12 +460,16 @@ impl App {
             }
             Page::Tools => self.tools_page(ui, r),
             Page::Settings => {
-                let tray = self.mon.settings.tray;
+                let s = &self.mon.settings;
+                let (tray, sampling) = (s.tray, (s.sample_ms, s.graph_seconds));
                 let persist = self.auto.is_none();
                 settings_ui::page(ui, &mut self.mon.settings, self.ctx.cfg.check_updates, persist);
                 if self.mon.settings.tray != tray {
                     let on = self.mon.settings.tray;
                     self.mon.set_tray(on, ui.ctx());
+                }
+                if (self.mon.settings.sample_ms, self.mon.settings.graph_seconds) != sampling {
+                    self.mon.apply_sampling();
                 }
                 ui.add_space(theme::GAP);
                 widgets::card(ui, icon::MONITOR, tr("Mini monitor"), |ui| {
@@ -472,9 +477,12 @@ impl App {
                         RichText::new(tr("A small always-on-top window with CPU, GPU and chipset temperatures."))
                             .color(theme::palette(ui).text_secondary),
                     );
-                    if ui.checkbox(&mut self.mon.show_mini, tr("Show the mini monitor")).changed() && self.mon.show_mini
-                    {
-                        self.mon.tel();
+                    let mut on = self.mon.show_mini;
+                    if ui.checkbox(&mut on, tr("Show the mini monitor")).changed() {
+                        self.mon.set_mini(on);
+                        if on {
+                            self.mon.tel();
+                        }
                     }
                 });
             }

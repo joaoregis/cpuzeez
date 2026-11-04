@@ -669,11 +669,6 @@ impl Telemetry {
         self.engine.snapshot()
     }
 
-    /// Every metric with its full kept history.
-    pub fn series(&self) -> Vec<Series> {
-        self.engine.series(|_| true)
-    }
-
     /// Every metric; history only for ids where `with_points(id)` is true.
     pub fn series_with(&self, with_points: impl Fn(&str) -> bool) -> Vec<Series> {
         self.engine.series(with_points)
@@ -691,6 +686,11 @@ impl Telemetry {
 
     pub fn set_period(&self, period: Duration) {
         self.engine.set_period(period);
+    }
+
+    /// Change how much graph history is kept.
+    pub fn set_keep(&self, keep: Duration) {
+        self.engine.set_keep(keep);
     }
 
     /// Latest full GPU live data (clocks, temperatures, throttle reasons).

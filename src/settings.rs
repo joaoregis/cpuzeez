@@ -30,6 +30,8 @@ pub struct Settings {
     pub graph_seconds: u64,
     /// Temperature (°C) at which the stress monitor warns, if the CPU's Tjmax is unknown.
     pub warn_temp_c: f64,
+    /// Show the always-on-top mini monitor window.
+    pub mini: bool,
 }
 
 impl Default for Settings {
@@ -42,6 +44,7 @@ impl Default for Settings {
             sample_ms: 1000,
             graph_seconds: 600,
             warn_temp_c: 95.0,
+            mini: false,
         }
     }
 }
@@ -85,6 +88,7 @@ mod tests {
         let s: super::Settings = serde_json::from_str(r#"{"theme":"Dark","tray":true}"#).unwrap();
         assert_eq!(s.theme, super::Theme::Dark);
         assert!(s.tray && s.sample_ms == 1000);
+        assert!(!s.mini, "settings files from 0.3.0 have no mini key");
         let back: super::Settings = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
         assert_eq!(back.theme, super::Theme::Dark);
     }
