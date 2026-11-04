@@ -174,10 +174,15 @@ Together with the **Metric Engine** and the **Widget Engine** ([README §4](READ
 
 ## 10. Migration (part of S0, incremental)
 
-1. Create the workspace and move the pure decoders into `core`. Existing tests must pass unchanged.
-2. Move per-OS sources into `platform`, behind the traits. `trait Hw` moves with them.
+1. ✅ Create the workspace and move the pure decoders into `core`: report, config, SPD, EDID, CPU/GPU names, SMU PM tables, SMART parsers, the SMBIOS parser and the PCI model and decoder. Existing tests pass unchanged.
+2. ✅ Create `platform` with the shared per-OS foundation: `os`, `hw` (`trait Hw` + PawnIO/Linux backends) and CPUID.
 3. Extract the pages out of `gui/mod.rs` into their own files, with no behaviour change (the screenshot regression is the safety net).
 4. Build the Metric Engine in `core`, plug the GUI into it, and remove the duplicate sampler.
 5. Only then start the new features, already built on the contracts.
 
-Each step is a small, reviewable PR with green CI.
+**The rest of the per-OS collection moves by strangling, not big-bang.** Most existing modules (`cpu`, `gpu`, `sensors`, `storage`, `network`…) mix OS calls with building report sections through `Ctx`. Splitting each one now would mean rewriting every page twice, since S1 rebuilds them anyway. So:
+- new per-OS sources (processes, per-disk I/O, adapter throughput, services, startup, frames…) are written in `platform` from the start, behind `core` traits;
+- each existing module moves its collection into `platform` and its formatting into `core` **in the same change that rebuilds its page in S1/S2**;
+- the `gui` crate is extracted once the GUI no longer calls the binary's OS code (end of S1). Until then it stays a module of the binary.
+
+Each step is a small, reviewable commit with green CI.
