@@ -4,7 +4,10 @@
 //! %APPDATA%\CpuZeeZ, ~/Library/Application Support/CpuZeeZ, $XDG_CONFIG_HOME/cpuzeez.
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+/// Schema version of settings.json. Bump when a field changes meaning.
+pub const SCHEMA: u32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum Theme {
@@ -17,6 +20,12 @@ pub enum Theme {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    /// Schema version of the file (absent in 0.3.0 files = 1).
+    pub schema: u32,
+    /// The file came from a newer CpuZeeZ: never write over it (fields this
+    /// version doesn't know would be lost).
+    #[serde(skip)]
+    pub read_only: bool,
     /// "en", "pt-BR", "es"; None = follow the OS language.
     pub language: Option<String>,
     pub theme: Theme,
@@ -44,6 +53,8 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
+            schema: SCHEMA,
+            read_only: false,
             language: None,
             theme: Theme::System,
             tray: false,
@@ -81,13 +92,41 @@ fn file() -> Option<PathBuf> {
 
 impl Settings {
     pub fn load() -> Settings {
-        file().and_then(|p| std::fs::read(p).ok()).and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+        file().map(|p| Settings::load_from(&p)).unwrap_or_default()
     }
 
     pub fn save(&self) {
-        if let (Some(p), Ok(json)) = (file(), serde_json::to_vec_pretty(self)) {
-            let _ = std::fs::write(p, json);
+        if let Some(p) = file()
+            && let Err(e) = self.save_to(&p)
+        {
+            eprintln!("{}: {e}", p.display());
         }
+    }
+
+    /// Missing file = defaults. An unreadable file is kept as
+    /// `settings.json.bad` instead of being overwritten later.
+    fn load_from(p: &Path) -> Settings {
+        let Ok(bytes) = std::fs::read(p) else { return Settings::default() };
+        match serde_json::from_slice::<Settings>(&bytes) {
+            Ok(mut s) => {
+                s.read_only = s.schema > SCHEMA;
+                s
+            }
+            Err(_) => {
+                let _ = std::fs::rename(p, p.with_extension("json.bad"));
+                Settings::default()
+            }
+        }
+    }
+
+    /// Atomic write (temp file + rename); refuses to replace a newer file.
+    fn save_to(&self, p: &Path) -> std::io::Result<()> {
+        if self.read_only {
+            return Err(std::io::Error::other("written by a newer CpuZeeZ; not overwriting it"));
+        }
+        let tmp = p.with_extension("json.tmp");
+        std::fs::write(&tmp, serde_json::to_vec_pretty(&Settings { schema: SCHEMA, ..self.clone() })?)?;
+        std::fs::rename(&tmp, p)
     }
 }
 
@@ -102,5 +141,27 @@ mod tests {
         assert_eq!(s.update_check, None, "0.3.0 users are asked before any update check");
         let back: super::Settings = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
         assert_eq!(back.theme, super::Theme::Dark);
+    }
+
+    #[test]
+    fn newer_files_are_never_overwritten_and_bad_ones_are_kept() {
+        use super::*;
+        let dir = std::env::temp_dir().join(format!("cz-settings-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("settings.json");
+        // A file from a future version, with a field this one doesn't know.
+        std::fs::write(&p, br#"{"schema":99,"theme":"Light","future_field":42}"#).unwrap();
+        let s = Settings::load_from(&p);
+        assert!(s.read_only && s.theme == Theme::Light);
+        assert!(s.save_to(&p).is_err());
+        assert!(std::fs::read_to_string(&p).unwrap().contains("future_field"), "left untouched");
+        // A corrupt file is set aside, not lost.
+        std::fs::write(&p, b"{ not json").unwrap();
+        let s = Settings::load_from(&p);
+        assert!(!s.read_only && dir.join("settings.json.bad").exists());
+        s.save_to(&p).unwrap();
+        assert_eq!(Settings::load_from(&p).schema, SCHEMA);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

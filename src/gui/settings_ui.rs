@@ -40,6 +40,10 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Turned off in cpuzeez.ini (CheckUpdates=0).", "Desativado no cpuzeez.ini (CheckUpdates=0)."),
     ("Privacy & data", "Privacidade e dados"),
     (
+        "These settings were saved by a newer CpuZeeZ, so changes here aren't saved (that would lose its newer options).",
+        "Estas configurações foram salvas por um CpuZeeZ mais novo, então mudanças aqui não são salvas (isso perderia as opções mais novas).",
+    ),
+    (
         "Everything CpuZeeZ keeps is on this computer, in this folder. Nothing is uploaded.",
         "Tudo o que o CpuZeeZ guarda está neste computador, nesta pasta. Nada é enviado.",
     ),
@@ -91,6 +95,10 @@ pub const ES: &[(&str, &str)] = &[
     ),
     ("Turned off in cpuzeez.ini (CheckUpdates=0).", "Desactivado en cpuzeez.ini (CheckUpdates=0)."),
     ("Privacy & data", "Privacidad y datos"),
+    (
+        "These settings were saved by a newer CpuZeeZ, so changes here aren't saved (that would lose its newer options).",
+        "Estos ajustes los guardó un CpuZeeZ más nuevo, así que los cambios aquí no se guardan (se perderían sus opciones nuevas).",
+    ),
     (
         "Everything CpuZeeZ keeps is on this computer, in this folder. Nothing is uploaded.",
         "Todo lo que CpuZeeZ guarda está en este equipo, en esta carpeta. No se sube nada.",
@@ -226,6 +234,16 @@ fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
 /// checks off; `persist` = save changes (off while taking screenshots).
 pub fn page(ui: &mut egui::Ui, s: &mut Settings, updates_allowed: bool, persist: bool) {
     let before = serde_json::to_string(s).unwrap_or_default();
+    if s.read_only {
+        widgets::pill(
+            ui,
+            tr(
+                "These settings were saved by a newer CpuZeeZ, so changes here aren't saved (that would lose its newer options).",
+            ),
+            widgets::Tone::Warning,
+        );
+        ui.add_space(theme::GAP);
+    }
     widgets::page_header(ui, tr("Settings"), tr("Changes apply immediately and are saved automatically."), |_| {});
 
     widgets::card(ui, icon::PALETTE, tr("Appearance"), |ui| {
