@@ -131,18 +131,9 @@ struct AutoShots {
     since: std::time::Instant,
 }
 
-#[derive(Default)]
-struct Live {
-    /// MHz per logical CPU (index = logical CPU), refreshed in the background.
-    mhz: Vec<Option<f64>>,
-    source: &'static str,
-    gpus: Vec<crate::gpu::Live>,
-}
-
 struct App {
     ctx: Arc<Ctx>,
     report: Arc<Mutex<Option<Vec<Section>>>>,
-    live: Arc<Mutex<Live>>,
     page: Page,
     /// Reload history.json when the History view is opened.
     history_dirty: bool,
@@ -151,7 +142,6 @@ struct App {
     core: usize,
     slot: usize,
     gpu: usize,
-    show_clocks: Arc<Mutex<bool>>,
     status: String,
     shot: Option<Shot>,
     auto: Option<AutoShots>,
@@ -179,10 +169,6 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         let (c, r) = (ctx.clone(), report.clone());
         std::thread::spawn(move || *r.lock().unwrap() = Some(crate::collect(&c)));
     }
-    let live = Arc::new(Mutex::new(Live::default()));
-    let show_clocks = Arc::new(Mutex::new(false));
-    spawn_sampler(ctx.clone(), live.clone(), show_clocks.clone());
-
     // One copy of the settings (the monitor's), edited by the Settings page.
     // Screenshots are reproducible: default settings, English.
     let mut mon = sensors::Monitor::new(ctx.clone());
@@ -204,7 +190,6 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
     let app = App {
         ctx,
         report,
-        live,
         page: Page::Overview,
         history_dirty: true,
         bench_view: BenchView::Cpu,
@@ -212,7 +197,6 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         core: 0,
         slot: 0,
         gpu: 0,
-        show_clocks,
         status: String::new(),
         shot: None,
         auto: shots.map(|dir| {
@@ -259,30 +243,6 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
     }
 }
 
-/// Core 0 every second; every logical CPU while the Clocks window is open.
-fn spawn_sampler(ctx: Arc<Ctx>, live: Arc<Mutex<Live>>, all: Arc<Mutex<bool>>) {
-    std::thread::spawn(move || {
-        let n = crate::os::logical_cpus();
-        live.lock().unwrap().mhz = vec![None; n];
-        loop {
-            let every = *all.lock().unwrap();
-            let targets: Vec<usize> = if every { (0..n).collect() } else { vec![0] };
-            for cpu in targets {
-                if let Some((m, src)) = crate::cpu::clocks::core_mhz(&ctx, cpu) {
-                    let mut l = live.lock().unwrap();
-                    l.mhz[cpu] = Some(m);
-                    l.source = src.label();
-                }
-            }
-            if every {
-                let g = crate::gpu::live(&ctx);
-                live.lock().unwrap().gpus = g;
-            }
-            std::thread::sleep(Duration::from_millis(1000));
-        }
-    });
-}
-
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ectx = ui.ctx().clone();
@@ -299,7 +259,6 @@ impl eframe::App for App {
             self.page = Page::Benchmarks;
             self.bench_view = BenchView::Stress;
         }
-        *self.show_clocks.lock().unwrap() = self.page == Page::Tools && self.tool_view == ToolView::Clocks;
         let p = theme::palette(ui);
         egui::Panel::left("nav")
             .exact_size(theme::SIDEBAR_WIDTH)
@@ -424,10 +383,10 @@ impl App {
 
     fn page_body(&mut self, ui: &mut egui::Ui, r: &[Section]) {
         let c = crate::cpu::get(&self.ctx);
-        let core_mhz = self.live.lock().unwrap().mhz.first().copied().flatten();
         match self.page {
             Page::Overview => {
                 let tel = self.mon.tel();
+                let core_mhz = crate::telemetry::core_mhz(&tel.snapshot(), 0);
                 overview::page(ui, &self.ctx, r, &tel, core_mhz);
             }
             Page::Processor => {
@@ -540,8 +499,9 @@ impl App {
         // CPU-Z shows the core clock in the title while iconized.
         let min = ectx.input(|i| i.viewport().minimized.unwrap_or(false));
         if min {
-            let m = self.live.lock().unwrap().mhz.first().copied().flatten();
-            if let Some(m) = m {
+            let tel = self.mon.tel();
+            tel.want("title", &["cpu/clock"]);
+            if let Some(m) = crate::telemetry::core_mhz(&tel.snapshot(), 0) {
                 ectx.send_viewport_cmd(egui::ViewportCommand::Title(format!("{m:.0} MHz - {}", crate::DISPLAY_NAME)));
             }
             self.title_minimized = true;

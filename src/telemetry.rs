@@ -390,6 +390,43 @@ impl Source for Batteries {
     }
 }
 
+/// macOS has no live per-core clock (no MSRs, no cpufreq): time a dependent-add
+/// chain on whatever core runs it. It loads that core for ~120 ms, so it is a
+/// slow source and only runs while something on screen wants clocks.
+#[cfg(target_os = "macos")]
+struct MeasuredClock;
+
+#[cfg(target_os = "macos")]
+impl Source for MeasuredClock {
+    fn name(&self) -> &'static str {
+        "measured clock"
+    }
+    fn prefixes(&self) -> &'static [&'static str] {
+        &["cpu/clock/measured"]
+    }
+    fn class(&self) -> Class {
+        Class::Slow
+    }
+    fn interval(&self) -> Duration {
+        Duration::from_secs(5)
+    }
+    fn read(&mut self, out: &mut Vec<Reading>) {
+        let mhz = crate::cpu::clocks::add_chain_mhz(Duration::from_millis(80));
+        out.push(Reading {
+            id: "cpu/clock/measured".into(),
+            group: "CPU".into(),
+            label: "Core clock (measured)".into(),
+            unit: Unit::Mhz,
+            value: mhz,
+        });
+    }
+}
+
+/// Live MHz of physical core `core` (`cpu/clock/core<N>`, else the measured clock).
+pub fn core_mhz(snap: &Snapshot, core: usize) -> Option<f64> {
+    snap.get(&format!("cpu/clock/core{core}")).or_else(|| snap.get("cpu/clock/measured")).map(|s| s.current)
+}
+
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
@@ -595,13 +632,16 @@ impl Telemetry {
     pub fn start(ctx: Arc<Ctx>, period: Duration, keep: Duration) -> Telemetry {
         let gpu_live = Arc::new(Mutex::new(Vec::new()));
         let have_batteries = !crate::battery::batteries(&ctx).is_empty();
-        let sources: Vec<Box<dyn Source>> = vec![
+        #[allow(unused_mut)]
+        let mut sources: Vec<Box<dyn Source>> = vec![
             Box::new(CpuBoard { ctx: ctx.clone(), have_batteries }),
             Box::new(Gpus { ctx: ctx.clone(), last: gpu_live.clone() }),
             Box::new(Memory),
             Box::new(Drives { ctx: ctx.clone() }),
             Box::new(Batteries { ctx: ctx.clone() }),
         ];
+        #[cfg(target_os = "macos")]
+        sources.push(Box::new(MeasuredClock));
         let engine = Engine::start(sources, metrics::Config { period, keep, ..Default::default() });
         let t = Telemetry { engine, throttles: Arc::default(), csv: Arc::default(), logging: Arc::default(), gpu_live };
         t.engine.add_hook(throttle_hook(ctx, t.throttles.clone()));

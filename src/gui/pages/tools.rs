@@ -47,16 +47,18 @@ impl App {
 
     pub(crate) fn clocks_body(&mut self, ui: &mut egui::Ui) {
         let c = crate::cpu::get(&self.ctx);
-        let live = self.live.lock().unwrap();
+        let tel = self.mon.tel();
+        tel.want("clocks", &["cpu/clock", "gpu"]);
+        let snap = tel.snapshot();
         let mut rows: Vec<(String, String)> = Vec::new();
         for (core, l) in c.logical.iter().filter(|l| l.smt == 0).enumerate() {
             let kind = l.kind.as_deref().map(|k| format!(" ({k})")).unwrap_or_default();
-            let v = live.mhz.get(l.cpu).copied().flatten().map_or("…".into(), |m| format!("{m:.1} MHz"));
+            let v = crate::telemetry::core_mhz(&snap, core).map_or("…".into(), |m| format!("{m:.1} MHz"));
             rows.push((format!("{}{kind}", trf("Core #{}", &[&core])), v));
         }
         let names = crate::gpu::adapters(&self.ctx);
         let mut gpus: Vec<(String, String)> = Vec::new();
-        for g in &live.gpus {
+        for g in &tel.gpu_live() {
             let name = names.get(g.adapter).map_or("GPU", |a| a.name.as_str());
             let opt = |v: Option<f64>, unit: &str| v.map_or(String::new(), |v| format!("{v:.0} {unit}"));
             let mut s: Vec<String> = [
@@ -76,8 +78,7 @@ impl App {
             }
             gpus.push((name.to_string(), s.join(", ")));
         }
-        let source = live.source;
-        drop(live);
+        let source = crate::cpu::clocks::live_source(&self.ctx).label();
         let refs: Vec<(&str, String)> = rows.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
         widgets::card(ui, icon::CPU, tr("Cores"), |ui| {
             ui.label(RichText::new(trf("source: {}", &[&source])).small().color(theme::palette(ui).text_muted));

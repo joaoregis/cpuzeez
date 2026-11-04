@@ -50,6 +50,18 @@ pub fn tsc_hz() -> Option<f64> {
     None
 }
 
+/// Where the live sampler's core clocks come from on this machine.
+pub fn live_source(ctx: &Ctx) -> Source {
+    let (ra, _) = aperf_mperf_regs(ctx);
+    if ctx.hw.rdmsr(0, ra).is_some() {
+        Source::AperfMperf
+    } else if cfg!(any(windows, target_os = "linux")) {
+        Source::Os
+    } else {
+        Source::AddChain
+    }
+}
+
 /// Effective MHz of logical CPU `cpu` while it is busy.
 pub fn core_mhz(ctx: &Ctx, cpu: usize) -> Option<(f64, Source)> {
     if let Some(m) = aperf_mperf(ctx, cpu) {

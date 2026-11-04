@@ -8,10 +8,9 @@ impl App {
         let c = crate::cpu::get(&self.ctx);
         let pi = |k: &str| sget(r, "Processors Information", k);
         let (fam, model, step) = c.sig;
-        let live = self.live.lock().unwrap();
-        let first_of_core = c.logical.iter().filter(|l| l.smt == 0).nth(self.core).map_or(0, |l| l.cpu);
-        let core_mhz = live.mhz.get(first_of_core).copied().flatten();
-        drop(live);
+        let tel = self.mon.tel();
+        tel.want("processor", &["cpu/clock"]);
+        let core_mhz = crate::telemetry::core_mhz(&tel.snapshot(), self.core);
         let bus = crate::cpu::bus_mhz(c);
         boxed(
             ui,
