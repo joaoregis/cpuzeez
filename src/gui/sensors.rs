@@ -17,6 +17,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Some sensors aren't responding: {}", "Alguns sensores não estão respondendo: {}"),
     ("Sensors", "Sensores"),
     ("Stress test", "Teste de estresse"),
     ("Mini monitor", "Minimonitor"),
@@ -43,6 +44,7 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("History", "Histórico"),
 ];
 pub const ES: &[(&str, &str)] = &[
+    ("Some sensors aren't responding: {}", "Algunos sensores no responden: {}"),
     ("Sensors", "Sensores"),
     ("Stress test", "Prueba de estrés"),
     ("Mini monitor", "Minimonitor"),
@@ -474,6 +476,16 @@ pub fn page(ui: &mut egui::Ui, mon: &mut Monitor) {
     let tjmax = mon.tjmax();
     ui.ctx().request_repaint_after(Duration::from_millis(mon.settings.sample_ms.clamp(250, 1000)));
     widgets::page_header(ui, tr("Sensors"), "", |ui| toolbar_actions(ui, mon, &tel));
+    // A source that panicked or hangs is isolated by the engine; say which one.
+    let failed: Vec<String> = tel.failures().into_iter().map(|(name, why)| format!("{name} ({why})")).collect();
+    if !failed.is_empty() {
+        widgets::pill(
+            ui,
+            &super::i18n::trf("Some sensors aren't responding: {}", &[&failed.join(", ")]),
+            widgets::Tone::Warning,
+        );
+        ui.add_space(theme::GAP / 2.0);
+    }
     summary_row(ui, &series, tjmax);
     toolbar(ui, mon, &tel);
     if series.is_empty() {

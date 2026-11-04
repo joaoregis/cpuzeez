@@ -154,11 +154,18 @@ pub struct Config {
     pub keep: Duration,
     /// How long a lease lives after its last renewal.
     pub lease: Duration,
+    /// A source busy for longer than this is reported as not responding.
+    pub timeout: Duration,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Config { period: Duration::from_secs(1), keep: Duration::from_secs(600), lease: Duration::from_secs(3) }
+        Config {
+            period: Duration::from_secs(1),
+            keep: Duration::from_secs(600),
+            lease: Duration::from_secs(3),
+            timeout: Duration::from_secs(10),
+        }
     }
 }
 
@@ -317,6 +324,7 @@ struct Inner {
     snap: Mutex<Arc<Snapshot>>,
     period_ms: AtomicU64,
     lease: Duration,
+    timeout: Duration,
     leases: Mutex<HashMap<String, (Vec<String>, Instant)>>,
     /// Read every source regardless of leases (CSV logging).
     always: AtomicBool,
@@ -347,31 +355,41 @@ impl Inner {
             .any(|p| p.is_empty() || prefixes.iter().any(|s| s.starts_with(p.as_str()) || p.starts_with(s)))
     }
 
-    /// Read one source, isolating a panic: the source is paused and reported.
-    fn read(&self, s: &mut Box<dyn Source>, paused: &mut HashMap<&'static str, Instant>) -> Option<Vec<Reading>> {
-        let name = s.name();
-        if paused.get(name).is_some_and(|until| Instant::now() < *until) {
-            return None;
+    /// Ask `a` to read, unless it is still busy or paused after a panic.
+    fn request(&self, a: &mut Actor, now: Instant) {
+        if a.busy.is_none() && a.paused_until.is_none_or(|u| now >= u) && a.req.send(()).is_ok() {
+            a.busy = Some(now);
         }
-        let mut out = Vec::new();
-        let t = Instant::now();
-        let r = catch_unwind(AssertUnwindSafe(|| s.read(&mut out)));
+    }
+
+    /// `a`'s reply, waiting up to `wait` for it. A source still busy after the
+    /// timeout is reported as not responding (and isn't asked again until it
+    /// answers); a panic pauses it.
+    fn collect(&self, a: &mut Actor, wait: Duration) -> Option<Vec<Reading>> {
+        let since = a.busy?;
+        let got = if wait.is_zero() { a.rep.try_recv().ok() } else { a.rep.recv_timeout(wait).ok() };
+        let Some((r, took)) = got else {
+            if since.elapsed() >= self.timeout {
+                let msg = format!("not responding for {} s", since.elapsed().as_secs());
+                lock(&self.failures).insert(a.name, msg);
+            }
+            return None;
+        };
+        a.busy = None;
         {
             let mut costs = lock(&self.costs);
-            let e = costs.entry(name).or_default();
-            (e.0, e.1) = (e.0 + 1, e.1 + t.elapsed());
+            let e = costs.entry(a.name).or_default();
+            (e.0, e.1) = (e.0 + 1, e.1 + took);
         }
         match r {
-            Ok(()) => {
-                lock(&self.failures).remove(name);
+            Ok(mut out) => {
+                lock(&self.failures).remove(a.name);
                 out.retain(|r| r.value.is_finite());
                 Some(out)
             }
-            Err(e) => {
-                let msg =
-                    e.downcast_ref::<&str>().map(|s| s.to_string()).or_else(|| e.downcast_ref::<String>().cloned());
-                lock(&self.failures).insert(name, msg.unwrap_or_else(|| "panicked".into()));
-                paused.insert(name, Instant::now() + PANIC_BACKOFF);
+            Err(msg) => {
+                lock(&self.failures).insert(a.name, msg);
+                a.paused_until = Some(Instant::now() + PANIC_BACKOFF);
                 None
             }
         }
@@ -391,6 +409,7 @@ impl Engine {
             snap: Mutex::new(Arc::new(Snapshot::default())),
             period_ms: AtomicU64::new(clamp_period(cfg.period)),
             lease: cfg.lease,
+            timeout: cfg.timeout,
             leases: Mutex::new(HashMap::new()),
             always: AtomicBool::new(false),
             hooks: Mutex::new(Vec::new()),
@@ -398,7 +417,7 @@ impl Engine {
             failures: Mutex::new(HashMap::new()),
             costs: Mutex::new(HashMap::new()),
         });
-        let (fast, slow): (Vec<_>, Vec<_>) = sources.into_iter().partition(|s| s.class() == Class::Fast);
+        let (fast, slow): (Vec<_>, Vec<_>) = sources.into_iter().map(actor).partition(|a| a.class == Class::Fast);
         let t0 = Instant::now();
         let w = Arc::downgrade(&inner);
         spawn("metrics-fast", move || fast_worker(w, fast, t0));
@@ -481,16 +500,62 @@ fn spawn(name: &str, f: impl FnOnce() + Send + 'static) {
     }
 }
 
-fn fast_worker(weak: Weak<Inner>, mut sources: Vec<Box<dyn Source>>, t0: Instant) {
-    let mut paused = HashMap::new();
+/// One source on its own thread, so a read that hangs or crashes can't stall
+/// the others: the workers send requests and wait for replies with a deadline.
+struct Actor {
+    name: &'static str,
+    prefixes: &'static [&'static str],
+    class: Class,
+    interval: Duration,
+    req: std::sync::mpsc::Sender<()>,
+    rep: std::sync::mpsc::Receiver<(Result<Vec<Reading>, String>, Duration)>,
+    /// When the pending request was sent.
+    busy: Option<Instant>,
+    /// When a slow source was last asked.
+    last: Option<Instant>,
+    paused_until: Option<Instant>,
+}
+
+fn panic_message(e: Box<dyn std::any::Any + Send>) -> String {
+    e.downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| e.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "panicked".into())
+}
+
+fn actor(mut s: Box<dyn Source>) -> Actor {
+    let (req, req_rx) = std::sync::mpsc::channel::<()>();
+    let (rep_tx, rep) = std::sync::mpsc::channel();
+    let (name, prefixes, class, interval) = (s.name(), s.prefixes(), s.class(), s.interval());
+    // The thread ends once the worker drops `req` (engine stopped).
+    spawn(&format!("metrics-{name}"), move || {
+        while req_rx.recv().is_ok() {
+            let mut out = Vec::new();
+            let t = Instant::now();
+            let r = catch_unwind(AssertUnwindSafe(|| s.read(&mut out))).map(|()| out).map_err(panic_message);
+            if rep_tx.send((r, t.elapsed())).is_err() {
+                return;
+            }
+        }
+    });
+    Actor { name, prefixes, class, interval, req, rep, busy: None, last: None, paused_until: None }
+}
+
+fn fast_worker(weak: Weak<Inner>, mut actors: Vec<Actor>, t0: Instant) {
     loop {
         let start = Instant::now();
         let Some(inner) = weak.upgrade() else { return };
+        let period = Duration::from_millis(inner.period_ms.load(Ordering::Relaxed));
+        for a in &mut actors {
+            if inner.wanted(a.prefixes) {
+                inner.request(a, start);
+            }
+        }
+        // Wait for replies within this tick; a late one is used next tick.
+        let deadline = start + period.mul_f32(0.9);
         let mut rs = Vec::new();
-        for s in &mut sources {
-            if inner.wanted(s.prefixes())
-                && let Some(out) = inner.read(s, &mut paused)
-            {
+        for a in &mut actors {
+            if let Some(out) = inner.collect(a, deadline.saturating_duration_since(Instant::now())) {
                 rs.extend(out);
             }
         }
@@ -505,31 +570,26 @@ fn fast_worker(weak: Weak<Inner>, mut sources: Vec<Box<dyn Source>>, t0: Instant
                 hook(&tick);
             }
         }
-        let period = Duration::from_millis(inner.period_ms.load(Ordering::Relaxed));
         drop(inner);
         std::thread::sleep(period.saturating_sub(start.elapsed()));
     }
 }
 
-fn slow_worker(weak: Weak<Inner>, mut sources: Vec<Box<dyn Source>>) {
-    let mut paused = HashMap::new();
-    let mut last: HashMap<&'static str, Instant> = HashMap::new();
+fn slow_worker(weak: Weak<Inner>, mut actors: Vec<Actor>) {
     loop {
         let Some(inner) = weak.upgrade() else { return };
-        for s in &mut sources {
-            let name = s.name();
-            if !inner.wanted(s.prefixes()) {
+        let now = Instant::now();
+        for a in &mut actors {
+            if !inner.wanted(a.prefixes) {
                 // Nobody looks: don't carry stale values into new ticks.
-                lock(&inner.slow_latest).remove(name);
-                last.remove(name);
-                continue;
+                lock(&inner.slow_latest).remove(a.name);
+                a.last = None;
+            } else if a.last.is_none_or(|t| now.duration_since(t) >= a.interval) {
+                a.last = Some(now);
+                inner.request(a, now);
             }
-            if last.get(name).is_some_and(|t| t.elapsed() < s.interval()) {
-                continue;
-            }
-            last.insert(name, Instant::now());
-            if let Some(out) = inner.read(s, &mut paused) {
-                lock(&inner.slow_latest).insert(name, out);
+            if let Some(out) = inner.collect(a, Duration::ZERO) {
+                lock(&inner.slow_latest).insert(a.name, out);
             }
         }
         drop(inner);
@@ -684,7 +744,38 @@ mod tests {
     }
 
     fn quick() -> Config {
-        Config { period: Duration::from_millis(100), keep: Duration::from_secs(60), lease: Duration::from_millis(400) }
+        Config {
+            period: Duration::from_millis(100),
+            keep: Duration::from_secs(60),
+            lease: Duration::from_millis(400),
+            timeout: Duration::from_millis(500),
+        }
+    }
+
+    /// A probe that hangs (a driver that never answers).
+    struct Stuck;
+
+    impl Source for Stuck {
+        fn name(&self) -> &'static str {
+            "stuck"
+        }
+        fn prefixes(&self) -> &'static [&'static str] {
+            &["board/"]
+        }
+        fn read(&mut self, _out: &mut Vec<Reading>) {
+            std::thread::sleep(Duration::from_secs(3));
+        }
+    }
+
+    #[test]
+    fn a_stuck_source_does_not_stall_the_others() {
+        let (cpu, cpu_reads) = fake("cpu", &["cpu/"], Class::Fast);
+        let e = Engine::start(vec![Box::new(Stuck), cpu], quick());
+        e.set_always(true);
+        wait_until("cpu keeps ticking", || cpu_reads.load(Ordering::SeqCst) >= 8);
+        wait_until("stuck reported", || {
+            e.failures().iter().any(|f| f.0 == "stuck" && f.1.starts_with("not responding"))
+        });
     }
 
     fn wait_until(what: &str, f: impl Fn() -> bool) {
