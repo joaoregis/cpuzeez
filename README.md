@@ -182,8 +182,13 @@ Like CPU-Z, some information can only come from hardware registers: MSRs, the SM
 
 [PawnIO](https://pawnio.eu) is a signed, open-source, scriptable kernel driver, also used by LibreHardwareMonitor and FanControl.
 
-1. Install it: `winget install namazso.PawnIO`, or get the installer from [pawnio.eu](https://pawnio.eu).
-2. Download the official modules ([PawnIO.Modules releases](https://github.com/namazso/PawnIO.Modules/releases), LGPL-2.1). Extract the `.bin` files into a `pawnio-modules` folder next to `cpuzeez.exe`, or into the PawnIO install folder.
+The Windows packages ship it, pinned and SHA-256-checked ([`packaging/pins.txt`](packaging/pins.txt)), and install it only if you ask:
+
+1. Install it:
+   - **MSI:** tick *Hardware access (PawnIO driver)* under *Custom Setup*. It's unticked by default. Silent installs use `msiexec /i cpuzeez-….msi ADDLOCAL=ALL`.
+   - **In the app:** press *Install hardware access* in the yellow banner. CpuZeeZ checks the bundled installer against the pinned hash, then Windows asks for permission.
+   - **Yourself:** `winget install namazso.PawnIO`, or the installer from [pawnio.eu](https://pawnio.eu).
+2. The official modules ([PawnIO.Modules](https://github.com/namazso/PawnIO.Modules/releases), LGPL-2.1) come in the `pawnio-modules` folder next to `cpuzeez.exe`. For a build from source, extract them there yourself.
 3. Run CpuZeeZ **as administrator**. *About* (and the report's *Binaries* section) then shows `Hardware access: PawnIO 2.2.0 (modules: …)`.
 
 Details are in [docs/windows-pawnio.md](docs/windows-pawnio.md).
@@ -418,4 +423,4 @@ Thanks to [@vinicius741](https://github.com/vinicius741) for the macOS signing a
 
 Licensed under either of [Apache License 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT), at your option.
 
-PawnIO and its modules are separate projects under their own licenses. They are not bundled.
+PawnIO and its modules are separate projects under their own licenses. The Windows packages redistribute them unmodified; see [THIRD_PARTY.md](THIRD_PARTY.md).

@@ -398,8 +398,11 @@ fn hex(b: &[u8]) -> String {
 }
 
 pub fn sha256_file(path: &Path) -> std::io::Result<String> {
-    use std::io::Read;
-    let mut f = std::fs::File::open(path)?;
+    sha256_of(&mut std::fs::File::open(path)?)
+}
+
+/// SHA-256 of everything `f` yields, as lowercase hex.
+pub fn sha256_of(f: &mut impl std::io::Read) -> std::io::Result<String> {
     let (mut h, mut buf) = (Sha256::new(), vec![0; 1 << 16]);
     loop {
         let n = f.read(&mut buf)?;

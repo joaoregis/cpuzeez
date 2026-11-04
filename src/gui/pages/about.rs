@@ -66,6 +66,16 @@ impl App {
                 ui.label(t);
             }
         });
+        ui.separator();
+        ui.collapsing(tr("Third-party components"), |ui| {
+            if cfg!(windows) {
+                use crate::executor::pin;
+                ui.label(trf("PawnIO driver installer {}, by namazso (pawnio.eu)", &[&pin("PAWNIO_SETUP_VERSION")]));
+                ui.label(trf("PawnIO modules {}, LGPL-2.1-or-later", &[&pin("PAWNIO_MODULES_VERSION")]));
+            }
+            ui.label(tr("Rust crates under MIT, Apache-2.0 and compatible licenses."));
+            ui.hyperlink_to(tr("Full list and licenses"), format!("{}/blob/main/THIRD_PARTY.md", crate::REPO_URL));
+        });
         ui.label(RichText::new(tr("Not affiliated with CPUID. CPU-Z is a trademark of CPUID.")).small().weak());
     }
 }

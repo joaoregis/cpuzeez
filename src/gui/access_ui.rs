@@ -24,6 +24,11 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Restart as administrator", "Reiniciar como administrador"),
     ("Restart as root", "Reiniciar como root"),
     ("How to install PawnIO", "Como instalar o PawnIO"),
+    ("Install hardware access", "Instalar acesso ao hardware"),
+    (
+        "Installs the PawnIO driver (pawnio.eu) shipped with CpuZeeZ, after checking its SHA-256. Windows asks for permission.",
+        "Instala o driver PawnIO (pawnio.eu) que acompanha o CpuZeeZ, após conferir o SHA-256. O Windows pede permissão.",
+    ),
     ("Hide", "Ocultar"),
     ("Show what's hidden", "Mostrar o que está oculto"),
     ("Waiting for permission…", "Aguardando permissão…"),
@@ -57,6 +62,11 @@ pub const ES: &[(&str, &str)] = &[
     ("Restart as administrator", "Reiniciar como administrador"),
     ("Restart as root", "Reiniciar como root"),
     ("How to install PawnIO", "Cómo instalar PawnIO"),
+    ("Install hardware access", "Instalar acceso al hardware"),
+    (
+        "Installs the PawnIO driver (pawnio.eu) shipped with CpuZeeZ, after checking its SHA-256. Windows asks for permission.",
+        "Instala el controlador PawnIO (pawnio.eu) incluido con CpuZeeZ, tras comprobar su SHA-256. Windows pide permiso.",
+    ),
     ("Hide", "Ocultar"),
     ("Show what's hidden", "Mostrar lo oculto"),
     ("Waiting for permission…", "Esperando permiso…"),
@@ -117,6 +127,9 @@ impl Access {
                 None => ectx.request_repaint_after(std::time::Duration::from_millis(200)),
                 Some(d) => {
                     self.running = None;
+                    if matches!(d, Done::Ok(_)) {
+                        self.gaps = None; // re-check: e.g. PawnIO now installed, so "run as admin" is next
+                    }
                     self.message = match d {
                         Done::Ok(_) => Some(tr("Enabled. Restart CpuZeeZ to use it.").into()),
                         Done::Cancelled => Some(tr("Administrator rights were not granted.").into()),
@@ -228,6 +241,17 @@ impl Access {
                             ui.spinner();
                         } else if ui.button(trf("Enable {}", &[&m.name()])).clicked() {
                             self.start(Action::LoadKernelModule { module: m });
+                        }
+                    }
+                    if !driver.is_empty() && crate::executor::bundled_pawnio().is_some() {
+                        let label = format!("{} {}", icon::SHIELD_CHECK, tr("Install hardware access"));
+                        if self.running.is_some() {
+                            ui.spinner();
+                        } else if widgets::primary_button(ui, &label)
+                            .on_hover_text(tr("Installs the PawnIO driver (pawnio.eu) shipped with CpuZeeZ, after checking its SHA-256. Windows asks for permission."))
+                            .clicked()
+                        {
+                            self.start(Action::InstallPawnIo);
                         }
                     }
                     if !driver.is_empty() && ui.button(tr("How to install PawnIO")).clicked() {

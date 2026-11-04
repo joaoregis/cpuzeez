@@ -33,14 +33,18 @@ jobs:
       - run: cargo build --release --locked
       - name: Static C runtime (starts without the VC++ redistributable)
         run: python .github/scripts/check_no_crt.py target/release/cpuzeez.exe
+      - name: PawnIO installer and modules (pinned in packaging/pins.txt, SHA-256 checked)
+        shell: bash
+        run: bash .github/scripts/fetch_pawnio.sh pawnio
       - name: MSI (WiX)
         shell: bash
         run: |
           dotnet tool install --global wix --version 5.0.2
-          wix build packaging/windows/cpuzeez.wxs -arch x64 -d Version="$MSI_VER" -d Bin=target/release/cpuzeez.exe -d IconFile=assets/cpuzeez.ico -o "cpuzeez-$VER-windows-x64.msi"
+          wix extension add -g WixToolset.UI.wixext/5.0.2
+          wix build packaging/windows/cpuzeez.wxs -ext WixToolset.UI.wixext -arch x64 -d Version="$MSI_VER" -d Bin=target/release/cpuzeez.exe -d IconFile=assets/cpuzeez.ico -d PawnIo=pawnio -o "cpuzeez-$VER-windows-x64.msi"
       - name: Portable zip
         shell: pwsh
-        run: Compress-Archive -Path target/release/cpuzeez.exe, README.md, LICENSE-MIT, LICENSE-APACHE -DestinationPath "cpuzeez-$env:VER-windows-x64-portable.zip"
+        run: Compress-Archive -Path target/release/cpuzeez.exe, pawnio/PawnIO_setup.exe, pawnio/pawnio-modules, README.md, THIRD_PARTY.md, LICENSE-MIT, LICENSE-APACHE -DestinationPath "cpuzeez-$env:VER-windows-x64-portable.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: windows

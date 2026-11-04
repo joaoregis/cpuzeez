@@ -67,7 +67,61 @@ pub fn elevated_main(arg: &str) -> i32 {
 fn perform(a: &Action) -> Result<String, String> {
     match a {
         Action::LoadKernelModule { module } => load_kernel_module(module.name()),
+        Action::InstallPawnIo => install_pawnio(),
     }
+}
+
+/// `KEY=value` from packaging/pins.txt, compiled in so a swapped file next
+/// to the exe can't change what we trust.
+pub fn pin(key: &str) -> &'static str {
+    include_str!("../packaging/pins.txt")
+        .lines()
+        .find_map(|l| l.strip_prefix(key)?.strip_prefix('='))
+        .map(str::trim)
+        .unwrap_or_default()
+}
+
+/// The PawnIO installer the MSI and the portable zip put next to the exe.
+pub fn bundled_pawnio() -> Option<std::path::PathBuf> {
+    let p = std::env::current_exe().ok()?.parent()?.join("PawnIO_setup.exe");
+    p.is_file().then_some(p)
+}
+
+#[cfg(windows)]
+fn install_pawnio() -> Result<String, String> {
+    use std::os::windows::fs::OpenOptionsExt;
+    const FILE_SHARE_READ: u32 = 1;
+    let path = bundled_pawnio().ok_or("PawnIO_setup.exe is not next to cpuzeez.exe")?;
+    // Held open without write/delete sharing from the hash check until the
+    // installer exits: in a user-writable (portable) folder nobody can swap
+    // the file in between.
+    let mut f = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(FILE_SHARE_READ)
+        .open(&path)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    let got = crate::update::sha256_of(&mut f).map_err(|e| format!("{}: {e}", path.display()))?;
+    let want = pin("PAWNIO_SETUP_SHA256");
+    if !got.eq_ignore_ascii_case(want) {
+        return Err(format!(
+            "PawnIO_setup.exe doesn't match the pinned SHA-256 (expected {want}, got {got}); not running it"
+        ));
+    }
+    let st = std::process::Command::new(&path)
+        .args(["-install", "-silent"])
+        .status()
+        .map_err(|e| format!("PawnIO_setup.exe: {e}"))?;
+    drop(f);
+    if st.success() {
+        Ok(format!("PawnIO {} installed", pin("PAWNIO_SETUP_VERSION")))
+    } else {
+        Err(format!("PawnIO_setup.exe exited with {st}"))
+    }
+}
+
+#[cfg(not(windows))]
+fn install_pawnio() -> Result<String, String> {
+    Err("PawnIO is a Windows driver".into())
 }
 
 #[cfg(target_os = "linux")]
@@ -139,5 +193,15 @@ mod tests {
             let a = Action::LoadKernelModule { module: actions::KernelModule::Msr };
             assert_eq!(elevated_main(&actions::encode(&a)), 3);
         }
+    }
+
+    #[test]
+    fn pins_are_compiled_in() {
+        for k in ["PAWNIO_SETUP_SHA256", "PAWNIO_MODULES_SHA256"] {
+            let h = pin(k);
+            assert!(h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit()), "{k}={h}");
+        }
+        assert!(pin("PAWNIO_SETUP_URL").starts_with("https://github.com/namazso/"));
+        assert_eq!(pin("NOPE"), "");
     }
 }

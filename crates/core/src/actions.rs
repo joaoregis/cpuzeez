@@ -34,6 +34,9 @@ impl KernelModule {
 pub enum Action {
     /// Linux: load a kernel module that exposes hardware to CpuZeeZ.
     LoadKernelModule { module: KernelModule },
+    /// Windows: run the PawnIO installer shipped next to the exe, after
+    /// checking it against the SHA-256 pinned at build time.
+    InstallPawnIo,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,13 +59,15 @@ pub enum Risk {
 impl Action {
     pub fn privilege(&self) -> Privilege {
         match self {
-            Action::LoadKernelModule { .. } => Privilege::Admin,
+            Action::LoadKernelModule { .. } | Action::InstallPawnIo => Privilege::Admin,
         }
     }
 
     pub fn risk(&self) -> Risk {
         match self {
             Action::LoadKernelModule { .. } => Risk::Normal,
+            // Installs a kernel driver for the whole machine.
+            Action::InstallPawnIo => Risk::Critical,
         }
     }
 
@@ -70,6 +75,7 @@ impl Action {
     pub fn describe(&self) -> String {
         match self {
             Action::LoadKernelModule { module } => format!("Load the {} kernel module", module.name()),
+            Action::InstallPawnIo => "Install the PawnIO driver".into(),
         }
     }
 }
@@ -132,6 +138,7 @@ mod tests {
         assert_eq!(decode(&encode(&a)), Ok(a.clone()));
         assert_eq!(a.privilege(), Privilege::Admin);
         assert_eq!(a.describe(), "Load the msr kernel module");
+        assert_eq!(decode(&encode(&Action::InstallPawnIo)), Ok(Action::InstallPawnIo));
     }
 
     #[test]
@@ -146,6 +153,8 @@ mod tests {
             r#"{"op":"load-kernel-module","module":"evil"}"#,
             r#"{"op":"load-kernel-module","module":"msr","args":"-f"}"#,
             r#"{"op":"load-kernel-module"}"#,
+            r#"{"op":"install-paw-nio","path":"C:\x.exe"}"#,
+            r#"{"op":"install-pawn-io","path":"C:\x.exe"}"#,
             r#""load-kernel-module""#,
             "",
         ] {

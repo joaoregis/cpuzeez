@@ -17,7 +17,7 @@ Verify downloads with `SHA256SUMS.txt`.
 - The installers have **no publisher certificate**:
   - Windows: SmartScreen → *More info* → *Run anyway*.
   - macOS: executables are ad-hoc signed, but not Developer ID signed or notarized. Check `SHA256SUMS.txt`, attempt to open the app or `.pkg`, then use *System Settings → Privacy & Security → Open Anyway* and confirm *Open*. On macOS 11–12 use *System Preferences → Security & Privacy → General*. Repeat for the installed app if prompted. Right-click → *Open* no longer bypasses Gatekeeper on macOS 15 and later. See [Apple's instructions](https://support.apple.com/en-us/102445).
-- Windows: install [PawnIO](https://pawnio.eu) and its modules, then run as administrator, to get MSR, SPD, memory timings and Super I/O sensors.
+- Windows: CPU temperatures and power, SPD, memory timings and Super I/O sensors need the [PawnIO](https://pawnio.eu) driver and administrator rights. The packages ship PawnIO and its modules ([THIRD_PARTY.md](https://github.com/joaoregis/cpuzeez/blob/main/THIRD_PARTY.md)) but install the driver only if you ask: tick *Hardware access* in the MSI's *Custom Setup*, or press *Install hardware access* in the app.
 - Linux: run with `sudo` (and `modprobe msr i2c-dev`) for the same.
 - The benchmark is cpuzeez's own workload: scores are not comparable with CPU-Z's.
 
