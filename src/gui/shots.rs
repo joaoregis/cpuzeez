@@ -81,7 +81,7 @@ impl App {
     pub(crate) fn auto_shots(&mut self, ectx: &egui::Context, report: Option<&[Section]>) {
         let Some(a) = &self.auto else { return };
         ectx.request_repaint();
-        self.mon.tel(); // start sampling early so the Sensors shot has history
+        self.mon.tel().want("sensors", &[""]); // sample early so the Sensors shot has history
         // Let the report load and the clock sampler produce a value first.
         if report.is_none() || a.started.elapsed() < Duration::from_secs(3) || self.shot.is_some() {
             return;

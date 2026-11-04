@@ -200,7 +200,18 @@ impl Monitor {
             ectx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
         }
         if let Some((tel, _)) = &self.tel {
-            let series = tel.series();
+            // Leases for what runs without its page open; current values only.
+            let shown = ["cpu/", "gpu", "chipset/"];
+            if self.stress.running() {
+                tel.want("stress", &shown);
+            }
+            if self.tray.active() {
+                tel.want("tray", &shown);
+            }
+            if self.show_mini {
+                tel.want("mini", &shown);
+            }
+            let series = tel.series_with(|_| false);
             let (limit, tjmax) = (self.stress_limit(), self.tjmax());
             self.stress.tick(&series, limit);
             let tip = summary(&series)
@@ -242,7 +253,7 @@ impl Monitor {
 
     /// Always-on-top borderless window with the key readings (all OSes).
     fn mini(&mut self, ectx: &egui::Context) {
-        let series = self.tel().series();
+        let series = self.tel().series_with(|_| false);
         let tjmax = self.tjmax();
         let builder = egui::ViewportBuilder::default()
             .with_title(format!("{} · {}", crate::DISPLAY_NAME, tr("Mini monitor")))
@@ -424,7 +435,8 @@ fn group_icon(g: &str) -> &'static str {
 /// Sensors page: summary, toolbar, grouped table, charts of checked rows.
 pub fn page(ui: &mut egui::Ui, mon: &mut Monitor) {
     let tel = mon.tel();
-    let series = tel.series();
+    tel.want("sensors", &[""]);
+    let series = tel.series_with(|id| mon.view.plotted.contains(id));
     let tjmax = mon.tjmax();
     ui.ctx().request_repaint_after(Duration::from_millis(mon.settings.sample_ms.clamp(250, 1000)));
     widgets::page_header(ui, tr("Sensors"), "", |ui| toolbar_actions(ui, mon, &tel));

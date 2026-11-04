@@ -1,87 +1,30 @@
-//! Live sensor telemetry: one background sampler gathers every reading the app
-//! knows (CPU, GPU, mainboard/Super I/O, chipset, DIMMs, drives, battery), keeps
-//! a time series per sensor with min/max/average, writes CSV logs, and flags
-//! thermal / power throttling. The Sensors window, the stress monitor, the tray
-//! mini-monitor and `-sensors` / `-log=` all read from here.
+//! Live sensor telemetry on the Metric Engine (`cpuzeez_core::metrics`).
+//!
+//! This module provides the engine's sources (CPU + mainboard monitors, GPU,
+//! memory, drives, batteries) and two per-tick hooks: throttle detection and
+//! CSV logging. The Sensors page, Overview, stress monitor, tray, mini monitor
+//! and `-sensors` / `-log=` read from it. Nothing is sampled unless a consumer
+//! holds a lease (`Telemetry::want`), so hidden pages cost nothing.
 //!
 //! Ids are `<device>/<kind>/<name>`: device is `cpu`, `gpu<N>`, `board`,
 //! `chipset`, `mem`, `storage`, `battery<N>`; kind is `temp`, `volt`, `power`,
 //! `curr`, `clock`, `fan`, `load`, `level` or `size`; name is the sensor label
 //! lowercased with only `[a-z0-9]` kept (`+`→`p`, `-`→`m`, `.`→`_`), e.g.
 //! `cpu/temp/package`, `cpu/clock/core3`, `board/volt/p12v`, `gpu0/temp/core`.
-//! A clashing id gets `_2`, `_3`… in reading order.
-//!
-//! CSV log: a header line `time,<id1>,<id2>,…`, then a comment line
-//! `# units,<unit1>,<unit2>,…`, then one row per sample with an ISO-8601 UTC
-//! timestamp and empty cells for sensors missing from that sample. When a new
-//! sensor appears, a fresh header + units block is written with the old columns
-//! in the same positions and the new ones appended, so a reader restarts its
-//! column map on every line that starts with `time,`. Each row is written to
-//! the OS as soon as it is sampled.
+//! A clashing id within one source gets `_2`, `_3`… in reading order. The CSV
+//! format is documented on `cpuzeez_core::metrics::Csv`.
 
 mod os;
 
 use crate::Ctx;
 use crate::sensors::Kind;
-use std::collections::{HashMap, HashSet, VecDeque};
+use cpuzeez_core::metrics::{self, Class, Csv, Engine, Source, Tick};
+pub use cpuzeez_core::metrics::{Reading, Series, Snapshot, Unit};
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, Weak};
-use std::time::{Duration, Instant, SystemTime};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize)]
-pub enum Unit {
-    Celsius,
-    Volt,
-    Watt,
-    Ampere,
-    Mhz,
-    Rpm,
-    Percent,
-    Megabytes,
-}
-
-impl Unit {
-    pub fn suffix(self) -> &'static str {
-        match self {
-            Unit::Celsius => "°C",
-            Unit::Volt => "V",
-            Unit::Watt => "W",
-            Unit::Ampere => "A",
-            Unit::Mhz => "MHz",
-            Unit::Rpm => "RPM",
-            Unit::Percent => "%",
-            Unit::Megabytes => "MB",
-        }
-    }
-}
-
-/// One value from one pass over every source.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct Reading {
-    /// Stable key, e.g. "cpu/temp/package", "gpu0/temp/core", "board/fan/sys1".
-    pub id: String,
-    /// Display group: "CPU", "GPU · NVIDIA GeForce RTX 4060", "Mainboard", "Chipset", "Memory", "Storage", "Battery".
-    pub group: String,
-    pub label: String,
-    pub unit: Unit,
-    pub value: f64,
-}
-
-#[derive(Debug, Clone)]
-pub struct Series {
-    pub id: String,
-    pub group: String,
-    pub label: String,
-    pub unit: Unit,
-    /// (seconds since the sampler started, value), oldest first, bounded by `graph_seconds`.
-    pub points: Vec<(f64, f64)>,
-    pub current: f64,
-    pub min: f64,
-    pub max: f64,
-    pub avg: f64,
-}
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ThrottleKind {
@@ -183,17 +126,14 @@ fn group_rank(g: &str) -> u8 {
     }
 }
 
-/// One pass over every source (also used by `-sensors`).
+/// One pass over every source, in display order (`-sensors`).
 pub fn read_all(ctx: &Ctx) -> Vec<Reading> {
     let mut o = Out::default();
     let bats = crate::battery::batteries(ctx);
     monitors(ctx, &mut o, !bats.is_empty());
     cpu_extra(ctx, &mut o);
-    gpu(ctx, &mut o);
-    if let Some((total, used)) = os::memory() {
-        o.add("mem/load/used", "Memory", "Memory load", Unit::Percent, used * 100.0 / total);
-        o.add("mem/size/used", "Memory", "Memory used", Unit::Megabytes, used);
-    }
+    gpu(ctx, &crate::gpu::live(ctx), &mut o);
+    memory(&mut o);
     storage(ctx, &mut o);
     battery(&bats, &mut o);
     o.v.sort_by_key(|r| group_rank(&r.group));
@@ -281,8 +221,15 @@ fn gpu_group(ctx: &Ctx, i: usize) -> String {
     format!("GPU · {}", name.map_or_else(|| format!("GPU {i}"), str::to_string))
 }
 
-fn gpu(ctx: &Ctx, o: &mut Out) {
-    for l in crate::gpu::live(ctx) {
+fn memory(o: &mut Out) {
+    if let Some((total, used)) = os::memory() {
+        o.add("mem/load/used", "Memory", "Memory load", Unit::Percent, used * 100.0 / total);
+        o.add("mem/size/used", "Memory", "Memory used", Unit::Megabytes, used);
+    }
+}
+
+fn gpu(ctx: &Ctx, live: &[crate::gpu::Live], o: &mut Out) {
+    for l in live {
         let (g, p) = (gpu_group(ctx, l.adapter), format!("gpu{}", l.adapter));
         // ponytail: throttle reasons (l.throttle) aren't a numeric series; surface them when the UI has a flag slot.
         for (k, label, unit, v) in [
@@ -304,23 +251,12 @@ fn gpu(ctx: &Ctx, o: &mut Out) {
     }
 }
 
+/// Drive temperatures. Probing opens every drive, so this is a slow source.
 fn storage(ctx: &Ctx, o: &mut Out) {
-    // ponytail: probing opens every drive, so temps are refreshed every 10 s;
-    // a per-drive temperature query belongs in crate::storage if that is too slow.
-    static CACHE: Mutex<Option<(Instant, Vec<(String, f64)>)>> = Mutex::new(None);
-    let Ok(mut g) = CACHE.lock() else { return };
-    if g.as_ref().is_none_or(|c| c.0.elapsed() > Duration::from_secs(10)) {
-        let temps = crate::storage::drives(ctx)
-            .iter()
-            .map(|d| {
-                let t = d.health.iter().find(|(k, _)| k == "Temperature");
-                (d.name.clone(), t.and_then(|t| t.1.trim_end_matches('C').trim().parse().ok()).unwrap_or(f64::NAN))
-            })
-            .collect();
-        *g = Some((Instant::now(), temps));
-    }
-    for (i, (name, t)) in g.iter().flat_map(|c| c.1.iter()).enumerate() {
-        o.add(format!("storage/temp/disk{i}"), "Storage", name.clone(), Unit::Celsius, *t);
+    for (i, d) in crate::storage::drives(ctx).iter().enumerate() {
+        let t = d.health.iter().find(|(k, _)| k == "Temperature");
+        let t = t.and_then(|t| t.1.trim_end_matches('C').trim().parse().ok()).unwrap_or(f64::NAN);
+        o.add(format!("storage/temp/disk{i}"), "Storage", d.name.clone(), Unit::Celsius, t);
     }
 }
 
@@ -339,6 +275,123 @@ fn battery(bats: &[crate::battery::Battery], o: &mut Out) {
             }
         }
     }
+}
+
+// ---------------------------------------------------------------- sources
+
+/// Hardware monitors (CPU, mainboard Super I/O, chipset, DIMMs) plus OS load and
+/// the AMD SMU limits. One source because `sensors::monitors` reads them in one
+/// pass and their ids must stay unique together.
+struct CpuBoard {
+    ctx: Arc<Ctx>,
+    have_batteries: bool,
+}
+
+impl Source for CpuBoard {
+    fn name(&self) -> &'static str {
+        "cpu+board"
+    }
+    fn prefixes(&self) -> &'static [&'static str] {
+        &["cpu/", "board/", "chipset/", "mem/temp/", "battery"]
+    }
+    fn read(&mut self, out: &mut Vec<Reading>) {
+        let mut o = Out::default();
+        monitors(&self.ctx, &mut o, self.have_batteries);
+        cpu_extra(&self.ctx, &mut o);
+        out.append(&mut o.v);
+    }
+}
+
+struct Gpus {
+    ctx: Arc<Ctx>,
+    /// The full live structs (throttle reasons included) for the Clocks tool.
+    last: Arc<Mutex<Vec<crate::gpu::Live>>>,
+}
+
+impl Source for Gpus {
+    fn name(&self) -> &'static str {
+        "gpu"
+    }
+    fn prefixes(&self) -> &'static [&'static str] {
+        &["gpu"]
+    }
+    fn read(&mut self, out: &mut Vec<Reading>) {
+        let live = crate::gpu::live(&self.ctx);
+        let mut o = Out::default();
+        gpu(&self.ctx, &live, &mut o);
+        *lock(&self.last) = live;
+        out.append(&mut o.v);
+    }
+}
+
+struct Memory;
+
+impl Source for Memory {
+    fn name(&self) -> &'static str {
+        "memory"
+    }
+    fn prefixes(&self) -> &'static [&'static str] {
+        &["mem/load", "mem/size"]
+    }
+    fn read(&mut self, out: &mut Vec<Reading>) {
+        let mut o = Out::default();
+        memory(&mut o);
+        out.append(&mut o.v);
+    }
+}
+
+/// Drive temperatures: opening every drive is slow, so its own worker, every 10 s.
+struct Drives {
+    ctx: Arc<Ctx>,
+}
+
+impl Source for Drives {
+    fn name(&self) -> &'static str {
+        "storage"
+    }
+    fn prefixes(&self) -> &'static [&'static str] {
+        &["storage/"]
+    }
+    fn class(&self) -> Class {
+        Class::Slow
+    }
+    fn interval(&self) -> Duration {
+        Duration::from_secs(10)
+    }
+    fn read(&mut self, out: &mut Vec<Reading>) {
+        let mut o = Out::default();
+        storage(&self.ctx, &mut o);
+        out.append(&mut o.v);
+    }
+}
+
+/// Batteries: macOS spawns `ioreg`, so a slow source (every 5 s).
+struct Batteries {
+    ctx: Arc<Ctx>,
+}
+
+impl Source for Batteries {
+    fn name(&self) -> &'static str {
+        "battery"
+    }
+    fn prefixes(&self) -> &'static [&'static str] {
+        &["battery"]
+    }
+    fn class(&self) -> Class {
+        Class::Slow
+    }
+    fn interval(&self) -> Duration {
+        Duration::from_secs(5)
+    }
+    fn read(&mut self, out: &mut Vec<Reading>) {
+        let mut o = Out::default();
+        battery(&crate::battery::batteries(&self.ctx), &mut o);
+        out.append(&mut o.v);
+    }
+}
+
+fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 // ---------------------------------------------------------------- throttling
@@ -524,256 +577,127 @@ impl Debounce {
     }
 }
 
-// ---------------------------------------------------------------- history + CSV
+// ---------------------------------------------------------------- Telemetry
 
-struct Buf {
-    id: String,
-    group: String,
-    label: String,
-    unit: Unit,
-    points: VecDeque<(f64, f64)>,
-    current: f64,
-    min: f64,
-    max: f64,
-    sum: f64,
-    n: u64,
-}
-
-impl Buf {
-    fn reset(&mut self) {
-        (self.min, self.max, self.sum, self.n) = (f64::INFINITY, f64::NEG_INFINITY, 0.0, 0);
-    }
-}
-
-struct Csv {
-    path: PathBuf,
-    file: std::fs::File,
-    cols: Vec<(String, Unit)>,
-}
-
-/// `time,<ids>` + `# units,<units>` lines.
-fn csv_header(cols: &[(String, Unit)]) -> String {
-    let ids: Vec<&str> = cols.iter().map(|c| c.0.as_str()).collect();
-    let units: Vec<&str> = cols.iter().map(|c| c.1.suffix()).collect();
-    format!("time,{}\n# units,{}\n", ids.join(","), units.join(","))
-}
-
-fn csv_row(time: &str, cols: &[(String, Unit)], rs: &[Reading]) -> String {
-    let by: HashMap<&str, f64> = rs.iter().map(|r| (r.id.as_str(), r.value)).collect();
-    let mut s = time.to_string();
-    for (id, _) in cols {
-        s.push(',');
-        if let Some(v) = by.get(id.as_str()) {
-            s += &format!("{v:.3}");
-        }
-    }
-    s.push('\n');
-    s
-}
-
-impl Csv {
-    fn write(&mut self, wall: SystemTime, rs: &[Reading]) -> std::io::Result<()> {
-        let known: HashSet<&str> = self.cols.iter().map(|c| c.0.as_str()).collect();
-        let new: Vec<(String, Unit)> =
-            rs.iter().filter(|r| !known.contains(r.id.as_str())).map(|r| (r.id.clone(), r.unit)).collect();
-        let mut s = String::new();
-        if !new.is_empty() || self.cols.is_empty() {
-            self.cols.extend(new);
-            s += &csv_header(&self.cols);
-        }
-        s += &csv_row(&iso8601(wall), &self.cols, rs);
-        self.file.write_all(s.as_bytes())
-    }
-}
-
-/// UTC "2026-10-14T12:34:56.789Z" (days-from-civil inverse, Howard Hinnant's algorithm).
-fn iso8601(t: SystemTime) -> String {
-    let d = t.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default();
-    let (secs, ms) = (d.as_secs() as i64, d.subsec_millis());
-    let (days, sod) = (secs.div_euclid(86400), secs.rem_euclid(86400));
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = doy - (153 * mp + 2) / 5 + 1;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = yoe + era * 400 + i64::from(month <= 2);
-    format!("{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}.{ms:03}Z", sod / 3600, sod / 60 % 60, sod % 60)
-}
-
-struct State {
-    /// Seconds of history kept per series.
-    keep: f64,
-    series: Vec<Buf>,
-    index: HashMap<String, usize>,
-    debounce: Debounce,
-    throttles: Vec<Throttle>,
-    csv: Option<Csv>,
-}
-
-impl State {
-    fn new(keep: f64) -> State {
-        State {
-            keep,
-            series: Vec::new(),
-            index: HashMap::new(),
-            debounce: Debounce::default(),
-            throttles: Vec::new(),
-            csv: None,
-        }
-    }
-
-    fn push(&mut self, t: f64, wall: SystemTime, rs: &[Reading]) {
-        for r in rs {
-            let i = *self.index.entry(r.id.clone()).or_insert_with(|| {
-                self.series.push(Buf {
-                    id: r.id.clone(),
-                    group: r.group.clone(),
-                    label: r.label.clone(),
-                    unit: r.unit,
-                    points: VecDeque::new(),
-                    current: r.value,
-                    min: f64::INFINITY,
-                    max: f64::NEG_INFINITY,
-                    sum: 0.0,
-                    n: 0,
-                });
-                self.series.len() - 1
-            });
-            let b = &mut self.series[i];
-            b.label.clone_from(&r.label);
-            b.points.push_back((t, r.value));
-            b.current = r.value;
-            b.min = b.min.min(r.value);
-            b.max = b.max.max(r.value);
-            b.sum += r.value;
-            b.n += 1;
-        }
-        for b in &mut self.series {
-            while b.points.front().is_some_and(|p| p.0 < t - self.keep) {
-                b.points.pop_front();
-            }
-        }
-        if let Some(c) = &mut self.csv
-            && let Err(e) = c.write(wall, rs)
-        {
-            eprintln!("{}: {e}; CSV logging stopped", c.path.display());
-            self.csv = None;
-        }
-    }
-
-    fn peak(&self, id: &str) -> Option<f64> {
-        let b = &self.series[*self.index.get(id)?];
-        b.points.iter().map(|p| p.1).reduce(f64::max)
-    }
-
-    fn snapshot(&self) -> Vec<Series> {
-        self.series
-            .iter()
-            .map(|b| {
-                let none = b.n == 0;
-                Series {
-                    id: b.id.clone(),
-                    group: b.group.clone(),
-                    label: b.label.clone(),
-                    unit: b.unit,
-                    points: b.points.iter().copied().collect(),
-                    current: b.current,
-                    min: if none { b.current } else { b.min },
-                    max: if none { b.current } else { b.max },
-                    avg: if none { b.current } else { b.sum / b.n as f64 },
-                }
-            })
-            .collect()
-    }
-}
-
-struct Inner {
-    st: Mutex<State>,
-    period_ms: AtomicU64,
-}
-
-/// Background sampler. Cheap to clone; stops when the last clone is dropped.
+/// The app's engine plus its throttle and CSV hooks. Cheap to clone; the engine
+/// stops when the last clone is dropped.
 #[derive(Clone)]
 pub struct Telemetry {
-    inner: Arc<Inner>,
-}
-
-fn period_ms(p: Duration) -> u64 {
-    (p.as_millis() as u64).max(100)
-}
-
-fn sampler(ctx: Arc<Ctx>, weak: Weak<Inner>, tjmax: f64) {
-    let t0 = Instant::now();
-    let slowdown: Vec<Option<f64>> = crate::gpu::adapters(&ctx).iter().map(|a| a.thermal_limits[1]).collect();
-    let mut counts = None;
-    loop {
-        let start = Instant::now();
-        let rs = read_all(&ctx);
-        let mut conds = hw_conds(&ctx, &mut counts);
-        let Some(inner) = weak.upgrade() else { return };
-        let t = t0.elapsed().as_secs_f64();
-        {
-            let mut st = inner.st.lock().unwrap_or_else(|e| e.into_inner());
-            st.push(t, SystemTime::now(), &rs);
-            let l = Limits { tjmax, clock_peak: st.peak("cpu/clock/avg"), gpu_slowdown: &slowdown };
-            conds.extend(reading_conds(&rs, &l));
-            st.throttles = st.debounce.update(t, conds);
-        }
-        let period = Duration::from_millis(inner.period_ms.load(Ordering::Relaxed));
-        drop(inner);
-        std::thread::sleep(period.saturating_sub(start.elapsed()));
-    }
+    engine: Engine,
+    throttles: Arc<Mutex<Vec<Throttle>>>,
+    csv: Arc<Mutex<Option<Csv>>>,
+    /// Set while a CSV log runs (the engine then reads every source).
+    logging: Arc<AtomicBool>,
+    gpu_live: Arc<Mutex<Vec<crate::gpu::Live>>>,
 }
 
 impl Telemetry {
     pub fn start(ctx: Arc<Ctx>, period: Duration, keep: Duration) -> Telemetry {
-        let inner = Arc::new(Inner {
-            st: Mutex::new(State::new(keep.as_secs_f64())),
-            period_ms: AtomicU64::new(period_ms(period)),
-        });
-        let tjmax = crate::cpu::get(&ctx).info.tjmax_c.unwrap_or_else(|| crate::settings::Settings::load().warn_temp_c);
-        let weak = Arc::downgrade(&inner);
-        let spawned = std::thread::Builder::new().name("telemetry".into()).spawn(move || sampler(ctx, weak, tjmax));
-        if let Err(e) = spawned {
-            eprintln!("telemetry: {e}");
-        }
-        Telemetry { inner }
+        let gpu_live = Arc::new(Mutex::new(Vec::new()));
+        let have_batteries = !crate::battery::batteries(&ctx).is_empty();
+        let sources: Vec<Box<dyn Source>> = vec![
+            Box::new(CpuBoard { ctx: ctx.clone(), have_batteries }),
+            Box::new(Gpus { ctx: ctx.clone(), last: gpu_live.clone() }),
+            Box::new(Memory),
+            Box::new(Drives { ctx: ctx.clone() }),
+            Box::new(Batteries { ctx: ctx.clone() }),
+        ];
+        let engine = Engine::start(sources, metrics::Config { period, keep, ..Default::default() });
+        let t = Telemetry { engine, throttles: Arc::default(), csv: Arc::default(), logging: Arc::default(), gpu_live };
+        t.engine.add_hook(throttle_hook(ctx, t.throttles.clone()));
+        let csv = t.csv.clone();
+        t.engine.add_hook(Box::new(move |tick: &Tick| {
+            let mut c = lock(&csv);
+            if let Some(f) = c.as_mut()
+                && let Err(e) = f.write(tick.wall, tick.readings)
+            {
+                eprintln!("{}: {e}; CSV logging stopped", f.path.display());
+                *c = None;
+            }
+        }));
+        t
     }
-    fn st(&self) -> MutexGuard<'_, State> {
-        self.inner.st.lock().unwrap_or_else(|e| e.into_inner())
+
+    /// Keep sampling the metrics under `prefixes` ("" = all) for a few more
+    /// seconds. Call it every frame from whatever shows them.
+    pub fn want(&self, key: &str, prefixes: &[&str]) {
+        self.engine.want(key, prefixes);
     }
+
+    /// Current values and statistics of every metric (no history).
+    pub fn snapshot(&self) -> Arc<Snapshot> {
+        self.engine.snapshot()
+    }
+
+    /// Every metric with its full kept history.
     pub fn series(&self) -> Vec<Series> {
-        self.st().snapshot()
+        self.engine.series(|_| true)
     }
+
+    /// Every metric; history only for ids where `with_points(id)` is true.
+    pub fn series_with(&self, with_points: impl Fn(&str) -> bool) -> Vec<Series> {
+        self.engine.series(with_points)
+    }
+
     /// Clear min/max/avg (keeps the graphs).
     pub fn reset_stats(&self) {
-        self.st().series.iter_mut().for_each(Buf::reset);
+        self.engine.reset_stats();
     }
+
     /// Active throttling events (empty when none).
     pub fn throttling(&self) -> Vec<Throttle> {
-        self.st().throttles.clone()
+        lock(&self.throttles).clone()
     }
+
     pub fn set_period(&self, period: Duration) {
-        self.inner.period_ms.store(period_ms(period), Ordering::Relaxed);
+        self.engine.set_period(period);
     }
-    /// Append every sample to `path` as CSV (header = sensor ids) until `stop_csv`.
-    pub fn start_csv(&self, path: &Path) -> std::io::Result<()> {
-        if let Some(d) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
-            std::fs::create_dir_all(d)?;
-        }
-        let file = std::fs::OpenOptions::new().create(true).append(true).open(path)?;
-        self.st().csv = Some(Csv { path: path.to_path_buf(), file, cols: Vec::new() });
+
+    /// Latest full GPU live data (clocks, temperatures, throttle reasons).
+    pub fn gpu_live(&self) -> Vec<crate::gpu::Live> {
+        lock(&self.gpu_live).clone()
+    }
+
+    /// Sources that failed recently: (name, error).
+    pub fn failures(&self) -> Vec<(&'static str, String)> {
+        self.engine.failures()
+    }
+
+    /// Append every sample of every metric to `path` as CSV until `stop_csv`.
+    pub fn start_csv(&self, path: &std::path::Path) -> std::io::Result<()> {
+        *lock(&self.csv) = Some(Csv::create(path)?);
+        self.logging.store(true, Ordering::Relaxed);
+        self.engine.set_always(true);
         Ok(())
     }
+
     pub fn stop_csv(&self) {
-        self.st().csv = None;
+        *lock(&self.csv) = None;
+        self.logging.store(false, Ordering::Relaxed);
+        self.engine.set_always(false);
     }
+
     pub fn csv_path(&self) -> Option<std::path::PathBuf> {
-        self.st().csv.as_ref().map(|c| c.path.clone())
+        let path = lock(&self.csv).as_ref().map(|c| c.path.clone());
+        if path.is_none() && self.logging.swap(false, Ordering::Relaxed) {
+            self.engine.set_always(false); // the hook stopped it after a write error
+        }
+        path
     }
+}
+
+/// Throttle detection after every tick: reading-based rules plus hardware/OS
+/// flags, debounced.
+fn throttle_hook(ctx: Arc<Ctx>, out: Arc<Mutex<Vec<Throttle>>>) -> metrics::Hook {
+    let tjmax = crate::cpu::get(&ctx).info.tjmax_c.unwrap_or_else(|| crate::settings::Settings::load().warn_temp_c);
+    let slowdown: Vec<Option<f64>> = crate::gpu::adapters(&ctx).iter().map(|a| a.thermal_limits[1]).collect();
+    let (mut counts, mut debounce) = (None, Debounce::default());
+    Box::new(move |tick: &Tick| {
+        let mut conds = hw_conds(&ctx, &mut counts);
+        let l = Limits { tjmax, clock_peak: tick.peak("cpu/clock/avg"), gpu_slowdown: &slowdown };
+        conds.extend(reading_conds(tick.readings, &l));
+        *lock(&out) = debounce.update(tick.t, conds);
+    })
 }
 
 // ---------------------------------------------------------------- CLI
@@ -787,9 +711,9 @@ pub fn cli_once(ctx: &Ctx) {
 
 /// One-line live status for `-log=`.
 fn status(tel: &Telemetry, secs: u64) -> String {
-    let s = tel.series();
-    let get = |id: &str| s.iter().find(|x| x.id == id).map(|x| x.current);
-    let mut out = format!("[{secs:>4} s] {} sensors", s.len());
+    let s = tel.snapshot();
+    let get = |id: &str| s.get(id).map(|x| x.current);
+    let mut out = format!("[{secs:>4} s] {} sensors", s.stats.len());
     for (dev, ids) in [
         ("CPU", [("cpu/temp/package", "°C"), ("cpu/clock/avg", "MHz"), ("cpu/load/total", "%")]),
         ("GPU", [("gpu0/temp/core", "°C"), ("gpu0/clock/core", "MHz"), ("gpu0/load/core", "%")]),
@@ -851,66 +775,6 @@ mod tests {
         o.add("a/b/d", "CPU", "x", Unit::Volt, f64::NAN);
         let ids: Vec<&str> = o.v.iter().map(|r| r.id.as_str()).collect();
         assert_eq!(ids, ["a/b/c", "a/b/c_2"]);
-    }
-
-    #[test]
-    fn ring_buffer_bounded_by_keep() {
-        let mut st = State::new(10.0);
-        for t in 0..=30 {
-            st.push(t as f64, SystemTime::now(), &[r("x", Unit::Celsius, t as f64)]);
-        }
-        let s = &st.snapshot()[0];
-        assert_eq!(s.points.len(), 11);
-        assert_eq!(s.points[0], (20.0, 20.0));
-        assert_eq!(s.points.last(), Some(&(30.0, 30.0)));
-        // Stats cover everything since start, not only the kept window.
-        assert_eq!((s.min, s.max, s.avg, s.current), (0.0, 30.0, 15.0, 30.0));
-    }
-
-    #[test]
-    fn stats_and_reset() {
-        let mut st = State::new(100.0);
-        for (t, v) in [1.0, 5.0, 3.0].into_iter().enumerate() {
-            st.push(t as f64, SystemTime::now(), &[r("x", Unit::Volt, v)]);
-        }
-        let s = &st.snapshot()[0];
-        assert_eq!((s.min, s.max, s.avg), (1.0, 5.0, 3.0));
-        st.series.iter_mut().for_each(Buf::reset);
-        let s = &st.snapshot()[0];
-        assert_eq!((s.min, s.max, s.avg), (3.0, 3.0, 3.0), "no samples since reset: current value");
-        st.push(3.0, SystemTime::now(), &[r("x", Unit::Volt, 4.0)]);
-        let s = &st.snapshot()[0];
-        assert_eq!((s.min, s.max, s.avg, s.points.len()), (4.0, 4.0, 4.0, 4), "graph kept");
-    }
-
-    #[test]
-    fn timestamps() {
-        let at = |s: u64, ms: u64| iso8601(SystemTime::UNIX_EPOCH + Duration::from_millis(s * 1000 + ms));
-        assert_eq!(at(0, 0), "1970-01-01T00:00:00.000Z");
-        assert_eq!(at(1_700_000_000, 42), "2023-11-14T22:13:20.042Z");
-        assert_eq!(at(951_782_400, 0), "2000-02-29T00:00:00.000Z");
-    }
-
-    #[test]
-    fn csv_header_rows_and_new_columns() {
-        let path = std::env::temp_dir().join(format!("cpuzeez_tel_{}.csv", std::process::id()));
-        let _ = std::fs::remove_file(&path);
-        let file = std::fs::OpenOptions::new().create(true).append(true).open(&path).unwrap();
-        let mut st = State::new(60.0);
-        st.csv = Some(Csv { path: path.clone(), file, cols: Vec::new() });
-        let t = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
-        st.push(0.0, t, &[r("cpu/temp/package", Unit::Celsius, 45.5), r("cpu/volt/vid", Unit::Volt, 1.1)]);
-        st.push(1.0, t, &[r("cpu/volt/vid", Unit::Volt, 1.2)]);
-        st.push(2.0, t, &[r("cpu/temp/package", Unit::Celsius, 46.0), r("gpu0/temp/core", Unit::Celsius, 50.0)]);
-        st.csv = None;
-        let got = std::fs::read_to_string(&path).unwrap();
-        let _ = std::fs::remove_file(&path);
-        let ts = "2023-11-14T22:13:20.000Z";
-        let want = format!(
-            "time,cpu/temp/package,cpu/volt/vid\n# units,°C,V\n{ts},45.500,1.100\n{ts},,1.200\n\
-             time,cpu/temp/package,cpu/volt/vid,gpu0/temp/core\n# units,°C,V,°C\n{ts},46.000,,50.000\n"
-        );
-        assert_eq!(got, want);
     }
 
     fn c(key: &str) -> Cond {

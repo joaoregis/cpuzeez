@@ -225,7 +225,8 @@ pub fn page(ui: &mut egui::Ui, mon: &mut Monitor, controls: bool) {
         };
         banner(ui, tone, &format!("{what} · {}", t.device), &t.detail);
     }
-    let series = tel.series();
+    tel.want("stress", &["cpu/", "gpu"]);
+    let series = tel.series_with(|id| id.starts_with("cpu/") || id.starts_with("gpu"));
     let tjmax = mon.tjmax();
     let st = &mon.stress;
     let cpu_t = sensors::cpu_temp(&series);

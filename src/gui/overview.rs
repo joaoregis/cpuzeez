@@ -111,7 +111,10 @@ fn sgi(r: &[Section], s: &str, g: &str, k: &str) -> String {
 pub fn page(ui: &mut Ui, ctx: &Ctx, r: &[Section], tel: &Telemetry, core_mhz: Option<f64>) {
     let p = theme::palette(ui);
     let c = crate::cpu::get(ctx);
-    let series = tel.series();
+    tel.want("overview", &["cpu/", "gpu", "chipset/"]);
+    // Points only for the sparklines.
+    let series =
+        tel.series_with(|id| ["cpu/temp", "cpu/clock", "gpu", "chipset/temp"].iter().any(|p| id.starts_with(p)));
     let board = format!("{} {}", sgi(r, "DMI", "DMI Baseboard", "vendor"), sgi(r, "DMI", "DMI Baseboard", "model"));
     let mut sub = vec![];
     if let Some(cn) = &c.info.codename {
