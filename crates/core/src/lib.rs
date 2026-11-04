@@ -12,7 +12,9 @@ pub const NAME: &str = "cpuzeez";
 pub const DISPLAY_NAME: &str = "CpuZeeZ";
 
 pub mod config;
+pub mod pci;
 pub mod report;
+pub mod smbios;
 
 pub mod cpu {
     pub mod db;

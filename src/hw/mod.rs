@@ -9,20 +9,7 @@ mod linux;
 #[cfg(windows)]
 mod windows;
 
-/// PCI function address.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Bdf {
-    pub seg: u16,
-    pub bus: u8,
-    pub dev: u8,
-    pub func: u8,
-}
-
-impl std::fmt::Display for Bdf {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:04x}:{:02x}:{:02x}.{}", self.seg, self.bus, self.dev, self.func)
-    }
-}
+pub use cpuzeez_core::pci::Bdf;
 
 /// One SMBus/I2C adapter that can talk to DIMM SPD/thermal/PMIC devices.
 pub trait Smbus: Send + Sync {

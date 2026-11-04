@@ -402,7 +402,7 @@ pub fn device_nodes(d: &Device) -> Vec<Node> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::hw::Bdf;
+    use crate::pci::Bdf;
     use crate::report::to_txt;
 
     /// Root port 00:01.1 of the reference machine (first 0x110 bytes of its dump).
