@@ -523,10 +523,11 @@ mod tests {
 
     #[test]
     fn short_run() {
-        let b = Bench::spawn(vec![None, None], Variant::best(), Duration::from_millis(100));
+        // 500 ms: a slow, shared CI runner (macOS x64) can finish no iteration in 100 ms.
+        let b = Bench::spawn(vec![None, None], Variant::best(), Duration::from_millis(500));
         assert!(b.progress() < 1.0);
         let s = b.wait().unwrap();
-        assert!(s.points > 0.0 && s.threads == 2);
+        assert!(s.points > 0.0 && s.threads == 2, "{} points on {} threads", s.points, s.threads);
         let b = Bench::spawn(vec![None], Variant::Scalar, Duration::from_secs(10));
         b.cancel();
         assert!(b.wait().is_none());
