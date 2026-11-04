@@ -235,6 +235,9 @@ impl<'a, R> Table<'a, R> {
             }
             x += c.width;
         }
+        // Painted text is invisible to screen readers: describe the header.
+        let header: Vec<&str> = shown.iter().map(|c| c.title.as_str()).collect();
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, header.join(", ")));
         resp.context_menu(|ui| {
             ui.label(egui::RichText::new(tr("Columns")).strong());
             for c in &self.cols {
@@ -271,6 +274,11 @@ impl<'a, R> Table<'a, R> {
                                 font.clone(),
                                 p.text,
                             );
+                            let state = if *collapsed { "collapsed" } else { "expanded" };
+                            let label = format!("{name}, {count}, {state}");
+                            resp.widget_info(|| {
+                                egui::WidgetInfo::labeled(egui::WidgetType::CollapsingHeader, true, &label)
+                            });
                             if resp.clicked() {
                                 toggle = Some(name.clone());
                             }
@@ -286,6 +294,12 @@ impl<'a, R> Table<'a, R> {
                                 egui::Color32::TRANSPARENT
                             };
                             ui.painter().rect_filled(r, egui::CornerRadius::same(4), bg);
+                            // The row as text for screen readers (and the GUI tests).
+                            let text: Vec<String> = shown.iter().map(|c| (c.cell)(row).shown().to_string()).collect();
+                            let label = text.join(", ");
+                            resp.widget_info(|| {
+                                egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, &label)
+                            });
                             let mut x = r.left() + 8.0;
                             for c in &shown {
                                 let cr = Rect::from_min_size(egui::pos2(x, r.top()), vec2(c.width - 6.0, row_h));
@@ -478,6 +492,34 @@ mod tests {
         let st = State { hidden: ["pid".to_string()].into(), filter: "game".into(), ..Default::default() };
         let items = view(&r, &c, &st, None);
         assert_eq!(to_tsv(&r, &c, &items, &st), "Name\tCPU\ngame.exe\t55.0 %\n");
+    }
+
+    /// GUI interaction through the accessibility tree (egui_kittest).
+    #[test]
+    fn rows_are_readable_selectable_and_filterable() {
+        use egui_kittest::{Harness, kittest::Queryable};
+        let r = rows();
+        let mut h = Harness::new_ui_state(
+            |ui, st: &mut State| {
+                let t = Table { id: "procs", cols: cols(), key: Box::new(|p: &P| p.pid), group: None };
+                t.show(ui, &r, st, |_, _| {});
+            },
+            State::default(),
+        );
+        h.run();
+        h.get_by_label("game.exe, 99, 55.0 %").click();
+        h.run();
+        assert_eq!(h.state().selected, [99].into());
+        h.get_by_label("chrome.exe, 42, 12.0 %").click_modifiers(egui::Modifiers::COMMAND);
+        h.run();
+        assert_eq!(h.state().selected, [42, 99].into(), "Ctrl/Cmd+click adds to the selection");
+        h.get_by_role(egui::accesskit::Role::TextInput).click();
+        h.run();
+        h.get_by_role(egui::accesskit::Role::TextInput).type_text("cpu>50");
+        h.run(); // the filter applies to the next frame's rows
+        h.run();
+        assert!(h.query_by_label("chrome.exe, 42, 12.0 %").is_none(), "filtered out");
+        assert!(h.query_by_label("game.exe, 99, 55.0 %").is_some());
     }
 
     #[test]

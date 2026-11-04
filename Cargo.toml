@@ -69,5 +69,10 @@ lto = "thin"
 codegen-units = 1
 strip = true
 
+# GUI interaction tests through the accessibility tree (S0-T05). Tests run on
+# stable Rust; rust-version above is what building the app needs.
+[dev-dependencies]
+egui_kittest = "0.36"
+
 [build-dependencies]
 winresource = "0.1"

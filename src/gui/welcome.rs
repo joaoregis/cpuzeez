@@ -108,3 +108,51 @@ pub fn page(ui: &mut egui::Ui, w: &mut Welcome, updates_allowed: bool) -> Option
     });
     done
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use egui_kittest::{Harness, kittest::Queryable};
+
+    /// (screen state, the answer once Continue is pressed)
+    type St = (Welcome, Option<bool>);
+
+    fn harness<'a>() -> Harness<'a, St> {
+        // Tall enough that Continue is on screen (the page scrolls in the app).
+        Harness::builder().with_size(egui::vec2(900.0, 1400.0)).build_ui_state(
+            |ui, st: &mut St| {
+                // The harness draws a frame while it is built: install the app's
+                // text styles then, and draw from the next frame on.
+                if !ui.style().text_styles.contains_key(&egui::TextStyle::Name("title".into())) {
+                    super::super::theme::install(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                if let Some(d) = page(ui, &mut st.0, true) {
+                    st.1 = Some(d);
+                }
+            },
+            (Welcome::default(), None),
+        )
+    }
+
+    #[test]
+    fn continuing_without_ticking_means_no_update_check() {
+        let mut h = harness();
+        h.run();
+        h.get_by_label("Continue").click();
+        h.run();
+        assert_eq!(h.state().1, Some(false), "the update check is opt-in (P1)");
+    }
+
+    #[test]
+    fn ticking_the_box_opts_in() {
+        let mut h = harness();
+        h.run();
+        h.get_by_label("Check for new versions at startup").click();
+        h.run();
+        h.get_by_label("Continue").click();
+        h.run();
+        assert_eq!(h.state().1, Some(true));
+    }
+}
