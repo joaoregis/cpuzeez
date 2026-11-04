@@ -529,6 +529,7 @@ version = "0.3.0"
 dependencies = [
  "cpuzeez-core",
  "libc",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

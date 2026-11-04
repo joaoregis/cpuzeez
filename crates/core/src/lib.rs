@@ -11,6 +11,7 @@ pub const NAME: &str = "cpuzeez";
 /// Name shown to people (window title, About, report headers).
 pub const DISPLAY_NAME: &str = "CpuZeeZ";
 
+pub mod availability;
 pub mod config;
 pub mod metrics;
 pub mod pci;

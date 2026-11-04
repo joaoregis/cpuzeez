@@ -4,6 +4,7 @@
 // Style-only lints; the tuple/type shapes are local to one function each.
 #![allow(clippy::type_complexity, clippy::field_reassign_with_default)]
 
+mod access;
 mod battery;
 mod bench;
 mod bios;
@@ -94,6 +95,7 @@ fn main() {
     let mut outs = Vec::new();
     let (mut console, mut bench, mut core, mut coremask) = (false, false, None, None);
     let mut shots: Option<std::path::PathBuf> = None;
+    let mut handoff = None;
     for a in std::env::args().skip(1) {
         let (k, v) = a.split_once('=').map_or((a.as_str(), ""), |(k, v)| (k, v));
         match k.to_ascii_lowercase().trim_start_matches('-') {
@@ -114,6 +116,8 @@ fn main() {
             "core" => core = v.parse::<usize>().ok(),
             "coremask" => coremask = u64::from_str_radix(v.trim_start_matches("0x"), 16).ok(),
             "screenshots" => shots = Some(if v.is_empty() { "screenshots" } else { v }.into()),
+            // Set by "Restart as administrator" on Linux; see platform::elevation.
+            "elevated-handoff" => handoff = Some(v.to_string()),
             "h" | "help" | "?" => return println!("{USAGE}"),
             _ => return eprintln!("unknown option {a}\n{USAGE}"),
         }
@@ -130,6 +134,9 @@ fn main() {
         #[cfg(feature = "gui")]
         {
             os::hide_own_console();
+            if let Some(m) = &handoff {
+                cpuzeez_platform::elevation::signal_handoff(m);
+            }
             return gui::run(ctx, shots);
         }
         #[cfg(not(feature = "gui"))]

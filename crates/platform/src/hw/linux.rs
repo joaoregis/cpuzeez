@@ -77,6 +77,20 @@ impl Linux {
 }
 
 impl Hw for Linux {
+    fn caps(&self) -> super::Caps {
+        // SMBus (i2c-dev), the SMN/UMC and MCHBAR paths all need root; the
+        // PCH temperature comes from the kernel's hwmon driver instead.
+        let root = unsafe { libc::geteuid() } == 0;
+        super::Caps {
+            msr: self.msr,
+            superio: self.port.is_some(),
+            smbus: root,
+            smu: std::path::Path::new(RYZEN_SMU).exists(),
+            imc: root,
+            pch: false,
+        }
+    }
+
     fn name(&self) -> String {
         let mut v = vec!["linux sysfs"];
         if self.msr {

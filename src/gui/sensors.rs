@@ -191,6 +191,12 @@ impl Monitor {
         }
     }
 
+    /// Close the app for real (not to the tray).
+    pub fn quit(&mut self, ectx: &egui::Context) {
+        self.quitting = true;
+        ectx.send_viewport_cmd(egui::ViewportCommand::Close);
+    }
+
     /// Call every frame from the app: windows, tray events, auto-stop, close-to-tray.
     pub fn frame(&mut self, ectx: &egui::Context) {
         if !self.started {
@@ -207,10 +213,7 @@ impl Monitor {
                     ectx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
                     ectx.send_viewport_cmd(egui::ViewportCommand::Focus);
                 }
-                tray::Action::Quit => {
-                    self.quitting = true;
-                    ectx.send_viewport_cmd(egui::ViewportCommand::Close);
-                }
+                tray::Action::Quit => self.quit(ectx),
             }
         }
         if self.tray.active()

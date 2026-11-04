@@ -4,6 +4,7 @@
 //! tree as `-txt`. F5 BMP, F6 clipboard, F7 .cvf (our JSON). UI text goes
 //! through `i18n::tr` (English keys; tables at the end of each file).
 
+mod access_ui;
 mod bench_tab;
 mod bmp;
 mod devices;
@@ -134,6 +135,8 @@ struct AutoShots {
 struct App {
     ctx: Arc<Ctx>,
     report: Arc<Mutex<Option<Vec<Section>>>>,
+    /// Capability banners and "Restart as administrator".
+    access: access_ui::Access,
     page: Page,
     /// Reload history.json when the History view is opened.
     history_dirty: bool,
@@ -191,6 +194,7 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
     let app = App {
         ctx,
         report,
+        access: Default::default(),
         page: Page::Overview,
         history_dirty: true,
         bench_view: BenchView::Cpu,
@@ -250,6 +254,10 @@ impl eframe::App for App {
         ectx.request_repaint_after(Duration::from_millis(500));
         self.hotkeys(&ectx);
         self.minimized_title(&ectx);
+        self.access.frame(&ectx);
+        if std::mem::take(&mut self.access.restarted) {
+            self.mon.quit(&ectx); // the elevated copy is up
+        }
 
         let report = self.report.lock().unwrap().clone();
         // Tray menu / monitor shortcuts navigate instead of opening windows.
@@ -280,14 +288,20 @@ impl eframe::App for App {
                     });
                     return;
                 };
+                // The capability banner reflects this machine; CI screenshots would show the runner's.
+                let caps = if self.auto.is_some() { &[][..] } else { access_ui::page_caps(page_name(self.page)) };
                 if self.page == Page::Sensors {
                     // Full-height dashboard with its own scrolling table and charts.
+                    self.access.banner(ui, &self.ctx, page_name(self.page), caps);
                     self.page_body(ui, r);
                 } else {
-                    egui::ScrollArea::vertical()
-                        .auto_shrink([false, false])
-                        .id_salt(page_name(self.page))
-                        .show(ui, |ui| self.page_body(ui, r));
+                    egui::ScrollArea::vertical().auto_shrink([false, false]).id_salt(page_name(self.page)).show(
+                        ui,
+                        |ui| {
+                            self.access.banner(ui, &self.ctx, page_name(self.page), caps);
+                            self.page_body(ui, r)
+                        },
+                    );
                 }
             });
         self.mon.frame(&ectx);

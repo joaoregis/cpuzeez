@@ -30,8 +30,29 @@ pub trait Smbus: Send + Sync {
     }
 }
 
+/// What the privileged backend can do here; drives the capability banners.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Caps {
+    /// Model-specific registers (per-core clocks, temperatures, power, P-states).
+    pub msr: bool,
+    /// Super I/O port access (mainboard voltages, fans, temperatures).
+    pub superio: bool,
+    /// SMBus to the DIMMs (SPD, DIMM temperatures).
+    pub smbus: bool,
+    /// AMD SMU metrics table.
+    pub smu: bool,
+    /// Memory-controller registers (live timings): AMD SMN/UMC or Intel MCHBAR.
+    pub imc: bool,
+    /// Intel PCH (chipset) temperature.
+    pub pch: bool,
+}
+
 pub trait Hw: Send + Sync {
     fn name(&self) -> String;
+    /// What this backend can do on this machine.
+    fn caps(&self) -> Caps {
+        Caps::default()
+    }
     fn rdmsr(&self, _cpu: usize, _msr: u32) -> Option<u64> {
         None
     }
@@ -90,6 +111,14 @@ impl Hw for NoHw {
     fn name(&self) -> String {
         "none (user mode only)".into()
     }
+}
+
+/// The privileged driver is installed (Windows: PawnIO). Unix needs none.
+pub fn driver_installed() -> bool {
+    #[cfg(windows)]
+    return windows::installed();
+    #[allow(unreachable_code)]
+    false
 }
 
 /// Best backend available on this machine right now.

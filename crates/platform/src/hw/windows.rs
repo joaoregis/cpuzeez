@@ -56,6 +56,12 @@ fn install_dir() -> Option<PathBuf> {
         .or_else(|| std::env::var_os("ProgramFiles").map(|p| Path::new(&p).join("PawnIO")))
 }
 
+/// PawnIO is installed (its library is in the install folder), whether or not
+/// this process may open it.
+pub fn installed() -> bool {
+    install_dir().is_some_and(|d| d.join("PawnIOLib.dll").is_file())
+}
+
 impl Lib {
     /// Loaded once and never freed: modules hold handles for the process lifetime.
     fn load(dir: &Path) -> Option<&'static Lib> {
@@ -368,6 +374,17 @@ impl PawnIo {
 }
 
 impl Hw for PawnIo {
+    fn caps(&self) -> super::Caps {
+        super::Caps {
+            msr: self.msr.is_some(),
+            superio: self.sio.iter().any(Option::is_some),
+            smbus: !self.smbus.is_empty(),
+            smu: self.smu.is_some(),
+            imc: self.smn || self.mchbar.is_some(),
+            pch: self.pch.is_some(),
+        }
+    }
+
     fn name(&self) -> String {
         let mut mods: Vec<&str> = self.msr.iter().map(|m| m.name).collect();
         if self.sio.iter().any(Option::is_some) {

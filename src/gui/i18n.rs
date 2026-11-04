@@ -33,6 +33,7 @@ fn tables() -> &'static [(Table, Table)] {
         (super::settings_ui::PT_BR, super::settings_ui::ES),
         (super::tools::PT_BR, super::tools::ES),
         (super::devices::PT_BR, super::devices::ES),
+        (super::access_ui::PT_BR, super::access_ui::ES),
     ]
 }
 
