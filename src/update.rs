@@ -91,13 +91,33 @@ fn pick(assets: &[Asset], suffixes: &[String]) -> Option<Asset> {
     suffixes.iter().find_map(|s| assets.iter().find(|a| a.name.ends_with(s.as_str())).cloned())
 }
 
-/// Semver-ish compare of "major.minor.patch" (pre-release tags sort lower).
+/// SemVer precedence: "major.minor.patch", then pre-releases below the release
+/// they precede, ordered identifier by identifier (`beta.2` > `beta.1`, `rc.1` > `beta.9`).
 pub fn newer(current: &str, latest: &str) -> bool {
-    fn key(v: &str) -> (Vec<u64>, bool) {
-        let (core, pre) = v.trim_start_matches('v').split_once('-').map_or((v, false), |(c, _)| (c, true));
-        (core.trim_start_matches('v').split('.').map(|p| p.parse().unwrap_or(0)).collect(), !pre)
+    use std::cmp::Ordering;
+    // Numeric identifiers sort before alphanumeric ones and compare as numbers (SemVer §11).
+    #[derive(PartialEq, Eq, PartialOrd, Ord)]
+    enum Id<'a> {
+        Num(u64),
+        Text(&'a str),
     }
-    key(latest) > key(current)
+    fn parse(v: &str) -> (Vec<u64>, Option<Vec<Id<'_>>>) {
+        let v = v.trim().trim_start_matches('v');
+        let v = v.split_once('+').map_or(v, |(c, _)| c); // build metadata never counts
+        let (core, pre) = v.split_once('-').map_or((v, None), |(c, p)| (c, Some(p)));
+        let core = core.split('.').map(|p| p.parse().unwrap_or(0)).collect();
+        let pre = pre.map(|p| p.split('.').map(|i| i.parse().map_or(Id::Text(i), Id::Num)).collect());
+        (core, pre)
+    }
+    let ((lc, lp), (cc, cp)) = (parse(latest), parse(current));
+    match lc.cmp(&cc) {
+        Ordering::Equal => match (lp, cp) {
+            (None, Some(_)) => true,     // the release beats its own pre-releases
+            (Some(l), Some(c)) => l > c, // Vec compares element-wise, then the longer wins
+            _ => false,
+        },
+        o => o == Ordering::Greater,
+    }
 }
 
 /// `-checkupdate`
@@ -397,6 +417,22 @@ mod tests {
         assert!(!newer("0.1.0", "0.1.0"));
         assert!(newer("0.2.0-rc1", "0.2.0"));
         assert!(!newer("0.2.0", "0.2.0-rc1"));
+    }
+
+    #[test]
+    fn prerelease_order() {
+        // The 1.0 release chain: each step must be offered over the previous one.
+        let chain =
+            ["0.3.0", "1.0.0-beta.1", "1.0.0-beta.2", "1.0.0-beta.10", "1.0.0-rc.1", "1.0.0-rc.2", "1.0.0", "1.0.1"];
+        for w in chain.windows(2) {
+            assert!(newer(w[0], w[1]), "{} -> {}", w[0], w[1]);
+            assert!(!newer(w[1], w[0]), "{} -> {} must not be an update", w[1], w[0]);
+        }
+        assert!(!newer("1.0.0-beta.2", "1.0.0-beta.2"));
+        // SemVer §11 details: numeric < alphanumeric, a longer identifier set wins, build metadata is ignored.
+        assert!(newer("1.0.0-1", "1.0.0-alpha"));
+        assert!(newer("1.0.0-beta", "1.0.0-beta.1"));
+        assert!(!newer("1.0.0+abc", "1.0.0+def"));
     }
 
     #[test]
