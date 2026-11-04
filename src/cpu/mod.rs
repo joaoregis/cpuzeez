@@ -4,7 +4,7 @@
 #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
 mod arm;
 pub mod clocks;
-pub mod db;
+pub use cpuzeez_core::cpu::db;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub mod x86;
 

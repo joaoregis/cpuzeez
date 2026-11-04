@@ -16,8 +16,28 @@
 // Parsers stay OS-neutral so their unit tests run on every host.
 #![allow(dead_code)]
 
-mod smart;
-pub use smart::*;
+pub use cpuzeez_core::storage::smart::*;
+/// `smartctl -j -a <dev>` when smartmontools is installed. Exit bits 0/1 mean
+/// the command or the device open failed; higher bits only report findings.
+#[cfg(unix)]
+pub fn smartctl(dev: &str) -> Option<Smart> {
+    for exe in [
+        "smartctl",
+        "/usr/sbin/smartctl",
+        "/usr/local/sbin/smartctl",
+        "/opt/homebrew/bin/smartctl",
+        "/usr/local/bin/smartctl",
+    ] {
+        let Ok(o) = std::process::Command::new(exe).args(["-j", "-a", dev]).output() else { continue };
+        if o.status.code().is_some_and(|c| c & 3 == 0)
+            && let Ok(v) = serde_json::from_slice::<serde_json::Value>(&o.stdout)
+        {
+            return from_smartctl(&v);
+        }
+        return None; // found smartctl but it couldn't read this device
+    }
+    None
+}
 
 use crate::Ctx;
 use crate::report::{Node, Section, f, gv, section};

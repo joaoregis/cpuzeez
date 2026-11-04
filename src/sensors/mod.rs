@@ -6,7 +6,7 @@
 //! (privileged), then whatever the OS exposes without privileges (Linux
 //! hwmon/powercap/cpufreq, Windows PDH counters + power status, Apple SMC).
 
-mod amd_pm;
+use cpuzeez_core::sensors::amd_pm;
 mod cpu;
 mod hwmon;
 #[cfg(target_os = "macos")]

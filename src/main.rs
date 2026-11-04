@@ -8,7 +8,6 @@ mod battery;
 mod bench;
 mod bios;
 mod chipset;
-mod config;
 mod cpu;
 mod diff;
 mod gpu;
@@ -21,7 +20,6 @@ mod network;
 mod npu;
 mod os;
 mod pci;
-mod report;
 mod sensors;
 mod settings;
 mod smbios;
@@ -36,10 +34,8 @@ mod usb;
 use report::{Section, f, section};
 use std::sync::OnceLock;
 
-/// Binary, package and file-name stem.
-pub const NAME: &str = "cpuzeez";
-/// Name shown to people (window title, About, report headers).
-pub const DISPLAY_NAME: &str = "CpuZeeZ";
+// Pure logic lives in cpuzeez-core (docs/adr/0011); these keep the old `crate::` paths.
+pub use cpuzeez_core::{DISPLAY_NAME, NAME, config, report};
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const REPO_URL: &str = env!("CARGO_PKG_REPOSITORY");
 

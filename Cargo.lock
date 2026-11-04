@@ -502,6 +502,7 @@ dependencies = [
 name = "cpuzeez"
 version = "0.3.0"
 dependencies = [
+ "cpuzeez-core",
  "eframe",
  "egui-phosphor",
  "ksni",
@@ -511,6 +512,14 @@ dependencies = [
  "serde_json",
  "tray-icon",
  "winresource",
+]
+
+[[package]]
+name = "cpuzeez-core"
+version = "0.3.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

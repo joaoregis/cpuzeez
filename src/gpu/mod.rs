@@ -2,10 +2,10 @@
 //! Each OS backend fills a `Probe`; this file owns the model and the report
 //! layout (CPU-Z's field names and value formats).
 
-pub mod db;
+pub use cpuzeez_core::gpu::db;
 #[cfg(any(windows, target_os = "linux"))]
 pub(crate) mod dl;
-pub mod edid;
+pub use cpuzeez_core::gpu::edid;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
