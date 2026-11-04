@@ -289,8 +289,9 @@ impl Monitor {
 
     /// Always-on-top borderless window with the key readings (all OSes).
     fn mini(&mut self, ectx: &egui::Context) {
-        let series = self.tel().series_with(|_| false);
-        let tjmax = self.tjmax();
+        let tel = self.tel();
+        let series = tel.series_with(|_| false);
+        let layout = cpuzeez_core::layout::presets::mini(self.tjmax());
         let builder = egui::ViewportBuilder::default()
             .with_title(format!("{} · {}", crate::DISPLAY_NAME, tr("Mini monitor")))
             .with_inner_size(MINI_SIZE)
@@ -313,17 +314,12 @@ impl Monitor {
                         keep = false;
                     }
                 });
-                summary_row(ui, &series, tjmax);
-                let clocks = core_clocks(&series);
-                let mut line = Vec::new();
-                if !clocks.is_empty() {
-                    let avg = clocks.iter().map(|s| s.current).sum::<f64>() / clocks.len() as f64;
-                    line.push(fmt(avg, Unit::Mhz));
+                let drawn = super::layout_view::show(ui, &layout, &series, &|id| tel.points(id)).rect;
+                // Fit the window to what was drawn (fonts and DPI vary by OS).
+                let want = egui::vec2(drawn.width(), drawn.height()) + egui::vec2(16.0, 16.0);
+                if (ui.ctx().content_rect().size() - want).length() > 2.0 {
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(want));
                 }
-                if let Some(p) = package_power(&series) {
-                    line.push(fmt(p.current, Unit::Watt));
-                }
-                ui.label(RichText::new(line.join(" · ")).monospace());
             });
             keep
         });
@@ -663,6 +659,15 @@ fn log_path() -> Option<PathBuf> {
     let dir = crate::settings::dir()?.join("logs");
     std::fs::create_dir_all(&dir).ok()?;
     Some(dir.join(format!("{}-{}.csv", crate::NAME, local_stamp())))
+}
+
+/// Local time as "HH:MM:SS" (the layouts' Clock widget).
+pub fn local_time() -> String {
+    let s = local_stamp(); // YYYYMMDD-HHMMSS
+    match (s.get(9..11), s.get(11..13), s.get(13..15)) {
+        (Some(h), Some(m), Some(sec)) => format!("{h}:{m}:{sec}"),
+        _ => String::new(),
+    }
 }
 
 fn local_stamp() -> String {

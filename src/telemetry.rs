@@ -674,6 +674,11 @@ impl Telemetry {
         self.engine.series(with_points)
     }
 
+    /// Kept history of one metric (engine seconds, value), oldest first.
+    pub fn points(&self, id: &str) -> Vec<(f64, f64)> {
+        self.engine.points(id, 0.0)
+    }
+
     /// Clear min/max/avg (keeps the graphs).
     pub fn reset_stats(&self) {
         self.engine.reset_stats();

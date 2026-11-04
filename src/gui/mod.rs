@@ -15,6 +15,7 @@ mod settings_ui;
 mod shots;
 mod update_ui;
 // ---- monitoring (sensors / stress / tray) ----
+pub mod layout_view;
 mod plot;
 pub mod sensors;
 pub mod stress;
