@@ -18,6 +18,7 @@ mod update_ui;
 mod plot;
 pub mod sensors;
 pub mod stress;
+pub mod table;
 mod tray;
 mod welcome;
 // ---- end monitoring ----

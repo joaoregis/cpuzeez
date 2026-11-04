@@ -16,6 +16,7 @@ pub mod availability;
 pub mod config;
 pub mod metrics;
 pub mod pci;
+pub mod query;
 pub mod report;
 pub mod smbios;
 
