@@ -263,6 +263,13 @@ Mixing them confuses comparisons. We use the **percentile** by default, offer th
 - No injection, no reading the game's memory, handles only with `PROCESS_QUERY_LIMITED_INFORMATION`.
 - ETW/PresentMon is what official tools use (Intel PresentMon, NVIDIA FrameView), and it never touches the process.
 - PawnIO is a signed driver and isn't on Microsoft's vulnerable-driver blocklist. 🔬 **SP7:** check with common kernel anti-cheats (Vanguard, FACEIT) whether a loaded PawnIO causes blocks. If it does, the overlay must run in "no PawnIO" mode (GPU/OS data only) and say so.
+  - **Compatibility list** (S0-X08; add a row per anti-cheat as it's tested):
+
+    | Anti-cheat | Version / game | PawnIO loaded | Result | Date |
+    |---|---|---|---|---|
+    | Riot Vanguard (`vgk`, boot-start) | League of Legends client open, not in a match | 2.2.0.0, CpuZeeZ elevated with AMDFamily17, LpcIO, SmbusPIIX4, RyzenSMU | ✅ Both drivers running together; CpuZeeZ read every sensor; the client kept running | 2026-11-04 |
+    | Riot Vanguard | in a League or Valorant match | | 🔬 To test: a match with CpuZeeZ elevated | |
+    | FACEIT, EasyAntiCheat, BattlEye | | | 🔬 To test | |
 - Nothing is recorded without opt-in, and ● REC is always visible on the overlay while capturing.
 
 ## 8. Per-OS limits (honest summary)

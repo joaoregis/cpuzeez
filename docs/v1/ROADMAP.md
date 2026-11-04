@@ -120,7 +120,7 @@ Goal: fix what's broken, build the shared building blocks, and set up the tests 
 | S0-X05 | **SP4** Wayland layer-shell with winit/eframe | ZeeZ Live | PoC on KDE/Hyprland, or a "MangoHud only" ADR |
 | S0-X06 | **SP5** MangoHud live data latency | ZeeZ Live | < 1 s, or a "post-session only" ADR |
 | S0-X07 | **SP6** Metal HUD log; ScreenCaptureKit FPS cost | ZeeZ Live | Feasibility + cost |
-| S0-X08 | **SP7** PawnIO × kernel anti-cheats (Vanguard, FACEIT…) | ZeeZ Live | Compatibility list |
+| S0-X08 | **SP7** PawnIO × kernel anti-cheats (Vanguard, FACEIT…) | ZeeZ Live | Compatibility list. 🟡 Started in zeez-live §5: Vanguard + PawnIO coexist outside a match; in-match and FACEIT/EAC/BattlEye need a player (see the S0 gate note) |
 | S0-X09 | **SP8** overlay GPU cost | ZeeZ Live | < 0.3 ms per game frame |
 | S0-X10 | Per-process network: ETW Kernel-Network (Win), eBPF/sock_diag (Linux), `nettop` (macOS) | System | Feasibility per OS. ✅ task-manager §3: ETW (admin), sock_diag TCP_INFO (no eBPF), `nettop` sidecar. macOS needs a check on the Mac (docs/testing/macos.md) |
 | S0-X11 | Per-process GPU on macOS (IOAccelerator `AppUsage`); "not responding" on macOS | System | Feasibility |
