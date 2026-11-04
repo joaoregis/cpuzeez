@@ -40,10 +40,84 @@ pub fn logical_cpus() -> usize {
     std::thread::available_parallelism().map_or(1, |n| n.get())
 }
 
-/// Run `f` on a thread pinned to logical CPU `cpu` (global index).
+/// Run `f` on the calling thread while it is pinned to logical CPU `cpu`
+/// (global index), then restore the thread's previous affinity.
 /// Returns None if the OS can't pin (macOS) so callers can fall back.
-pub fn on_cpu<T: Send>(cpu: usize, f: impl FnOnce() -> T + Send) -> Option<T> {
-    std::thread::scope(|s| s.spawn(move || pin(cpu).then(f)).join().ok().flatten())
+///
+/// The sampler reads per-core MSRs every tick, so this must not create a
+/// thread per call (it used to).
+pub fn on_cpu<T>(cpu: usize, f: impl FnOnce() -> T) -> Option<T> {
+    let _restore = Pinned::to(cpu)?;
+    Some(f())
+}
+
+/// The calling thread pinned to one CPU; the previous affinity comes back on drop.
+struct Pinned {
+    #[cfg(windows)]
+    prev: win::GroupAffinity,
+    #[cfg(target_os = "linux")]
+    prev: libc::cpu_set_t,
+}
+
+impl Pinned {
+    #[cfg(windows)]
+    fn to(cpu: usize) -> Option<Pinned> {
+        let mut rest = cpu as u32;
+        // SAFETY: GetCurrentThread is a pseudo-handle; both structs outlive the calls.
+        unsafe {
+            for grp in 0..win::GetActiveProcessorGroupCount() {
+                let n = win::GetActiveProcessorCount(grp);
+                if rest < n {
+                    let ga = win::GroupAffinity { mask: 1usize << rest, group: grp, reserved: [0; 3] };
+                    let mut prev = win::GroupAffinity { mask: 0, group: 0, reserved: [0; 3] };
+                    if win::SetThreadGroupAffinity(win::GetCurrentThread(), &ga, &mut prev) == 0 {
+                        return None;
+                    }
+                    std::thread::yield_now(); // migrate now, before `f` runs
+                    return Some(Pinned { prev });
+                }
+                rest -= n;
+            }
+        }
+        None
+    }
+
+    #[cfg(target_os = "linux")]
+    fn to(cpu: usize) -> Option<Pinned> {
+        // SAFETY: cpu_set_t is plain data; pid 0 targets the calling thread.
+        unsafe {
+            let size = std::mem::size_of::<libc::cpu_set_t>();
+            let mut prev: libc::cpu_set_t = std::mem::zeroed();
+            if libc::sched_getaffinity(0, size, &mut prev) != 0 {
+                return None;
+            }
+            let mut set: libc::cpu_set_t = std::mem::zeroed();
+            libc::CPU_SET(cpu, &mut set);
+            if libc::sched_setaffinity(0, size, &set) != 0 {
+                return None;
+            }
+            let p = Pinned { prev };
+            (libc::sched_getcpu() == cpu as i32).then_some(p)
+        }
+    }
+
+    #[cfg(not(any(windows, target_os = "linux")))]
+    fn to(_cpu: usize) -> Option<Pinned> {
+        None // macOS has no hard thread affinity.
+    }
+}
+
+#[cfg(any(windows, target_os = "linux"))]
+impl Drop for Pinned {
+    fn drop(&mut self) {
+        // SAFETY: restores the affinity saved by `to` on the same thread.
+        unsafe {
+            #[cfg(windows)]
+            win::SetThreadGroupAffinity(win::GetCurrentThread(), &self.prev, std::ptr::null_mut());
+            #[cfg(target_os = "linux")]
+            libc::sched_setaffinity(0, std::mem::size_of::<libc::cpu_set_t>(), &self.prev);
+        }
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -182,5 +256,33 @@ pub mod win {
         let n = b.len().min(8);
         a[..n].copy_from_slice(&b[..n]);
         Some(u64::from_le_bytes(a))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[cfg(any(windows, target_os = "linux"))]
+    fn on_cpu_runs_on_the_calling_thread() {
+        let me = std::thread::current().id();
+        let last = logical_cpus() - 1;
+        for cpu in [0, last] {
+            assert_eq!(on_cpu(cpu, || std::thread::current().id()), Some(me), "cpu {cpu}");
+        }
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn on_cpu_restores_affinity() {
+        let get = || unsafe {
+            let mut s: libc::cpu_set_t = std::mem::zeroed();
+            libc::sched_getaffinity(0, std::mem::size_of::<libc::cpu_set_t>(), &mut s);
+            (0..logical_cpus()).filter(|&c| libc::CPU_ISSET(c, &s)).collect::<Vec<_>>()
+        };
+        let before = get();
+        on_cpu(0, || ());
+        assert_eq!(get(), before);
     }
 }

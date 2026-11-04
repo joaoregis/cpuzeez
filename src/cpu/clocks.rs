@@ -65,11 +65,46 @@ pub fn core_mhz(ctx: &Ctx, cpu: usize) -> Option<(f64, Source)> {
     crate::os::on_cpu(cpu, run).or_else(|| (cpu == 0).then(run)).map(|m| (m, Source::AddChain))
 }
 
+/// (APERF, MPERF) MSR numbers. AMD also mirrors them read-only at C00000E8/E7,
+/// and some PawnIO allow-lists only permit those.
+fn aperf_mperf_regs(ctx: &Ctx) -> (u32, u32) {
+    static REGS: std::sync::OnceLock<(u32, u32)> = std::sync::OnceLock::new();
+    *REGS.get_or_init(|| {
+        if ctx.hw.rdmsr(0, MSR_APERF).is_some() { (MSR_APERF, MSR_MPERF) } else { (0xC000_00E8, 0xC000_00E7) }
+    })
+}
+
+/// Clock `cpu` actually ran at since the previous call for it: TSC rate ×
+/// ΔAPERF/ΔMPERF. Both counters only advance while the core is awake (C0), so
+/// this adds no load of its own, unlike `core_mhz`, which keeps the core busy
+/// to report its loaded clock. Used by the live sampler. None on the first call
+/// for a CPU, when the core slept for the whole interval, or without MSR access.
+pub fn active_mhz(ctx: &Ctx, cpu: usize) -> Option<f64> {
+    use std::sync::Mutex;
+    static LAST: Mutex<Vec<Option<(u64, u64)>>> = Mutex::new(Vec::new());
+    let tsc = tsc_hz()?;
+    let (ra, rm) = aperf_mperf_regs(ctx);
+    let (a, m) = (ctx.hw.rdmsr(cpu, ra)?, ctx.hw.rdmsr(cpu, rm)?);
+    let prev = {
+        let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+        if last.len() <= cpu {
+            last.resize(cpu + 1, None);
+        }
+        last[cpu].replace((a, m))
+    };
+    let (a0, m0) = prev?;
+    active_from_deltas(tsc, a.wrapping_sub(a0), m.wrapping_sub(m0))
+}
+
+/// MHz from counter deltas; below ~1 µs of MPERF the core was asleep throughout.
+fn active_from_deltas(tsc_hz: f64, d_aperf: u64, d_mperf: u64) -> Option<f64> {
+    (d_mperf as f64 > tsc_hz * 1e-6).then(|| tsc_hz * d_aperf as f64 / d_mperf as f64 / 1e6)
+}
+
 fn aperf_mperf(ctx: &Ctx, cpu: usize) -> Option<f64> {
     let tsc = tsc_hz()?;
     let hw = &ctx.hw;
-    // AMD also mirrors them read-only at C00000E7/E8 (some allow-lists only permit those).
-    let (ra, rm) = if hw.rdmsr(cpu, MSR_APERF).is_some() { (MSR_APERF, MSR_MPERF) } else { (0xC000_00E8, 0xC000_00E7) };
+    let (ra, rm) = aperf_mperf_regs(ctx);
     let a0 = hw.rdmsr(cpu, ra)?;
     let m0 = hw.rdmsr(cpu, rm)?;
     // Keep that core busy while sampling, else we measure an idle core.
@@ -179,6 +214,16 @@ fn adds(iters: u64) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn active_clock_from_deltas() {
+        let tsc = 4.7e9;
+        // Ran at 5.2 GHz while awake, however long it slept in between.
+        let m = super::active_from_deltas(tsc, 5_200_000, 4_700_000).unwrap();
+        assert!((m - 5200.0).abs() < 1e-6, "{m}");
+        // Asleep for the whole interval: no reading rather than a made-up one.
+        assert_eq!(super::active_from_deltas(tsc, 10, 100), None);
+    }
+
     #[test]
     fn plausible_clock() {
         let m = super::add_chain_mhz(std::time::Duration::from_millis(50));

@@ -472,11 +472,18 @@ fn powercap(m: &mut Monitor) {
     }
 }
 
-/// Current MHz of each physical core: APERF/MPERF when MSRs are readable,
-/// else the OS's own figure.
+/// Current MHz of each physical core: APERF/MPERF deltas since the previous
+/// sample when MSRs are readable (no load added), else the OS's own figure.
 fn core_clocks(ctx: &Ctx, cores: &[usize]) -> Vec<Option<f64>> {
-    if ctx.hw.rdmsr(0, 0xE8).is_some() {
-        return cores.iter().map(|&c| crate::cpu::clocks::core_mhz(ctx, c).map(|x| x.0)).collect();
+    if ctx.hw.rdmsr(0, 0xE8).is_some() || ctx.hw.rdmsr(0, 0xC000_00E8).is_some() {
+        let read = || cores.iter().map(|&c| crate::cpu::clocks::active_mhz(ctx, c)).collect::<Vec<_>>();
+        let v = read();
+        if v.iter().any(Option::is_some) {
+            return v;
+        }
+        // First call (a one-shot report): deltas need a second reading. Sleep, don't spin.
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        return read();
     }
     #[cfg(target_os = "linux")]
     return cores
