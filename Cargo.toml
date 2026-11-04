@@ -15,6 +15,8 @@ authors = ["Joao Regis <22204842+joaoregis@users.noreply.github.com>"]
 
 [workspace]
 members = ["crates/*"]
+# Fuzzing needs nightly and libFuzzer; see fuzz/Cargo.toml.
+exclude = ["fuzz"]
 
 [dependencies]
 cpuzeez-core = { path = "crates/core" }

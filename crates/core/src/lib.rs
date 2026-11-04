@@ -19,6 +19,8 @@ pub mod metrics;
 pub mod pci;
 pub mod query;
 pub mod report;
+#[cfg(test)]
+mod robustness;
 pub mod smbios;
 
 pub mod cpu {
