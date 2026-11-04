@@ -100,14 +100,29 @@ Cada [release](https://github.com/joaoregis/cpuzeez/releases) traz um instalador
 | Arch Linux | `cpuzeez-bin-<ver>-1-x86_64.pkg.tar.zst` | `sudo pacman -U cpuzeez-bin-*.pkg.tar.zst` |
 | Qualquer Linux (glibc 2.35+) | `cpuzeez-<ver>-linux-<arch>.tar.gz` | Binário, arquivo `.desktop` e ícones |
 
-> **Sem certificado do publicador.** Os instaladores não têm assinatura com certificado do publicador, porque isso exige certificado pago. Os executáveis macOS usam assinatura ad-hoc, que não identifica o desenvolvedor nem fornece notarização da Apple.
-> - **Windows:** o SmartScreen pode mostrar "O Windows protegeu o computador". Clique em *Mais informações → Executar assim mesmo*.
-> - **macOS:** o Gatekeeper pode bloquear o app ou o `.pkg` porque a Apple não consegue verificar o desenvolvedor.
->   1. Confira o download com o `SHA256SUMS.txt`.
->   2. Tente abrir uma vez e feche o aviso.
->   3. Vá a *Ajustes do Sistema → Privacidade e Segurança → Abrir Mesmo Assim* e confirme *Abrir*.
->
->   Para o `.pkg`, conclua a instalação e repita para o app se aparecer outro aviso. No macOS 11–12, a opção fica em *Preferências do Sistema → Segurança e Privacidade → Geral*. Clicar com o botão direito → *Abrir* não contorna mais essa verificação no macOS 15 ou posterior. Veja as [instruções da Apple](https://support.apple.com/pt-br/102445).
+### Por que o Windows ou o macOS mostra um aviso de segurança
+
+**O CpuZeeZ não é assinado com certificado do publicador.** No Windows, tirar o aviso exige um certificado de assinatura de código. No macOS, exige a assinatura paga do Apple Developer (US$ 99/ano) para a notarização. Os dois custam dinheiro todo ano, e o CpuZeeZ é um projeto gratuito, ainda sem orçamento para isso. Os executáveis do macOS usam assinatura ad-hoc: ela permite rodar, mas não identifica o desenvolvedor nem vale como notarização.
+
+**O que o aviso significa.** O Windows e o macOS não conseguem saber quem publicou o arquivo. **Não significa que um vírus foi encontrado.** O SmartScreen funciona por reputação e avisa sobre downloads sem assinatura que ainda foram pouco executados.
+
+**Como conferir se o seu download é legítimo:**
+1. Toda versão traz o `SHA256SUMS.txt`. Compare o hash do seu arquivo com o da lista:
+   - Windows (PowerShell): `Get-FileHash .\cpuzeez-<ver>-windows-x64.msi -Algorithm SHA256`
+   - macOS: `shasum -a 256 cpuzeez-<ver>-macos-universal.dmg`
+   - Linux: `sha256sum cpuzeez_<ver>_amd64.deb`
+2. Toda versão é gerada pelo [workflow de release](.github/workflows/release.yml) público, nos servidores do GitHub, a partir do commit marcado deste código aberto. Os logs da compilação são públicos.
+3. O atualizador do app confere o SHA-256 sozinho antes de instalar qualquer coisa ([Atualizações](#atualizações)).
+
+**Como continuar:**
+- **Windows:** quando o SmartScreen mostrar "O Windows protegeu o computador", clique em *Mais informações → Executar assim mesmo*.
+- **macOS:** o Gatekeeper pode bloquear o app ou o `.pkg` porque a Apple não consegue verificar o desenvolvedor.
+  1. Confira o download com o `SHA256SUMS.txt` (acima).
+  2. Tente abrir uma vez e feche o aviso.
+  3. Vá a *Ajustes do Sistema → Privacidade e Segurança → Abrir Mesmo Assim* e confirme *Abrir*.
+
+  Para o `.pkg`, conclua a instalação e repita para o app se aparecer outro aviso. No macOS 11–12, a opção fica em *Preferências do Sistema → Segurança e Privacidade → Geral*. Clicar com o botão direito → *Abrir* não contorna mais essa verificação no macOS 15 ou posterior. Veja as [instruções da Apple](https://support.apple.com/pt-br/102445).
+- **Linux:** pacotes instalados com `apt`, `pacman` ou pelo tarball não mostram esse aviso.
 
 Com Rust instalado, também dá para usar `cargo install --git https://github.com/joaoregis/cpuzeez`.
 

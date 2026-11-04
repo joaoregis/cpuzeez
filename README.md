@@ -120,14 +120,29 @@ Every [release](https://github.com/joaoregis/cpuzeez/releases) ships an installe
 | Arch Linux | `cpuzeez-bin-<ver>-1-x86_64.pkg.tar.zst` | `sudo pacman -U cpuzeez-bin-*.pkg.tar.zst` |
 | Any Linux (glibc 2.35+) | `cpuzeez-<ver>-linux-<arch>.tar.gz` | Binary, `.desktop` file and icons |
 
-> **No publisher certificate.** The installers are not signed with a publisher certificate, because that needs a paid certificate. macOS executables use ad-hoc signatures, which neither identify the developer nor provide Apple notarization.
-> - **Windows:** SmartScreen may say "Windows protected your PC". Click *More info → Run anyway*.
-> - **macOS:** Gatekeeper may block the app or the `.pkg` because Apple cannot verify the developer.
->   1. Check your download against `SHA256SUMS.txt`.
->   2. Try to open it once and dismiss the alert.
->   3. Go to *System Settings → Privacy & Security → Open Anyway* and confirm *Open*.
->
->   For the `.pkg`, finish installing and repeat for the app if prompted. On macOS 11–12 this setting is under *System Preferences → Security & Privacy → General*. Right-click → *Open* no longer bypasses this check on macOS 15 and later; see [Apple's instructions](https://support.apple.com/en-us/102445).
+### Why Windows or macOS shows a security warning
+
+**CpuZeeZ is not signed with a publisher certificate.** On Windows, removing the warning needs a code-signing certificate. On macOS it needs a paid Apple Developer membership (US$ 99/year) for notarization. Both cost money every year, and CpuZeeZ is a free project with no budget for that yet. macOS executables are ad-hoc signed, which keeps them runnable but neither identifies the developer nor counts as notarization.
+
+**What the warning means.** Windows and macOS can't tell who published the file. **It doesn't mean malware was found.** SmartScreen is reputation-based and warns about unsigned downloads that few people have run yet.
+
+**How to check that your download is genuine:**
+1. Every release ships `SHA256SUMS.txt`. Compare your file's hash with the one listed:
+   - Windows (PowerShell): `Get-FileHash .\cpuzeez-<ver>-windows-x64.msi -Algorithm SHA256`
+   - macOS: `shasum -a 256 cpuzeez-<ver>-macos-universal.dmg`
+   - Linux: `sha256sum cpuzeez_<ver>_amd64.deb`
+2. Every release is built by the public [release workflow](.github/workflows/release.yml) on GitHub's servers, from the tagged commit of this open-source code. The build logs are public.
+3. The in-app updater checks the SHA-256 for you before it installs anything ([Updates](#updates)).
+
+**How to continue:**
+- **Windows:** when SmartScreen says "Windows protected your PC", click *More info → Run anyway*.
+- **macOS:** Gatekeeper may block the app or the `.pkg` because Apple cannot verify the developer.
+  1. Check your download against `SHA256SUMS.txt` (above).
+  2. Try to open it once and dismiss the alert.
+  3. Go to *System Settings → Privacy & Security → Open Anyway* and confirm *Open*.
+
+  For the `.pkg`, finish installing and repeat for the app if prompted. On macOS 11–12 this setting is under *System Preferences → Security & Privacy → General*. Right-click → *Open* no longer bypasses this check on macOS 15 and later; see [Apple's instructions](https://support.apple.com/en-us/102445).
+- **Linux:** packages installed with `apt`, `pacman` or from the tarball show no such warning.
 
 With Rust installed you can also run `cargo install --git https://github.com/joaoregis/cpuzeez`.
 

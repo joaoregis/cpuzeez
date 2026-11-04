@@ -5,6 +5,25 @@ All notable changes to CpuZeeZ are documented here. The format follows
 [Semantic Versioning](https://semver.org/). Each release's notes on GitHub are
 generated from its section below.
 
+## [Unreleased]
+
+### Added
+
+- **1.0 plan** in [`docs/v1/`](docs/v1/README.md). Nothing is implemented yet. It covers:
+  - Principles: local-first data, opt-in recording, transparent privileges, no injection, zero install friction.
+  - A diagnosis of 0.3.0.
+  - The target architecture, engineering practices and per-stage quality gates.
+  - A dependency and bundling policy.
+  - A permissions map and the roadmap (one 1.0.0 release, built in four internal stages).
+  - Designs for **ZeeZ Live** (overlay, capture, reports), the bottleneck detector and the cross-platform System hub (Task Manager).
+  - Improvements to the existing pages, the tray icon and the mini monitor.
+  - A detailed roadmap ([`docs/v1/ROADMAP.md`](docs/v1/ROADMAP.md)) listing every fix, improvement and feature by stage, with IDs and acceptance criteria.
+- Static-analysis evidence scripts for the Task Manager design (`docs/v1/evidence/`).
+
+### Changed
+
+- README (English and pt-BR): the install section now explains why the builds are unsigned (a paid certificate the project can't fund yet), what the SmartScreen/Gatekeeper warning means, and how to verify a download with `SHA256SUMS.txt`.
+
 ## [0.3.0] - 2026-10-14
 
 A redesigned interface, a hardware monitor, memory and cache benchmarks,
@@ -98,6 +117,7 @@ features.
 - GUI with CPU-Z's tabs.
 - Installers for Windows (MSI), macOS (DMG/PKG), Debian/Ubuntu (DEB) and Arch.
 
+[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v0.3.0...HEAD
 [0.3.0]: https://github.com/joaoregis/cpuzeez/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/joaoregis/cpuzeez/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/joaoregis/cpuzeez/releases/tag/v0.1.0
