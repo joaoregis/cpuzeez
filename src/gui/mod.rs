@@ -19,6 +19,7 @@ mod plot;
 pub mod sensors;
 pub mod stress;
 mod tray;
+mod welcome;
 // ---- end monitoring ----
 pub mod theme;
 mod tools;
@@ -137,6 +138,8 @@ struct App {
     report: Arc<Mutex<Option<Vec<Section>>>>,
     /// Capability banners and "Restart as administrator".
     access: access_ui::Access,
+    /// The first-run privacy screen, until the user continues.
+    welcome: Option<welcome::Welcome>,
     page: Page,
     /// Reload history.json when the History view is opened.
     history_dirty: bool,
@@ -159,7 +162,8 @@ struct App {
     logo: Option<egui::TextureHandle>,
     /// About > Check for updates: Some(result text) once finished.
     update_manual: Arc<Mutex<Option<String>>>,
-    title_minimized: bool,
+    /// Last window title sent (● REC, MHz while minimized).
+    title: String,
     /// Sensors page, stress monitor, tray and mini monitor (gui/sensors.rs).
     /// Its `settings` is the app's one copy of settings.json.
     mon: sensors::Monitor,
@@ -195,6 +199,7 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         ctx,
         report,
         access: Default::default(),
+        welcome: (shots.is_none() && mon.settings.privacy_seen < welcome::PRIVACY_VERSION).then(Default::default),
         page: Page::Overview,
         history_dirty: true,
         bench_view: BenchView::Cpu,
@@ -219,12 +224,14 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         installer: None,
         logo: None,
         update_manual: Arc::new(Mutex::new(None)),
-        title_minimized: false,
+        title: String::new(),
         mon,
     };
-    if app.ctx.cfg.check_updates && app.auto.is_none() {
-        let slot = app.update.clone();
-        std::thread::spawn(move || *slot.lock().unwrap() = crate::update::check());
+    if app.auto.is_none() {
+        crate::data::expire_logs(app.mon.settings.log_retention_days);
+        if app.welcome.is_none() {
+            app.check_updates_if_allowed();
+        }
     }
     let font_size = app.ctx.cfg.text_font_size;
     if let Err(e) = eframe::run_native(
@@ -253,12 +260,29 @@ impl eframe::App for App {
         let ectx = ui.ctx().clone();
         ectx.request_repaint_after(Duration::from_millis(500));
         self.hotkeys(&ectx);
-        self.minimized_title(&ectx);
+        self.window_title(&ectx);
         self.access.frame(&ectx);
         if std::mem::take(&mut self.access.restarted) {
             self.mon.quit(&ectx); // the elevated copy is up
         }
 
+        if let Some(w) = &mut self.welcome {
+            let allowed = self.ctx.cfg.check_updates;
+            let p = theme::palette(ui);
+            let done = egui::CentralPanel::default()
+                .frame(egui::Frame::default().fill(p.bg).inner_margin(egui::Margin::symmetric(48, 32)))
+                .show(ui, |ui| welcome::page(ui, w, allowed))
+                .inner;
+            if let Some(updates) = done {
+                self.mon.set_setting(|s| {
+                    s.privacy_seen = welcome::PRIVACY_VERSION;
+                    s.update_check = Some(updates);
+                });
+                self.welcome = None;
+                self.check_updates_if_allowed();
+            }
+            return;
+        }
         let report = self.report.lock().unwrap().clone();
         // Tray menu / monitor shortcuts navigate instead of opening windows.
         if std::mem::take(&mut self.mon.show_sensors) {
@@ -373,6 +397,13 @@ impl App {
         }
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
             ui.label(RichText::new(format!("v{}", crate::VERSION)).small().color(p.text_muted));
+            if self.mon.recording() {
+                let rec =
+                    widgets::pill(ui, "● REC", widgets::Tone::Danger).on_hover_text(tr("Recording · click to stop"));
+                if rec.interact(egui::Sense::click()).clicked() {
+                    self.mon.stop_recording();
+                }
+            }
             if !self.status.is_empty() {
                 ui.add(egui::Label::new(RichText::new(&self.status).small().color(p.text_secondary)).wrap());
             }
@@ -517,19 +548,32 @@ impl App {
         }
     }
 
-    fn minimized_title(&mut self, ectx: &egui::Context) {
-        // CPU-Z shows the core clock in the title while iconized.
-        let min = ectx.input(|i| i.viewport().minimized.unwrap_or(false));
-        if min {
+    /// The update check, only when the user opted in and cpuzeez.ini allows it (P1).
+    fn check_updates_if_allowed(&self) {
+        if self.ctx.cfg.check_updates && self.mon.settings.update_check == Some(true) {
+            let slot = self.update.clone();
+            std::thread::spawn(move || *slot.lock().unwrap() = crate::update::check());
+        }
+    }
+
+    /// Window title: ● REC while recording, and the core clock while
+    /// minimized (as CPU-Z does). Sent only when it changes.
+    fn window_title(&mut self, ectx: &egui::Context) {
+        let mut t = String::new();
+        if self.mon.recording() {
+            t += "● REC · ";
+        }
+        if ectx.input(|i| i.viewport().minimized.unwrap_or(false)) {
             let tel = self.mon.tel();
             tel.want("title", &["cpu/clock"]);
             if let Some(m) = crate::telemetry::core_mhz(&tel.snapshot(), 0) {
-                ectx.send_viewport_cmd(egui::ViewportCommand::Title(format!("{m:.0} MHz - {}", crate::DISPLAY_NAME)));
+                t += &format!("{m:.0} MHz - ");
             }
-            self.title_minimized = true;
-        } else if self.title_minimized {
-            ectx.send_viewport_cmd(egui::ViewportCommand::Title(crate::DISPLAY_NAME.into()));
-            self.title_minimized = false;
+        }
+        t += crate::DISPLAY_NAME;
+        if t != self.title {
+            ectx.send_viewport_cmd(egui::ViewportCommand::Title(t.clone()));
+            self.title = t;
         }
     }
 
@@ -591,6 +635,7 @@ fn decode_png(png: &[u8]) -> Option<egui::IconData> {
 /// labels (Core Speed, Bus Speed, SPD, CAS#, tRCD…) stay in English, as in
 /// CPU-Z's own Portuguese/Spanish builds and local reviews.
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Recording · click to stop", "Gravando · clique para parar"),
     // tabs, menus
     ("CPU", "CPU"),
     ("Caches", "Caches"),
@@ -816,6 +861,7 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Recording · click to stop", "Grabando · haz clic para detener"),
     // tabs, menus
     ("CPU", "CPU"),
     ("Caches", "Cachés"),

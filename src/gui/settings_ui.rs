@@ -3,7 +3,7 @@
 
 use super::i18n::{self, tr};
 use super::theme::{self, icon};
-use super::widgets::{self, Tone};
+use super::widgets;
 use crate::settings::{Settings, Theme};
 use eframe::egui::{self, RichText};
 
@@ -33,14 +33,28 @@ pub const PT_BR: &[(&str, &str)] = &[
         "Usada pelo monitor de estresse quando o Tjmax da CPU é desconhecido.",
     ),
     ("Check for updates at startup", "Procurar atualizações ao iniciar"),
-    ("On", "Ligado"),
-    ("Off", "Desligado"),
     (
-        "Set CheckUpdates=0 (or 1) in cpuzeez.ini next to the executable to change this.",
-        "Defina CheckUpdates=0 (ou 1) no cpuzeez.ini, ao lado do executável, para mudar isso.",
+        "One anonymous request to GitHub's releases page at startup; nothing about your computer is sent.",
+        "Uma consulta anônima à página de versões do GitHub ao iniciar; nada sobre o seu computador é enviado.",
+    ),
+    ("Turned off in cpuzeez.ini (CheckUpdates=0).", "Desativado no cpuzeez.ini (CheckUpdates=0)."),
+    ("Privacy & data", "Privacidade e dados"),
+    (
+        "Everything CpuZeeZ keeps is on this computer, in this folder. Nothing is uploaded.",
+        "Tudo o que o CpuZeeZ guarda está neste computador, nesta pasta. Nada é enviado.",
     ),
     ("Open data folder", "Abrir pasta de dados"),
-    ("Settings, benchmark history and logs are kept in:", "Configurações, histórico de benchmarks e logs ficam em:"),
+    ("Sensor logs", "Logs de sensores"),
+    ("Benchmark history", "Histórico de benchmarks"),
+    ("Action log", "Registro de ações"),
+    ("{} files · {}", "{} arquivos · {}"),
+    ("Delete", "Apagar"),
+    ("Confirm", "Confirmar"),
+    ("Delete sensor logs older than", "Apagar logs de sensores com mais de"),
+    ("days (0 = keep)", "dias (0 = manter)"),
+    ("Delete everything", "Apagar tudo"),
+    ("Recent actions", "Ações recentes"),
+    ("No actions yet.", "Nenhuma ação ainda."),
     ("ms", "ms"),
     ("s", "s"),
 ];
@@ -71,17 +85,28 @@ pub const ES: &[(&str, &str)] = &[
         "La usa el monitor de estrés cuando se desconoce el Tjmax de la CPU.",
     ),
     ("Check for updates at startup", "Buscar actualizaciones al iniciar"),
-    ("On", "Activado"),
-    ("Off", "Desactivado"),
     (
-        "Set CheckUpdates=0 (or 1) in cpuzeez.ini next to the executable to change this.",
-        "Ponga CheckUpdates=0 (o 1) en cpuzeez.ini, junto al ejecutable, para cambiarlo.",
+        "One anonymous request to GitHub's releases page at startup; nothing about your computer is sent.",
+        "Una consulta anónima a la página de versiones de GitHub al iniciar; no se envía nada sobre tu equipo.",
+    ),
+    ("Turned off in cpuzeez.ini (CheckUpdates=0).", "Desactivado en cpuzeez.ini (CheckUpdates=0)."),
+    ("Privacy & data", "Privacidad y datos"),
+    (
+        "Everything CpuZeeZ keeps is on this computer, in this folder. Nothing is uploaded.",
+        "Todo lo que CpuZeeZ guarda está en este equipo, en esta carpeta. No se sube nada.",
     ),
     ("Open data folder", "Abrir carpeta de datos"),
-    (
-        "Settings, benchmark history and logs are kept in:",
-        "La configuración, el historial de pruebas y los registros se guardan en:",
-    ),
+    ("Sensor logs", "Registros de sensores"),
+    ("Benchmark history", "Historial de pruebas"),
+    ("Action log", "Registro de acciones"),
+    ("{} files · {}", "{} archivos · {}"),
+    ("Delete", "Borrar"),
+    ("Confirm", "Confirmar"),
+    ("Delete sensor logs older than", "Borrar registros de sensores con más de"),
+    ("days (0 = keep)", "días (0 = conservar)"),
+    ("Delete everything", "Borrar todo"),
+    ("Recent actions", "Acciones recientes"),
+    ("No actions yet.", "Aún no hay acciones."),
     ("ms", "ms"),
     ("s", "s"),
 ];
@@ -100,6 +125,91 @@ pub fn lang_of(s: &Settings) -> i18n::Lang {
 }
 
 /// A label + control row inside a card.
+/// Privacy & data: what is kept, its size, deleting it, retention, the action log.
+fn privacy(ui: &mut egui::Ui, s: &mut Settings, dir: &std::path::Path) {
+    use crate::data::{self, Category};
+    let p = theme::palette(ui);
+    ui.label(
+        RichText::new(tr("Everything CpuZeeZ keeps is on this computer, in this folder. Nothing is uploaded."))
+            .color(p.text_secondary),
+    );
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(dir.display().to_string()).monospace().small());
+        if ui.small_button(format!("{} {}", icon::FOLDER_OPEN, tr("Open data folder"))).clicked() {
+            crate::update::open_path(dir);
+        }
+    });
+    ui.add_space(4.0);
+    // A delete needs a second click; which button is armed lives in egui's memory.
+    let armed_id = egui::Id::new("privacy-delete-armed");
+    let armed: Option<usize> = ui.data(|d| d.get_temp(armed_id)).flatten();
+    let mut arm = armed;
+    for (i, u) in data::usage().iter().enumerate() {
+        row(ui, tr(u.cat.label()), |ui| {
+            ui.label(
+                RichText::new(i18n::trf("{} files · {}", &[&u.files, &super::bench_tab::bytes_text(u.bytes as f64)]))
+                    .color(p.text_muted),
+            );
+            if u.files > 0 {
+                let label = if armed == Some(i) { tr("Confirm") } else { tr("Delete") };
+                if ui.small_button(label).clicked() {
+                    if armed == Some(i) {
+                        let _ = data::delete(u.cat);
+                        if u.cat == Category::Settings {
+                            *s = Settings::default(); // the in-memory copy too, so nothing is written back
+                        }
+                        arm = None;
+                    } else {
+                        arm = Some(i);
+                    }
+                }
+            }
+        });
+    }
+    row(ui, tr("Delete sensor logs older than"), |ui| {
+        ui.add(
+            egui::DragValue::new(&mut s.log_retention_days)
+                .range(0..=3650)
+                .suffix(format!(" {}", tr("days (0 = keep)"))),
+        );
+    });
+    let all = usize::MAX;
+    let label = if armed == Some(all) { tr("Confirm") } else { tr("Delete everything") };
+    if ui.add(egui::Button::new(RichText::new(label).color(p.danger))).clicked() {
+        if armed == Some(all) {
+            for c in Category::ALL {
+                let _ = data::delete(c);
+            }
+            *s = Settings::default();
+            arm = None;
+        } else {
+            arm = Some(all);
+        }
+    }
+    ui.data_mut(|d| d.insert_temp(armed_id, arm));
+    ui.add_space(4.0);
+    egui::CollapsingHeader::new(tr("Recent actions")).id_salt("audit").show(ui, |ui| {
+        let log = crate::executor::audit_log();
+        if log.is_empty() {
+            ui.label(RichText::new(tr("No actions yet.")).color(p.text_muted));
+        }
+        for e in log.iter().rev().take(20) {
+            let mark = if e.ok { "✓" } else { "✗" };
+            let how = if e.elevated { " (admin)" } else { "" };
+            ui.label(
+                RichText::new(format!(
+                    "{mark} {} {}{how}{}",
+                    e.time,
+                    e.description,
+                    if e.detail.is_empty() { String::new() } else { format!(" · {}", e.detail) }
+                ))
+                .small()
+                .monospace(),
+            );
+        }
+    });
+}
+
 fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
     ui.horizontal(|ui| {
         let p = theme::palette(ui);
@@ -112,8 +222,9 @@ fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
     });
 }
 
-/// The Settings page. `persist` = save changes (off while taking screenshots).
-pub fn page(ui: &mut egui::Ui, s: &mut Settings, check_updates: bool, persist: bool) {
+/// The Settings page. `updates_allowed` is false when cpuzeez.ini turns update
+/// checks off; `persist` = save changes (off while taking screenshots).
+pub fn page(ui: &mut egui::Ui, s: &mut Settings, updates_allowed: bool, persist: bool) {
     let before = serde_json::to_string(s).unwrap_or_default();
     widgets::page_header(ui, tr("Settings"), tr("Changes apply immediately and are saved automatically."), |_| {});
 
@@ -164,26 +275,23 @@ pub fn page(ui: &mut egui::Ui, s: &mut Settings, check_updates: bool, persist: b
 
     widgets::card(ui, icon::ARROW_CIRCLE_UP, tr("Updates"), |ui| {
         row(ui, tr("Check for updates at startup"), |ui| {
-            let (tone, text) = if check_updates { (Tone::Success, "On") } else { (Tone::Neutral, "Off") };
-            widgets::pill(ui, tr(text), tone);
+            let mut on = s.update_check == Some(true) && updates_allowed;
+            if ui.add_enabled(updates_allowed, egui::Checkbox::without_text(&mut on)).changed() {
+                s.update_check = Some(on);
+            }
         });
         let p = theme::palette(ui);
-        ui.label(
-            RichText::new(tr("Set CheckUpdates=0 (or 1) in cpuzeez.ini next to the executable to change this."))
-                .small()
-                .color(p.text_muted),
-        );
+        let note = if updates_allowed {
+            "One anonymous request to GitHub's releases page at startup; nothing about your computer is sent."
+        } else {
+            "Turned off in cpuzeez.ini (CheckUpdates=0)."
+        };
+        ui.label(RichText::new(tr(note)).small().color(p.text_muted));
     });
     ui.add_space(theme::GAP);
 
     if let Some(dir) = crate::settings::dir() {
-        widgets::card(ui, icon::FOLDER_OPEN, tr("Data"), |ui| {
-            ui.label(tr("Settings, benchmark history and logs are kept in:"));
-            ui.label(RichText::new(dir.display().to_string()).monospace().small());
-            if ui.button(format!("{} {}", icon::FOLDER_OPEN, tr("Open data folder"))).clicked() {
-                crate::update::open_path(&dir);
-            }
-        });
+        widgets::card(ui, icon::LOCK_SIMPLE, tr("Privacy & data"), |ui| privacy(ui, s, &dir));
     }
 
     if !s.tray {

@@ -10,6 +10,7 @@ mod bench;
 mod bios;
 mod chipset;
 mod cpu;
+mod data;
 mod diff;
 mod executor;
 mod gpu;

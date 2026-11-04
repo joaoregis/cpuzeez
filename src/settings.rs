@@ -32,6 +32,13 @@ pub struct Settings {
     pub warn_temp_c: f64,
     /// Show the always-on-top mini monitor window.
     pub mini: bool,
+    /// Ask GitHub for a newer release at startup. None = not asked yet: the
+    /// first-run screen asks, and nothing is checked until then (P1).
+    pub update_check: Option<bool>,
+    /// Version of the first-run privacy screen the user has seen (0 = never).
+    pub privacy_seen: u32,
+    /// Delete sensor logs older than this many days (0 = keep them).
+    pub log_retention_days: u32,
 }
 
 impl Default for Settings {
@@ -45,6 +52,9 @@ impl Default for Settings {
             graph_seconds: 600,
             warn_temp_c: 95.0,
             mini: false,
+            update_check: None,
+            privacy_seen: 0,
+            log_retention_days: 0,
         }
     }
 }
@@ -89,6 +99,7 @@ mod tests {
         assert_eq!(s.theme, super::Theme::Dark);
         assert!(s.tray && s.sample_ms == 1000);
         assert!(!s.mini, "settings files from 0.3.0 have no mini key");
+        assert_eq!(s.update_check, None, "0.3.0 users are asked before any update check");
         let back: super::Settings = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
         assert_eq!(back.theme, super::Theme::Dark);
     }

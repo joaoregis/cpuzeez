@@ -191,6 +191,17 @@ impl Monitor {
         }
     }
 
+    /// A CSV log is being written (● REC).
+    pub fn recording(&self) -> bool {
+        self.tel.as_ref().is_some_and(|(t, _)| t.csv_path().is_some())
+    }
+
+    pub fn stop_recording(&self) {
+        if let Some((t, _)) = &self.tel {
+            t.stop_csv();
+        }
+    }
+
     /// Close the app for real (not to the tray).
     pub fn quit(&mut self, ectx: &egui::Context) {
         self.quitting = true;
