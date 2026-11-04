@@ -81,8 +81,17 @@ These aren't libraries, but they stop people from installing the app, so they be
 - **Explain it up front.** Both READMEs and the release notes say why the builds are unsigned (a paid certificate, which the project can't fund yet), what the SmartScreen/Gatekeeper warning means, and the exact steps to continue.
 - **Let users verify.** Every release already publishes `SHA256SUMS.txt`. The README shows how to check a download with `Get-FileHash` / `shasum -a 256`, and the in-app updater already verifies it ([update.rs](../../src/update.rs)).
 - **Reproducible-from-source CI.** The release workflow builds everything on GitHub's runners from the tagged commit, and the run's logs are public, so anyone can see that a binary came from the code.
-- **Free signing for open-source projects (evaluate).** The SignPath Foundation offers free Authenticode signing to OSS projects that meet its criteria. 🔬 Check eligibility. If accepted, the SmartScreen warning fades as the certificate builds reputation. There's no free equivalent for Apple notarization.
-- Package managers that don't require signing: winget manifests, Scoop, the AUR and Homebrew casks. 🔬 Check each one's current policy for unsigned binaries before promising it.
+- **Free signing for open-source projects (S0-X14, checked 2026-11-04).** The SignPath Foundation signs OSS projects for free. As far as we could find:
+  - Requirements: an OSI-approved license and a public repository; MFA for every team member on SignPath and on the repository; a published code-signing policy page; an attribution line in the docs.
+  - The certificate's publisher is **"SignPath Foundation"**, not CpuZeeZ. SmartScreen reputation builds on that certificate.
+  - ⚠ One accepted project's guide says dual-licensed projects don't qualify. CpuZeeZ is `MIT OR Apache-2.0`. **Ask SignPath before applying.** If it's true, the choice is a single license or staying unsigned (ADR 0009).
+  - Builds would have to come from CI (GitHub Actions + the SignPath action). We already build that way.
+  - There's no free equivalent for Apple notarization.
+- **Package managers for unsigned builds (S0-X14):**
+  - **winget** (`microsoft/winget-pkgs`): signing isn't required. Every submission goes through Microsoft's validation pipeline (Defender/SmartScreen scans), so an unsigned MSI can be held for manual review. The manifest pins the SHA-256. ✅ Plan it for 1.0.
+  - **Scoop**: portable zips with a pinned hash; signing isn't checked. ✅ Our `-portable.zip` fits as is (an `extras` bucket entry or our own bucket).
+  - **AUR**: no signing. The `PKGBUILD` already exists (`packaging/arch`). ✅
+  - **Homebrew**: ❌ the official tap deprecated casks that fail Gatekeeper, and disables them from 2026-09-01; `--no-quarantine` was removed. Unsigned macOS builds need **our own tap** (`brew install joaoregis/tap/cpuzeez`), and users still get the Gatekeeper prompt. The CLI-only formula (built from source) has no such restriction.
 
 ## 4. Rules for every runtime component
 
