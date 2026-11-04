@@ -33,6 +33,9 @@ jobs:
       - run: cargo test --all-targets
       - name: Build release
         run: cargo build --release
+      - name: Static C runtime (starts without the VC++ redistributable)
+        if: runner.os == 'Windows'
+        run: python .github/scripts/check_no_crt.py target/release/cpuzeez.exe
       - name: Run every report format (real hardware of the runner)
         shell: bash
         run: |
@@ -102,29 +105,33 @@ jobs:
       - run: cargo build --no-default-features && ./target/debug/cpuzeez | head -n 20
 
   msi-upgrade:
-    name: MSI install / upgrade / downgrade-block
+    name: MSI install / upgrade chain / downgrade-block
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release
-      - name: Build two MSIs from the same binary (1.0.0 and 1.0.1)
+      - name: Version mapping self-test
+        run: python .github/scripts/pkgver.py --test
+      - name: Build MSIs for the chain beta.1 -> rc.1 -> 1.0.0 -> 1.0.1 (same binary)
         shell: bash
         run: |
           dotnet tool install --global wix --version 5.0.2
-          for v in 1.0.0 1.0.1; do
-            wix build packaging/windows/cpuzeez.wxs -arch x64 -d Version=$v -d Bin=target/release/cpuzeez.exe -d IconFile=assets/cpuzeez.ico -o cz-$v.msi
+          for v in 1.0.0-beta.1 1.0.0-rc.1 1.0.0 1.0.1; do
+            msi=$(python .github/scripts/pkgver.py "$v" | sed -n 's/^MSI_VER=//p')
+            wix build packaging/windows/cpuzeez.wxs -arch x64 -d Version=$msi -d Bin=target/release/cpuzeez.exe -d IconFile=assets/cpuzeez.ico -o cz-$v.msi
           done
-      - name: Install 1.0.0, upgrade to 1.0.1 in place, refuse downgrade
+      - name: Upgrade in place along the chain, refuse downgrade, uninstall cleanly
         shell: pwsh
         run: |
           function Installed { Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object DisplayName -eq 'CpuZeeZ' }
-          $p = Start-Process msiexec -ArgumentList '/i cz-1.0.0.msi /qn /l*v i1.log' -Wait -PassThru; if ($p.ExitCode) { throw "install 1.0.0: $($p.ExitCode)" }
-          (Installed).DisplayVersion
-          $p = Start-Process msiexec -ArgumentList '/i cz-1.0.1.msi /qn /l*v i2.log' -Wait -PassThru; if ($p.ExitCode) { throw "upgrade: $($p.ExitCode)" }
-          $e = @(Installed); "$($e.Count) entry, version $($e.DisplayVersion)"
-          if ($e.Count -ne 1 -or $e[0].DisplayVersion -ne '1.0.1') { throw 'upgrade left the wrong entries' }
+          foreach ($v in '1.0.0-beta.1', '1.0.0-rc.1', '1.0.0', '1.0.1') {
+            $p = Start-Process msiexec -ArgumentList "/i cz-$v.msi /qn /l*v i-$v.log" -Wait -PassThru; if ($p.ExitCode) { throw "install ${v}: $($p.ExitCode)" }
+            $e = @(Installed); "$v -> $($e.Count) entry, version $($e.DisplayVersion)"
+            if ($e.Count -ne 1) { throw "after $v there are $($e.Count) entries" }
+          }
+          if ($e[0].DisplayVersion -ne '1.0.1') { throw 'upgrade chain ended on the wrong version' }
           & "C:\Program Files\CpuZeeZ\cpuzeez.exe" -core=0
           $p = Start-Process msiexec -ArgumentList '/i cz-1.0.0.msi /qn' -Wait -PassThru
           if ($p.ExitCode -eq 0) { throw 'downgrade was not blocked' } else { "downgrade blocked ($($p.ExitCode))" }
