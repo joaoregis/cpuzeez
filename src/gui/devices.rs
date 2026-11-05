@@ -11,6 +11,16 @@ use eframe::egui::{self, RichText};
 use std::sync::{Arc, Mutex};
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Displays", "Telas"),
+    ("{} Hz (supports {} Hz)", "{} Hz (suporta {} Hz)"),
+    ("Below its refresh rate", "Abaixo da sua taxa de atualização"),
+    ("Refresh rate", "Taxa de atualização"),
+    ("Connected to", "Conectado a"),
+    ("USB", "USB"),
+    (
+        "USB 3 device at USB 2 speed: try another port or cable",
+        "Dispositivo USB 3 em velocidade USB 2: tente outra porta ou cabo",
+    ),
     ("Partition alignment", "Alinhamento das partições"),
     ("All {} partitions aligned", "Todas as {} partições alinhadas"),
     ("Partition {} not aligned to 4 KiB (slower writes)", "Partição {} não alinhada a 4 KiB (gravação mais lenta)"),
@@ -87,6 +97,16 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Displays", "Pantallas"),
+    ("{} Hz (supports {} Hz)", "{} Hz (admite {} Hz)"),
+    ("Below its refresh rate", "Por debajo de su frecuencia"),
+    ("Refresh rate", "Frecuencia de actualización"),
+    ("Connected to", "Conectado a"),
+    ("USB", "USB"),
+    (
+        "USB 3 device at USB 2 speed: try another port or cable",
+        "Dispositivo USB 3 a velocidad USB 2: prueba otro puerto o cable",
+    ),
     ("Partition alignment", "Alineación de particiones"),
     ("All {} partitions aligned", "Las {} particiones alineadas"),
     ("Partition {} not aligned to 4 KiB (slower writes)", "Partición {} sin alinear a 4 KiB (escrituras más lentas)"),
@@ -167,6 +187,8 @@ struct Data {
     drives: Vec<crate::storage::Drive>,
     adapters: Vec<crate::network::Adapter>,
     batteries: Vec<crate::battery::Battery>,
+    usb: Vec<crate::usb::UsbDevice>,
+    displays: Vec<cpuzeez_platform::display::Mode>,
 }
 
 #[derive(Default)]
@@ -259,6 +281,8 @@ impl State {
                 drives: crate::storage::drives(&ctx),
                 adapters: crate::network::adapters(&ctx),
                 batteries: crate::battery::batteries(&ctx),
+                usb: crate::usb::devices(&ctx),
+                displays: cpuzeez_platform::display::modes(),
             };
             *slot.lock().unwrap() = Some(d);
         });
@@ -299,6 +323,59 @@ impl State {
             }
             for a in &d.adapters {
                 adapter(ui, a);
+            }
+            if !d.displays.is_empty() {
+                section(ui, icon::MONITOR, "Displays");
+                for m in &d.displays {
+                    let hz = if m.max_hz > m.hz {
+                        trf("{} Hz (supports {} Hz)", &[&m.hz, &m.max_hz])
+                    } else {
+                        format!("{} Hz", m.hz)
+                    };
+                    let tone = if m.max_hz > m.hz + 1 {
+                        (Tone::Warning, tr("Below its refresh rate"))
+                    } else {
+                        (Tone::Success, tr("OK"))
+                    };
+                    device_card(ui, icon::MONITOR, &m.monitor, tone, |ui| {
+                        widgets::kv_list(ui, &rows(vec![("Refresh rate", hz), ("Connected to", m.adapter.clone())]));
+                    });
+                }
+            }
+            if !d.usb.is_empty() {
+                section(ui, icon::USB, "USB");
+                widgets::card(ui, "", "", |ui| {
+                    let p = theme::palette(ui);
+                    for u in &d.usb {
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(&u.name).color(p.text));
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                ui.label(
+                                    RichText::new(format!("{:04X}:{:04X}", u.vendor, u.product))
+                                        .monospace()
+                                        .color(p.text_muted),
+                                );
+                                let speed = [u.speed_text(), u.version_text()]
+                                    .into_iter()
+                                    .filter(|s| !s.is_empty())
+                                    .collect::<Vec<_>>()
+                                    .join(" · ");
+                                ui.label(RichText::new(speed).color(p.text_secondary));
+                                if u.slowed() {
+                                    ui.label(
+                                        RichText::new(format!(
+                                            "{} {}",
+                                            icon::WARNING,
+                                            tr("USB 3 device at USB 2 speed: try another port or cable")
+                                        ))
+                                        .color(p.warning),
+                                    );
+                                }
+                            });
+                        });
+                    }
+                });
+                ui.add_space(theme::GAP);
             }
             section(ui, icon::BATTERY_HIGH, "Batteries");
             if d.batteries.is_empty() {

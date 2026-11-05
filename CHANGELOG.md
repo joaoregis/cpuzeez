@@ -27,6 +27,7 @@ generated from its section below.
 - **Per-disk activity** in the Sensors list and CSV logs: read/write speed, IOPS, latency, active time and queue for every physical disk, on Windows, Linux and macOS, without administrator rights.
 - **Per-adapter network traffic** the same way: download/upload in Mbps, packets per second, errors and drops.
 - **GPU engine load**: 3D, copy, video encode and decode, compute and the rest per GPU on Windows (as the Task Manager counts them); the busy figure on Linux (AMD) and Device/Renderer/Tiler on macOS.
+- **Devices page**: USB devices with the speed they run at and the USB version they support (with a warning when a USB 3 device runs at USB 2 speed), and each display's refresh rate against what it supports.
 - **Drives**: partition alignment, the OS's TRIM setting and NVMe thermal throttling (how often and for how long) on each drive's card.
 - **Memory page**: which profile is running (XMP/EXPO, or "tuned tRAS"), secondary and tertiary timings on AMD (tRRD, tFAW, tWR, tRTP, tWTR, tCWL, tREFI, tRFC2), the FCLK, a map of which slot holds which module, ECC, module temperatures, a bar of what the OS uses RAM for, and the theoretical bandwidth next to a link to measure it.
 - **Mainboard page**: firmware (UEFI or legacy boot, Secure Boot, TPM), every PCI Express device's link next to its maximum (with a warning when a device runs narrower), mainboard sensors by name, slots and ports, a browsable SMBIOS tree and, at Expert level, the ACPI tables.
