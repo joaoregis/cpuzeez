@@ -27,6 +27,7 @@ generated from its section below.
 - **Per-disk activity** in the Sensors list and CSV logs: read/write speed, IOPS, latency, active time and queue for every physical disk, on Windows, Linux and macOS, without administrator rights.
 - **Per-adapter network traffic** the same way: download/upload in Mbps, packets per second, errors and drops.
 - **GPU engine load**: 3D, copy, video encode and decode, compute and the rest per GPU on Windows (as the Task Manager counts them); the busy figure on Linux (AMD) and Device/Renderer/Tiler on macOS.
+- **Storage benchmark** (*Benchmarks › Storage*): sequential and 4K random read/write with 1 and 8 requests in flight, bypassing the OS cache, on a temporary file that is always deleted.
 - **Core-to-core latency** (*Benchmarks › Latency*): a heat map of how long each core takes to see another core's writes, which shows the CCD/CCX layout at a glance.
 - **Devices page**: USB devices with the speed they run at and the USB version they support (with a warning when a USB 3 device runs at USB 2 speed), and each display's refresh rate against what it supports.
 - **Drives**: partition alignment, the OS's TRIM setting and NVMe thermal throttling (how often and for how long) on each drive's card.

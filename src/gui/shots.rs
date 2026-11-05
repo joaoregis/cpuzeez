@@ -40,7 +40,7 @@ impl App {
                 match v {
                     BenchView::Cpu => self.bench.autorun(&self.ctx),
                     BenchView::Memory => self.bench.autorun_memory(&self.ctx),
-                    BenchView::Latency => true,
+                    BenchView::Latency | BenchView::Storage => true,
                     BenchView::Stress => {
                         if first && !self.mon.stress.running() {
                             self.mon.start_stress(crate::os::logical_cpus());

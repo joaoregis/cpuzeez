@@ -13,6 +13,7 @@ mod chipset;
 mod cpu;
 mod data;
 mod diff;
+mod diskbench;
 mod executor;
 mod gpu;
 #[cfg(feature = "gui")]

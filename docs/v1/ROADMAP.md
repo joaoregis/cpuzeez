@@ -189,7 +189,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 | S1-K03 | **Core-to-core latency** heat map | 🆕 | core-pages §7.2 | Win/Linux; macOS statistical. ✅ *Benchmarks › Latency*: pinned ping-pong per core pair (`src/latency.rs`, tested), heat map with min/median/max. 7900X: ~20 ns within a CCD, ~165 ns across, 0.3 s total. 🟡 macOS (no pinning) says so; statistical mode later |
 | S1-K04 | **Memory** additions: GUPS, STREAM triad, huge pages, per-CCD/NUMA latency | ✨ | core-pages §7.2 | Same |
 | S1-K05 | **GPU benchmark** (`wgpu`, feature `gpu-bench`): FP32/FP16, VRAM bandwidth, PCIe host↔GPU, raster scene | 🆕 | core-pages §7.2 | DX12/Vulkan/Metal |
-| S1-K06 | **Storage benchmark** (CrystalDiskMark-style + sustained write with a warning) | 🆕 | core-pages §7.2 | Uncached I/O verified; cleans up its test file |
+| S1-K06 | **Storage benchmark** (CrystalDiskMark-style + sustained write with a warning) | 🆕 | core-pages §7.2 | Uncached I/O verified; cleans up its test file. ✅ *Benchmarks › Storage*: SEQ1M/RND4K × T1/T8, write then read, uncached (`platform::direct_io`: NO_BUFFERING/O_DIRECT/F_NOCACHE, aligned buffers), test file deleted on every exit path (tested); drive or app-data folder, 256 MiB–4 GiB. 🟡 Sustained-write (SLC cache) run next |
 | S1-K07 | **Stability**: CPU stress variants, user-mode memory test, GPU stress, combined | ✨ | core-pages §7.2 | Auto-stop limits tested |
 | S1-K08 | **SSD/HDD health**: SMART self-tests, health panel (life, TBW, temperature history, alerts), read-only surface scan | 🆕 | core-pages §7.3 | Per-OS availability declared |
 | S1-K09 | History and compare for every benchmark type | ✨ | core-pages §7.2 | Same UI as today's history |
