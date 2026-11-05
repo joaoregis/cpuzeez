@@ -95,7 +95,17 @@ Mixing them confuses comparisons. We use the **percentile** by default, offer th
 
     ✅ Under the 0.5 % budget measured against the whole machine, and about 1 % of one core. Filtering to the game's process is the cheapest; tracking options barely matter. The cost grows with the frame rate: this game ran at ~30 FPS (menu cap), so **re-measure at 240+ FPS**. CSV columns include `MsCPUBusy`, `MsGPUBusy`, `MsGPUWait`, `MsAllInputToPhotonLatency` and the present mode, which feed the bottleneck detector (here: CPUBusy 33 ms vs GPUBusy 2.7 ms, as expected when the menu is frame-capped).
   - ⚠ **Seen on the same machine:** the `PresentMon_x64.exe` that **NVIDIA FrameView SDK** (the NVIDIA App) runs used **~99 % of a core nonstop**, 8 h of CPU in one day. An older build plus a never-ending session can cost far more than the tool itself. Our sidecar runs only while ZeeZ Live is on, is pinned to a release we've measured, and its own CPU shows in *Settings › Diagnostics* (`Engine::costs`).
-  - Still to do: DX12, Vulkan, OpenGL and Frame Generation (a game with DLSS FG / FSR FG), and 240+ FPS.
+  - **API coverage (S0-X02, 2026-11-05), measured on CpuZeeZ itself** with `--process_id`, 8 s per renderer (same machine, RTX 4060 driver):
+
+    | API | How it ran | Frames seen | `PresentRuntime` · `PresentMode` |
+    |---|---|---|---|
+    | DX11 | VALORANT (above) | 598 / 20 s | DXGI · Hardware Composed: Independent Flip |
+    | DX12 | CpuZeeZ on wgpu, `WGPU_BACKEND=dx12` | 14 | DXGI · Composed: Flip |
+    | Vulkan | CpuZeeZ on wgpu, `WGPU_BACKEND=vulkan` | 42 | DXGI · Composed: Flip (NVIDIA presents Vulkan through DXGI on Windows) |
+    | OpenGL | CpuZeeZ on glow (default) | 15 | Other · Composed: Copy with GPU GDI |
+
+    ✅ All four APIs are captured, with the runtime and present mode we need for the exclusive-fullscreen detection (§3.2). OpenGL windows land in *Composed: Copy with GPU GDI*, which is worth knowing for the overlay: they're always composed, so the external overlay sits on top of them.
+  - Still to do (need a game session, in the beta checklist): Frame Generation (a game with DLSS FG / FSR FG: FG frames should show as extra presents with `FrameType`), and 240+ FPS to re-measure the sidecar's CPU at a high frame rate.
 
 **Linux: there is no "ETW".**
 - Neither X11 nor Wayland exposes another process's frame timing. That's why the reference tool, **MangoHud** (MIT), runs as a **Vulkan layer** plus an **OpenGL preload**, enabled with `mangohud %command%` in Steam or with `MANGOHUD=1`.

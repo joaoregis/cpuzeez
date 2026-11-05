@@ -114,7 +114,7 @@ Goal: fix what's broken, build the shared building blocks, and set up the tests 
 | ID | Question | For | Done when |
 |---|---|---|---|
 | S0-X01 | **eframe on wgpu** instead of glow: transparency, overlay, startup cost, VM/RDP (WARP) | Q6c, ZeeZ Live | ADR: switch or stay on glow. ✅ [ADR 0013](../adr/0013-gui-renders-with-glow-and-falls-back-to-wgpu.md): glow stays, automatic wgpu fallback (WARP verified) |
-| S0-X02 | **SP1** PresentMon sidecar: overhead and API coverage, FG | ZeeZ Live | < 0.5% CPU; DX11/DX12/Vulkan/OpenGL covered. 🟡 2.6.0: 0.04 % of the machine (~1 % of one core), 15 MB, DX11 ✅; DX12/Vulkan/OpenGL/FG and 240+ FPS still to do (zeez-live §3) |
+| S0-X02 | **SP1** PresentMon sidecar: overhead and API coverage, FG | ZeeZ Live | < 0.5% CPU; DX11/DX12/Vulkan/OpenGL covered. 🟡 2.6.0: 0.04 % of the machine (~1 % of one core), 15 MB; DX11 ✅ (VALORANT), DX12 ✅ Vulkan ✅ OpenGL ✅ (CpuZeeZ's own renderers, runtime + present mode right); FG and 240+ FPS need a game session (zeez-live §3) |
 | S0-X03 | **SP2** external overlay over games on Windows (display modes × latency) | ZeeZ Live | Matrix documented |
 | S0-X04 | **SP3** macOS overlay over fullscreen Spaces | ZeeZ Live | Proof of concept or documented limit |
 | S0-X05 | **SP4** Wayland layer-shell with winit/eframe | ZeeZ Live | PoC on KDE/Hyprland, or a "MangoHud only" ADR |
@@ -137,6 +137,7 @@ Goal: fix what's broken, build the shared building blocks, and set up the tests 
   | Spike | Waiting on | Blocks |
   |---|---|---|
   | X02 (rest): DX12/Vulkan/OpenGL/FG, 240+ FPS | Games with those APIs | S2b gate |
+  | X02 (rest): Frame Generation, 240+ FPS | A play session (DLSS/FSR FG game) | S2b gate |
   | X03, X09: overlay over games × display modes; overlay GPU cost | A play session with the overlay prototype (S2b) | S2b gate |
   | X04, X07, X11: macOS overlay over fullscreen, Metal HUD, per-process GPU | Mac results ([docs/testing/macos.md](../testing/macos.md)) | S2a/S2b gates |
   | X05, X06: Wayland layer-shell, MangoHud | A Linux desktop (KDE/Hyprland) | S2b gate |
