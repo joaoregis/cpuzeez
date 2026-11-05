@@ -53,7 +53,7 @@ impl App {
         let mut rows: Vec<(String, String)> = Vec::new();
         for (core, l) in c.logical.iter().filter(|l| l.smt == 0).enumerate() {
             let kind = l.kind.as_deref().map(|k| format!(" ({k})")).unwrap_or_default();
-            let v = crate::telemetry::core_mhz(&snap, core).map_or("…".into(), |m| format!("{m:.1} MHz"));
+            let v = crate::telemetry::core_mhz(&snap, core).map_or("…".into(), |m| units::clock(m, false, 1));
             rows.push((format!("{}{kind}", trf("Core #{}", &[&core])), v));
         }
         let names = crate::gpu::adapters(&self.ctx);

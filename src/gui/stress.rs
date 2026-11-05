@@ -245,12 +245,12 @@ pub fn page(ui: &mut egui::Ui, mon: &mut Monitor, controls: bool) {
         let min = cur.iter().copied().fold(f64::MAX, f64::min);
         (sensors::fmt(avg, Unit::Mhz), format!("{} · {} {min:.0}", tr("Effective clock"), tr("min")))
     };
-    let cpu_text = cpu_t.map_or_else(dash, |s| format!("{:.0} °C", s.current));
+    let cpu_text = cpu_t.map_or_else(dash, |s| super::units::temp(s.current, 0));
     let cpu_label = match st.max_temp {
-        Some(m) => format!("{} · {} {m:.0} °C", tr("CPU temperature"), tr("max")),
+        Some(m) => format!("{} · {} {}", tr("CPU temperature"), tr("max"), super::units::temp(m, 0)),
         None => tr("CPU temperature").to_string(),
     };
-    let gpu_text = gpu_t.map_or_else(dash, |s| format!("{:.0} °C", s.current));
+    let gpu_text = gpu_t.map_or_else(dash, |s| super::units::temp(s.current, 0));
     let power_text = power.map_or_else(dash, |s| sensors::fmt(s.current, Unit::Watt));
     let tone = |s: Option<&Series>, lim: f64| s.map_or(Tone::Neutral, |s| sensors::temp_tone(s.current, lim));
     let tiles: Vec<(&str, String, Vec<f64>, egui::Color32, Tone)> = vec![

@@ -25,6 +25,7 @@ pub mod report;
 #[cfg(test)]
 mod robustness;
 pub mod smbios;
+pub mod units;
 
 pub mod cpu {
     pub mod db;

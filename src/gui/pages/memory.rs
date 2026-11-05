@@ -53,7 +53,7 @@ impl App {
                     ui.end_row();
                     type Cell = fn(&crate::spd::decode::Timing) -> String;
                     let rows: [(&str, Cell); 8] = [
-                        ("Frequency", |t| format!("{:.0} MHz", t.freq)),
+                        ("Frequency", |t| units::clock(t.freq, false, 0)),
                         ("CAS# Latency", |t| format!("{:.1}", t.cl)),
                         ("RAS# to CAS#", |t| t.rcd.to_string()),
                         ("RAS# Precharge", |t| t.rp.to_string()),

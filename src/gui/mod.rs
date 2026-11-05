@@ -21,6 +21,7 @@ pub mod sensors;
 pub mod stress;
 pub mod table;
 mod tray;
+pub mod units;
 mod welcome;
 // ---- end monitoring ----
 pub mod theme;
@@ -287,6 +288,7 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        units::set(self.mon.settings.units);
         let ectx = ui.ctx().clone();
         ectx.request_repaint_after(Duration::from_millis(500));
         self.hotkeys(&ectx);

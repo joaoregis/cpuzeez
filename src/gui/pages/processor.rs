@@ -39,10 +39,10 @@ impl App {
                 &mut cols[0],
                 &trf("Clocks (Core #{})", &[&self.core]),
                 &[
-                    ("Core Speed", core_mhz.map(|m| format!("{m:.2} MHz")).unwrap_or_else(|| pi("Core Speed"))),
+                    ("Core Speed", core_mhz.map(|m| units::clock(m, false, 2)).unwrap_or_else(|| pi("Core Speed"))),
                     ("Multiplier", core_mhz.zip(bus).map(|(m, b)| format!("x {:.1}", m / b)).unwrap_or_default()),
-                    ("Bus Speed", bus.map(|b| format!("{b:.2} MHz")).unwrap_or_default()),
-                    ("Base", c.base_mhz.map(|b| format!("{b:.0} MHz")).unwrap_or_default()),
+                    ("Bus Speed", bus.map(|b| units::clock(b, false, 2)).unwrap_or_default()),
+                    ("Base", c.base_mhz.map(|b| units::clock(b, false, 0)).unwrap_or_default()),
                 ],
             );
             let cache = |lvl: u32, kind: char| {

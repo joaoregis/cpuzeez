@@ -333,30 +333,14 @@ impl Monitor {
 
 // ---- series helpers (shared with the stress monitor and tray) ----
 
+/// A telemetry value in the units chosen in Settings.
 pub fn fmt(v: f64, u: Unit) -> String {
-    match u {
-        Unit::Celsius => format!("{v:.1} °C"),
-        Unit::Volt => format!("{v:.3} V"),
-        Unit::Watt => format!("{v:.1} W"),
-        Unit::Ampere => format!("{v:.2} A"),
-        Unit::Mhz => format!("{v:.0} MHz"),
-        Unit::Rpm => format!("{v:.0} RPM"),
-        Unit::Percent => format!("{v:.1} %"),
-        Unit::Megabytes if v >= 10240.0 => format!("{:.1} GB", v / 1024.0),
-        Unit::Megabytes => format!("{v:.0} MB"),
-        Unit::MegabytesPerSec if v < 10.0 => format!("{v:.2} MB/s"),
-        Unit::MegabytesPerSec => format!("{v:.0} MB/s"),
-        Unit::Mbps if v < 10.0 => format!("{v:.2} Mbps"),
-        Unit::Mbps => format!("{v:.0} Mbps"),
-        Unit::PerSec => format!("{v:.0} /s"),
-        Unit::Millis => format!("{v:.2} ms"),
-        Unit::Count => format!("{v:.1}"),
-    }
+    super::units::get().format(v, u)
 }
 
 /// Whole-degree temperature for compact summaries.
 fn fmt0(t: f64) -> String {
-    format!("{t:.0} °C")
+    super::units::temp(t, 0)
 }
 
 /// "GPU" matches "GPU · NVIDIA …".

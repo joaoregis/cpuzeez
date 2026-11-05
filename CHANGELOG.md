@@ -27,6 +27,7 @@ generated from its section below.
 - **Per-disk activity** in the Sensors list and CSV logs: read/write speed, IOPS, latency, active time and queue for every physical disk, on Windows, Linux and macOS, without administrator rights.
 - **Per-adapter network traffic** the same way: download/upload in Mbps, packets per second, errors and drops.
 - **GPU engine load**: 3D, copy, video encode and decode, compute and the rest per GPU on Windows (as the Task Manager counts them); the busy figure on Linux (AMD) and Device/Renderer/Tiler on macOS.
+- **Units** in *Settings › Units*: °C or °F, MHz or GHz, MB as Windows counts, MiB/GiB or decimal MB, and a fixed number of decimals. Only the display changes; logs and reports keep °C, MHz and MiB.
 - **What memory is used for**: standby/cached, modified, compressed, kernel pools (wired), commit charge and page file or swap use, each where the OS reports it.
 
 ### Changed

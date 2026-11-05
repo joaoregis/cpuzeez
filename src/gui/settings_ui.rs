@@ -9,6 +9,19 @@ use crate::settings::{Settings, Theme};
 use eframe::egui::{self, RichText};
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Units", "Unidades"),
+    ("Temperature", "Temperatura"),
+    ("Clocks", "Clocks"),
+    ("Memory sizes", "Tamanhos de memória"),
+    ("Decimal places", "Casas decimais"),
+    ("Automatic", "Automático"),
+    ("MB (as Windows counts)", "MB (como o Windows conta)"),
+    ("MB (decimal, as drive makers count)", "MB (decimal, como os fabricantes de discos contam)"),
+    ("As each page shows it", "Como cada página mostra"),
+    (
+        "Only how values are shown changes: logs, reports and thresholds keep °C, MHz and MiB.",
+        "Só muda como os valores aparecem: logs, relatórios e limites continuam em °C, MHz e MiB.",
+    ),
     ("Settings", "Configurações"),
     (
         "Changes apply immediately and are saved automatically.",
@@ -72,6 +85,19 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Units", "Unidades"),
+    ("Temperature", "Temperatura"),
+    ("Clocks", "Relojes"),
+    ("Memory sizes", "Tamaños de memoria"),
+    ("Decimal places", "Decimales"),
+    ("Automatic", "Automático"),
+    ("MB (as Windows counts)", "MB (como cuenta Windows)"),
+    ("MB (decimal, as drive makers count)", "MB (decimal, como cuentan los fabricantes de discos)"),
+    ("As each page shows it", "Como lo muestra cada página"),
+    (
+        "Only how values are shown changes: logs, reports and thresholds keep °C, MHz and MiB.",
+        "Solo cambia cómo se muestran los valores: registros, informes y umbrales siguen en °C, MHz y MiB.",
+    ),
     ("Settings", "Configuración"),
     (
         "Changes apply immediately and are saved automatically.",
@@ -260,6 +286,46 @@ fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
 }
 
 /// The Settings page. `updates_allowed` is false when cpuzeez.ini turns update
+/// °C/°F, MHz/GHz, MB/MiB, decimals (S1-U04).
+fn units(ui: &mut egui::Ui, u: &mut cpuzeez_core::units::Units) {
+    use cpuzeez_core::units::{Clock, Size, Temp};
+    row(ui, tr("Temperature"), |ui| {
+        ui.selectable_value(&mut u.temp, Temp::Celsius, "°C");
+        ui.selectable_value(&mut u.temp, Temp::Fahrenheit, "°F");
+    });
+    row(ui, tr("Clocks"), |ui| {
+        ui.selectable_value(&mut u.clock, Clock::Auto, tr("Automatic"));
+        ui.selectable_value(&mut u.clock, Clock::Mhz, "MHz");
+        ui.selectable_value(&mut u.clock, Clock::Ghz, "GHz");
+    });
+    row(ui, tr("Memory sizes"), |ui| {
+        let label = |s: Size| match s {
+            Size::Windows => tr("MB (as Windows counts)").to_string(),
+            Size::Iec => "MiB / GiB".to_string(),
+            Size::Decimal => tr("MB (decimal, as drive makers count)").to_string(),
+        };
+        egui::ComboBox::from_id_salt("size-unit").selected_text(label(u.size)).show_ui(ui, |ui| {
+            for s in [Size::Windows, Size::Iec, Size::Decimal] {
+                ui.selectable_value(&mut u.size, s, label(s));
+            }
+        });
+    });
+    row(ui, tr("Decimal places"), |ui| {
+        let label = |d: Option<u8>| d.map_or_else(|| tr("As each page shows it").to_string(), |d| d.to_string());
+        egui::ComboBox::from_id_salt("decimals").selected_text(label(u.decimals)).show_ui(ui, |ui| {
+            for d in [None, Some(0), Some(1), Some(2), Some(3)] {
+                ui.selectable_value(&mut u.decimals, d, label(d));
+            }
+        });
+    });
+    let p = theme::palette(ui);
+    ui.label(
+        RichText::new(tr("Only how values are shown changes: logs, reports and thresholds keep °C, MHz and MiB."))
+            .small()
+            .color(p.text_muted),
+    );
+}
+
 /// checks off; `persist` = save changes (off while taking screenshots).
 pub fn page(ui: &mut egui::Ui, s: &mut Settings, updates_allowed: bool, persist: bool, report: Option<&[Section]>) {
     let before = serde_json::to_string(s).unwrap_or_default();
@@ -294,6 +360,9 @@ pub fn page(ui: &mut egui::Ui, s: &mut Settings, updates_allowed: bool, persist:
             }
         });
     });
+    ui.add_space(theme::GAP);
+
+    widgets::card(ui, icon::RULER, tr("Units"), |ui| units(ui, &mut s.units));
     ui.add_space(theme::GAP);
 
     widgets::card(ui, icon::GAUGE, tr("Monitoring"), |ui| {

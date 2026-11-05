@@ -48,6 +48,8 @@ pub struct Settings {
     pub privacy_seen: u32,
     /// Delete sensor logs older than this many days (0 = keep them).
     pub log_retention_days: u32,
+    /// °C/°F, MHz/GHz, MB/MiB and decimals for every displayed value.
+    pub units: cpuzeez_core::units::Units,
 }
 
 impl Default for Settings {
@@ -66,6 +68,7 @@ impl Default for Settings {
             update_check: None,
             privacy_seen: 0,
             log_retention_days: 0,
+            units: Default::default(),
         }
     }
 }

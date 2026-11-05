@@ -335,7 +335,7 @@ fn bytes_tb(b: u64) -> String {
 
 fn drive(ui: &mut egui::Ui, i: usize, d: &crate::storage::Drive) {
     let s = d.smart.as_ref();
-    let temp = s.and_then(|s| s.temperature_c).map(|t| format!("{t:.0} °C")).or_else(|| {
+    let temp = s.and_then(|s| s.temperature_c).map(|t| super::units::temp(t, 0)).or_else(|| {
         d.health.iter().find(|(k, _)| k.to_ascii_lowercase().contains("temperature")).map(|(_, v)| v.clone())
     });
     let kind = format!("{}{}", tr(if d.removable { "Removable" } else { "Fixed" }), if d.ssd { ", SSD" } else { "" });
@@ -465,7 +465,7 @@ fn battery(ui: &mut egui::Ui, b: &crate::battery::Battery) {
         ("Status", b.status.clone()),
         ("Rate", opt(b.rate_w, |w| format!("{w:+.2} W"))),
         ("Voltage", opt(b.voltage_v, |v| format!("{v:.3} V"))),
-        ("Temperature", opt(b.temperature_c, |t| format!("{t:.1} °C"))),
+        ("Temperature", opt(b.temperature_c, |t| super::units::temp(t, 1))),
     ];
     let (t, text) = tone(h);
     device_card(ui, icon::BATTERY_HIGH, &b.name, (t, tr(text)), |ui| {

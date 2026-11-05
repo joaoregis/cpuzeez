@@ -155,28 +155,28 @@ pub fn page(ui: &mut Ui, ctx: &Ctx, r: &[Section], tel: &Telemetry, core_mhz: Op
     let tiles: Vec<(&str, String, Vec<f64>, egui::Color32, Tone)> = vec![
         (
             tr("CPU temperature"),
-            cpu_t.map_or("–".into(), |s| format!("{:.0} °C", s.current)),
+            cpu_t.map_or("–".into(), |s| super::units::temp(s.current, 0)),
             spark(cpu_t),
             p.series[0],
             cpu_t.map_or(Tone::Neutral, |s| temp_tone(s.current, tj)),
         ),
         (
             tr("CPU clock"),
-            core_mhz.or(clk.map(|s| s.current)).map_or("–".into(), |m| format!("{:.2} GHz", m / 1000.0)),
+            core_mhz.or(clk.map(|s| s.current)).map_or("–".into(), |m| super::units::clock(m, true, 2)),
             spark(clk),
             p.series[0],
             Tone::Neutral,
         ),
         (
             tr("GPU temperature"),
-            gpu_t.map_or("–".into(), |s| format!("{:.0} °C", s.current)),
+            gpu_t.map_or("–".into(), |s| super::units::temp(s.current, 0)),
             spark(gpu_t),
             p.series[1],
             gpu_t.map_or(Tone::Neutral, |s| temp_tone(s.current, 90.0)),
         ),
         (
             tr("Chipset temperature"),
-            chip_t.map_or("–".into(), |s| format!("{:.0} °C", s.current)),
+            chip_t.map_or("–".into(), |s| super::units::temp(s.current, 0)),
             spark(chip_t),
             p.series[2],
             chip_t.map_or(Tone::Neutral, |s| temp_tone(s.current, 90.0)),
