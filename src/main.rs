@@ -17,6 +17,7 @@ mod executor;
 mod gpu;
 #[cfg(feature = "gui")]
 mod gui;
+mod health;
 mod history;
 mod membench;
 mod network;

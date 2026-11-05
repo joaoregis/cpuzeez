@@ -16,6 +16,7 @@ pub mod availability;
 pub mod config;
 pub mod detail;
 pub mod diskio;
+pub mod health;
 pub mod layout;
 pub mod memory;
 pub mod metrics;

@@ -169,6 +169,11 @@ impl Monitor {
     }
 
     /// The shared sampler, started on first use.
+    /// Opens on these rows (the Overview's tiles link here).
+    pub fn focus(&mut self, filter: String) {
+        self.view.table.filter = filter;
+    }
+
     pub fn tel(&mut self) -> Telemetry {
         let (period, keep) = self.sampling();
         let ctx = self.ctx.clone();

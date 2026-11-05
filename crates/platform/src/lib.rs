@@ -6,6 +6,7 @@
 //! each page is rebuilt (docs/v1/engineering.md §10).
 
 pub mod disk_io;
+pub mod display;
 pub mod elevation;
 pub mod gpu_engines;
 pub mod hw;

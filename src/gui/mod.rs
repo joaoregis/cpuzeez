@@ -175,6 +175,7 @@ struct App {
     mon: sensors::Monitor,
     /// Ctrl+K search (S1-U02).
     palette: palette::Palette,
+    overview: overview::State,
 }
 
 pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
@@ -238,6 +239,7 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         title: String::new(),
         mon,
         palette: Default::default(),
+        overview: Default::default(),
     };
     if app.auto.is_none() {
         crate::data::expire_logs(app.mon.settings.log_retention_days);
@@ -526,9 +528,18 @@ impl App {
             Page::Overview => {
                 let tel = self.mon.tel();
                 let core_mhz = crate::telemetry::core_mhz(&tel.snapshot(), 0);
-                if overview::page(ui, &self.ctx, r, &tel, core_mhz, &mut self.mon.settings.pins) && self.auto.is_none()
-                {
-                    self.mon.settings.save();
+                let navs = overview::page(ui, &self.ctx, r, &tel, core_mhz, &mut self.mon.settings, &mut self.overview);
+                for n in navs {
+                    match n {
+                        overview::Nav::Page(p) => self.page = p,
+                        overview::Nav::Sensors(filter) => {
+                            self.page = Page::Sensors;
+                            self.mon.focus(filter);
+                        }
+                        overview::Nav::Act(a) => self.run_palette(palette::Target::Act(a)),
+                        overview::Nav::Save if self.auto.is_none() => self.mon.settings.save(),
+                        overview::Nav::Save => {}
+                    }
                 }
             }
             Page::Processor => {

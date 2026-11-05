@@ -36,6 +36,12 @@ pub const ALIASES: &[(&str, &str)] = &[
     ("@gpu_load", "GPU load"),
     ("@chipset_temp", "Chipset temperature"),
     ("@mem_load", "Memory load"),
+    ("@cpu_vid", "CPU voltage (VID)"),
+    ("@gpu_power", "GPU power"),
+    ("@battery_charge", "Battery charge"),
+    ("@battery_rate", "Battery charge rate"),
+    ("@disk_active", "First disk's active time"),
+    ("@net_rx", "First adapter's download"),
 ];
 
 /// The series a widget's metric (exact id or alias) points to.
@@ -50,6 +56,12 @@ pub fn resolve<'a>(metric: &str, series: &'a [Series]) -> Option<&'a Series> {
         "@gpu_load" => id("gpu0/load/core"),
         "@chipset_temp" => sensors::chipset_temp(series),
         "@mem_load" => id("mem/load/used"),
+        "@cpu_vid" => id("cpu/volt/vid"),
+        "@gpu_power" => id("gpu0/power/board"),
+        "@battery_charge" => id("battery0/level/charge"),
+        "@battery_rate" => id("battery0/power/rate"),
+        "@disk_active" => id("disk0/load/active"),
+        "@net_rx" => id("net0/rate/rx"),
         exact => id(exact),
     }
 }
@@ -63,20 +75,42 @@ fn tone_color(p: &theme::Palette, t: Tone) -> Color32 {
     }
 }
 
-/// Colour is never the only cue (colour-blind users): warn/danger add an icon.
-fn tone_mark(t: Tone) -> &'static str {
+/// Colour is never the only cue (colour-blind users): warn/danger add an
+/// icon (Phosphor: the UI fonts don't have ▲ on every OS).
+fn tone_mark(t: Tone) -> String {
     match t {
-        Tone::Warning => "▲ ",
-        Tone::Danger => "⚠ ",
-        _ => "",
+        Tone::Warning => format!("{} ", theme::icon::WARNING),
+        Tone::Danger => format!("{} ", theme::icon::WARNING_OCTAGON),
+        _ => String::new(),
     }
 }
 
-fn value_text(w: &Widget, s: &Series) -> String {
-    match w.decimals {
-        Some(d) => format!("{:.*} {}", d as usize, s.current, s.unit.suffix()),
-        None => sensors::fmt(s.current, s.unit),
-    }
+/// The value in the chosen units; a widget's own decimals win.
+pub fn value_text(w: &Widget, s: &Series) -> String {
+    let u = super::units::get();
+    let u = cpuzeez_core::units::Units { decimals: w.decimals.or(u.decimals), ..u };
+    u.format(s.current, s.unit)
+}
+
+/// The metric prefixes `widgets` read (aliases included), for a telemetry lease.
+pub fn prefixes(widgets: &[Widget]) -> Vec<String> {
+    let mut v: Vec<String> = widgets
+        .iter()
+        .filter_map(|w| w.metric.as_deref())
+        .map(|m| match m {
+            m if m.starts_with("@cpu") => "cpu/".to_string(),
+            m if m.starts_with("@gpu") => "gpu".to_string(),
+            "@chipset_temp" => "chipset/".to_string(),
+            "@mem_load" => "mem/".to_string(),
+            m if m.starts_with("@battery") => "battery".to_string(),
+            "@disk_active" => "disk".to_string(),
+            "@net_rx" => "net".to_string(),
+            exact => exact.to_string(),
+        })
+        .collect();
+    v.sort();
+    v.dedup();
+    v
 }
 
 /// Draw `layout`. `series` has current values; `points(id)` returns history,

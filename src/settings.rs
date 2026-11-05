@@ -54,6 +54,8 @@ pub struct Settings {
     pub detail: std::collections::BTreeMap<String, cpuzeez_core::detail::Level>,
     /// Rows pinned to the Overview, in pin order.
     pub pins: Vec<Pin>,
+    /// The Overview's tiles; None = the default set.
+    pub overview_tiles: Option<Vec<cpuzeez_core::layout::Widget>>,
 }
 
 /// A row pinned to the Overview (S1-U03).
@@ -88,6 +90,7 @@ impl Default for Settings {
             units: Default::default(),
             detail: Default::default(),
             pins: Vec::new(),
+            overview_tiles: None,
         }
     }
 }

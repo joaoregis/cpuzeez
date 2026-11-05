@@ -249,11 +249,62 @@ pub mod presets {
     pub fn all(tjmax: f64) -> Vec<Layout> {
         vec![mini(tjmax), compact(tjmax), detailed(tjmax)]
     }
+
+    /// The Overview's tile sets (S1-G01). "Default" is the pre-1.0 Overview.
+    pub const OVERVIEW: [&str; 5] = ["Default", "Gamer", "Overclocker", "Laptop", "Workstation"];
+
+    pub fn overview(name: &str, tjmax: f64) -> Vec<Widget> {
+        let t = |m: &str, l: &str| Widget::metric(Kind::Sparkline, m, l);
+        let temp = |m: &str, l: &str, lim: f64| t(m, l).with_thresholds(&temp_thresholds(lim));
+        let load = |m: &str, l: &str| t(m, l).range(0.0, 100.0).with_thresholds(&[(90.0, Tone::Warning)]);
+        match name {
+            "Gamer" => vec![
+                temp("@cpu_temp", "CPU temperature", tjmax),
+                load("@cpu_load", "CPU load"),
+                temp("@gpu_temp", "GPU temperature", 90.0),
+                load("@gpu_load", "GPU load"),
+            ],
+            "Overclocker" => vec![
+                temp("@cpu_temp", "CPU temperature", tjmax),
+                t("@cpu_clock", "CPU clock"),
+                t("@cpu_power", "CPU power"),
+                t("@cpu_vid", "CPU voltage"),
+            ],
+            "Laptop" => vec![
+                temp("@cpu_temp", "CPU temperature", tjmax),
+                t("@cpu_power", "CPU power"),
+                t("@battery_charge", "Battery"),
+                t("@battery_rate", "Charge rate"),
+            ],
+            "Workstation" => vec![
+                load("@cpu_load", "CPU load"),
+                load("@mem_load", "Memory load"),
+                load("@disk_active", "Disk active time"),
+                t("@net_rx", "Download"),
+            ],
+            _ => vec![
+                temp("@cpu_temp", "CPU temperature", tjmax),
+                t("@cpu_clock", "CPU clock"),
+                temp("@gpu_temp", "GPU temperature", 90.0),
+                temp("@chipset_temp", "Chipset temperature", 90.0),
+            ],
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn overview_presets_have_four_tiles_each() {
+        for name in presets::OVERVIEW {
+            let tiles = presets::overview(name, 95.0);
+            assert_eq!(tiles.len(), 4, "{name}");
+            assert!(tiles.iter().all(|w| w.metric.as_deref().is_some_and(|m| m.starts_with('@'))), "{name}");
+        }
+        assert_eq!(presets::overview("nope", 95.0), presets::overview("Default", 95.0));
+    }
 
     #[test]
     fn thresholds_and_bars() {
