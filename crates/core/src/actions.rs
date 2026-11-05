@@ -28,6 +28,87 @@ impl KernelModule {
     }
 }
 
+/// Windows priority classes (Unix maps them to nice values).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Priority {
+    Idle,
+    BelowNormal,
+    Normal,
+    AboveNormal,
+    High,
+    Realtime,
+}
+
+impl Priority {
+    pub const ALL: [Priority; 6] = [
+        Priority::Idle,
+        Priority::BelowNormal,
+        Priority::Normal,
+        Priority::AboveNormal,
+        Priority::High,
+        Priority::Realtime,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Priority::Idle => "Low",
+            Priority::BelowNormal => "Below normal",
+            Priority::Normal => "Normal",
+            Priority::AboveNormal => "Above normal",
+            Priority::High => "High",
+            Priority::Realtime => "Realtime",
+        }
+    }
+
+    /// Unix nice value.
+    pub fn nice(self) -> i32 {
+        match self {
+            Priority::Idle => 19,
+            Priority::BelowNormal => 10,
+            Priority::Normal => 0,
+            Priority::AboveNormal => -5,
+            Priority::High => -10,
+            Priority::Realtime => -20,
+        }
+    }
+
+    /// From a Windows base priority (4, 6, 8, 10, 13, 24) or a Unix nice.
+    pub fn from_base(base: i32, unix: bool) -> Priority {
+        if unix {
+            return match base {
+                n if n >= 15 => Priority::Idle,
+                n if n >= 5 => Priority::BelowNormal,
+                n if n > -5 => Priority::Normal,
+                n if n > -10 => Priority::AboveNormal,
+                n if n > -20 => Priority::High,
+                _ => Priority::Realtime,
+            };
+        }
+        match base {
+            ..=4 => Priority::Idle,
+            5..=6 => Priority::BelowNormal,
+            7..=8 => Priority::Normal,
+            9..=10 => Priority::AboveNormal,
+            11..=15 => Priority::High,
+            _ => Priority::Realtime,
+        }
+    }
+}
+
+/// Process operations (S2a-03): closed enum of typed operations, never a free-form command.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum ProcessOp {
+    End { pids: Vec<u32>, force: bool },
+    Suspend { pid: u32, on: bool },
+    Priority { pid: u32, priority: Priority },
+    Affinity { pid: u32, mask: u64 },
+    Eco { pid: u32, on: bool },
+    Virtualization { pid: u32, on: bool },
+    Dump { pid: u32 },
+}
+
 /// Everything the app can be asked to do with side effects.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "kebab-case", deny_unknown_fields)]
@@ -37,6 +118,9 @@ pub enum Action {
     /// Windows: run the PawnIO installer shipped next to the exe, after
     /// checking it against the SHA-256 pinned at build time.
     InstallPawnIo,
+    /// Act on one or more processes (S2a-03). `elevate` is set when the
+    /// target belongs to another user or an in-process attempt returned access denied.
+    Process { target: ProcessOp, elevate: bool },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,6 +144,8 @@ impl Action {
     pub fn privilege(&self) -> Privilege {
         match self {
             Action::LoadKernelModule { .. } | Action::InstallPawnIo => Privilege::Admin,
+            Action::Process { elevate: true, .. } => Privilege::Admin,
+            Action::Process { elevate: false, .. } => Privilege::User,
         }
     }
 
@@ -68,6 +154,11 @@ impl Action {
             Action::LoadKernelModule { .. } => Risk::Normal,
             // Installs a kernel driver for the whole machine.
             Action::InstallPawnIo => Risk::Critical,
+            Action::Process { target: ProcessOp::End { pids, .. }, .. } => {
+                if pids.iter().any(|&p| crate::procs::critical("", p)) { Risk::Critical } else { Risk::Irreversible }
+            }
+            Action::Process { target: ProcessOp::Priority { priority: Priority::Realtime, .. }, .. } => Risk::Critical,
+            Action::Process { .. } => Risk::Normal,
         }
     }
 
@@ -76,6 +167,24 @@ impl Action {
         match self {
             Action::LoadKernelModule { module } => format!("Load the {} kernel module", module.name()),
             Action::InstallPawnIo => "Install the PawnIO driver".into(),
+            Action::Process { target, .. } => match target {
+                ProcessOp::End { pids, force } => {
+                    let verb = if *force { "Force-kill" } else { "End" };
+                    if pids.len() == 1 {
+                        format!("{verb} process {}", pids[0])
+                    } else {
+                        format!("{verb} {} processes", pids.len())
+                    }
+                }
+                ProcessOp::Suspend { pid, on: true } => format!("Suspend process {pid}"),
+                ProcessOp::Suspend { pid, on: false } => format!("Resume process {pid}"),
+                ProcessOp::Priority { pid, priority } => format!("Set process {pid} priority to {}", priority.label()),
+                ProcessOp::Affinity { pid, mask } => format!("Set process {pid} CPU affinity to {mask:#x}"),
+                ProcessOp::Eco { pid, on: true } => format!("Enable Efficiency mode for process {pid}"),
+                ProcessOp::Eco { pid, on: false } => format!("Disable Efficiency mode for process {pid}"),
+                ProcessOp::Virtualization { pid, on } => format!("Set UAC virtualization for process {pid} to {on}"),
+                ProcessOp::Dump { pid } => format!("Create memory dump for process {pid}"),
+            },
         }
     }
 }
@@ -139,6 +248,11 @@ mod tests {
         assert_eq!(a.privilege(), Privilege::Admin);
         assert_eq!(a.describe(), "Load the msr kernel module");
         assert_eq!(decode(&encode(&Action::InstallPawnIo)), Ok(Action::InstallPawnIo));
+        let p = Action::Process { target: ProcessOp::End { pids: vec![1234, 5678], force: false }, elevate: true };
+        assert_eq!(decode(&encode(&p)), Ok(p.clone()));
+        assert_eq!(p.privilege(), Privilege::Admin);
+        assert_eq!(p.risk(), Risk::Irreversible);
+        assert_eq!(p.describe(), "End 2 processes");
     }
 
     #[test]
@@ -155,6 +269,7 @@ mod tests {
             r#"{"op":"load-kernel-module"}"#,
             r#"{"op":"install-paw-nio","path":"C:\x.exe"}"#,
             r#"{"op":"install-pawn-io","path":"C:\x.exe"}"#,
+            r#"{"op":"process","target":{"kind":"run","cmd":"sh"},"elevate":true}"#,
             r#""load-kernel-module""#,
             "",
         ] {

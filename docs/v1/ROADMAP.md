@@ -30,8 +30,8 @@
 
 ```
 S0 Foundation ──► S1 Existing features ──► S2a System ──► S2b ZeeZ Live ──► S2c Bottleneck ──► S3 Hardening ──► 1.0.0
-   │                 │ beta.1 (+ beta.2 fix)    └──────────────── beta.3 ────────────────┘            rc.N
-   └─ spikes ────────┴───────────────────────────── feed S2 ───────────────────┘
+   │                 │ beta.1 (+ beta.2 fix)    │ beta.3        │ beta.4          │ beta.5          rc.N
+   └─ spikes ────────┴──────────────────────────┴───────────────┴─── feed S2 ─────┘
 ```
 
 ---
@@ -214,9 +214,9 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 
 | ID | Item | Type | Source | Depends | Done when |
 |---|---|---|---|---|---|
-| S2a-01 | `procs` sources per OS: snapshot with threads, no strong handles | 🆕 | [task-manager §3.1](task-manager.md) | S0-E03, X10–X11 | Contract tests; anti-cheat rule enforced (handle-rights test) |
+| S2a-01 | `procs` sources per OS: snapshot with threads, no strong handles | 🆕 | [task-manager §3.1](task-manager.md) | S0-E03, X10–X11 | Contract tests; anti-cheat rule enforced (handle-rights test). ✅ `platform::procs` (`NtQuerySystemInformation`, `/proc/<pid>`, `libproc`; `PROCESS_QUERY_LIMITED_INFORMATION` only, enforced by `reading_uses_only_the_limited_right`), `platform::pdh` + `core::gpu::engines::per_process`, `platform::desktop` (`EnumWindows` + `IsHungAppWindow`), `core::procs` (rates, tree, grouping, problems, critical list) |
 | S2a-02 | **Processes**, Grouped and Detailed modes: every column, search syntax, presets, tree, heat map, 60 s sparklines, pinning | 🆕 | task-manager §2–3 | S0-B03 | Every Task Manager column present or marked per OS |
-| S2a-03 | **Process actions** through the Executor: end/tree, restart, suspend/resume, Eco mode, priority, affinity, dump, wait chain, UAC virtualization, run new task (+ admin), window actions | 🆕 | task-manager §3.2 | S0-B05 | Critical-process warnings; kittest flows |
+| S2a-03 | **Process actions** through the Executor: end/tree, restart, suspend/resume, Eco mode, priority, affinity, dump, wait chain, UAC virtualization, run new task (+ admin), window actions | 🆕 | task-manager §3.2 | S0-B05 | Critical-process warnings; kittest flows. ✅ `platform::proc_ops` (end/kill, suspend/resume, priority, affinity, Efficiency mode, minidump, WCT / Linux `wchan`, UAC virtualization, reveal, run new task) wired into `core::actions::ProcessOp` + `executor` (tested on child process) |
 | S2a-04 | **Details panel**: threads, modules, connections, open files, services, windows, GPU, security (signature, integrity, on-demand SHA-256) | 🆕 | task-manager §3.3 | 01 | Protected/anti-cheat processes excluded from on-demand reads |
 | S2a-05 | Problems filters, multi-select batch actions, export, snapshot compare | 🆕 | task-manager §3.3 | 02 | Same |
 | S2a-06 | **Performance** tab: per-device views (CPU grid, memory, disks, network, GPU engines, NPU), summary view, time ranges, export | 🆕 | task-manager §4 | S1-D01–D04 | Same |
@@ -226,7 +226,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 | S2a-10 | **App history** recorder (opt-in, SQLite, retention) + UI | 🆕 | task-manager §5 | S0-B07–B08 | Off by default; covers-only-while-running notice shown |
 | S2a-11 | *Settings › System* (every Task Manager setting + new ones) | 🆕 | task-manager §9 | — | Same |
 
-**S2a gate:** internal (no pre-release of its own; see the S2 note below).
+**S2a gate → pre-release `1.0.0-beta.3`** (System hub / Task Manager).
 
 ## S2b. ZeeZ Live
 
@@ -245,7 +245,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 | S2b-11 | **Per-game profiles** and automation | 🆕 | zeez-live §5.4 | 03 | Same |
 | S2b-12 | **Anti-cheat safety**: "no PawnIO" mode where needed, the compatibility list from X08 | 🆕 | zeez-live §7 | X08 | Documented |
 
-**S2b gate:** internal.
+**S2b gate → pre-release `1.0.0-beta.4`** (ZeeZ Live).
 
 ## S2c. Bottleneck detector
 
@@ -258,7 +258,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 | S2c-05 | Integrations: overlay pill, report section, Overview shortcut | 🆕 | bottleneck §5 | S2b | Same |
 | S2c-06 | *(Conditional)* static hardware balance from our own benchmarks | 🆕 | bottleneck §4 | S1-K02, K05 | Calibration passes, or the ADR cuts it |
 
-**S2c gate → `1.0.0-beta.3`: the whole of S2 (System hub, ZeeZ Live, Bottleneck detector) ships together** (decided 2026-11-05). `1.0.0-beta.2` was a fix release for beta.1 (UI frame time).
+**S2c gate → pre-release `1.0.0-beta.5`** (Bottleneck detector). (`1.0.0-beta.2` was a fix release for beta.1's UI frame time.)
 
 ---
 

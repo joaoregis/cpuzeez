@@ -7,6 +7,10 @@ generated from its section below.
 
 ## [Unreleased]
 
+### Added
+
+- **System hub foundation (S2a-01, S2a-03)**: cross-platform process and thread snapshots without opening strong process handles (`NtQuerySystemInformation` + `PROCESS_QUERY_LIMITED_INFORMATION` on Windows, `/proc` on Linux, `libproc` on macOS), per-process GPU engine and VRAM counters, top-level window detection (`IsHungAppWindow`), and audited process actions through the Executor (end task, suspend/resume, priority, CPU affinity, Efficiency mode, memory dump, wait-chain analysis, UAC virtualization, reveal in file manager and run new task).
+
 ## [1.0.0-beta.2] - 2026-11-05
 
 A fix release for testers of 1.0.0-beta.1.

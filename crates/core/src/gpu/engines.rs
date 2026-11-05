@@ -64,6 +64,49 @@ pub fn aggregate<'a>(items: impl IntoIterator<Item = (&'a str, f64)>) -> Vec<Ada
         .collect()
 }
 
+/// A process's GPU use, as the Task Manager shows it: its busiest engine.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProcessGpu {
+    pub pid: u32,
+    pub percent: f64,
+    /// That engine's type ("3D", "Video Decode"…).
+    pub engine: String,
+}
+
+/// Per-process GPU from the same (instance name, %) pairs.
+pub fn per_process<'a>(items: impl IntoIterator<Item = (&'a str, f64)>) -> Vec<ProcessGpu> {
+    type EngineMap<'a> = BTreeMap<(&'a str, &'a str, &'a str), (f64, &'a str)>;
+    // pid → (luid, phys, eng) → (%, type)
+    let mut m: BTreeMap<u32, EngineMap<'a>> = BTreeMap::new();
+    for (name, v) in items {
+        let Some(pid) = name.strip_prefix("pid_").and_then(|r| r.split('_').next()?.parse::<u32>().ok()) else {
+            continue;
+        };
+        let Some((luid, phys, eng, ty)) = parse(name) else { continue };
+        if v.is_finite() {
+            let e = m.entry(pid).or_default().entry((luid, phys, eng)).or_insert((0.0, ty));
+            e.0 += v.max(0.0);
+        }
+    }
+    m.into_iter()
+        .filter_map(|(pid, engines)| {
+            let (pct, ty) = engines.into_values().max_by(|a, b| a.0.total_cmp(&b.0))?;
+            Some(ProcessGpu { pid, percent: pct.min(100.0), engine: engine_label(ty) })
+        })
+        .collect()
+}
+
+/// Per-process memory from `GPU Process Memory(*)` instances ("pid_1234_luid_…_phys_0"): bytes per pid.
+pub fn per_process_memory<'a>(items: impl IntoIterator<Item = (&'a str, f64)>) -> BTreeMap<u32, u64> {
+    let mut m = BTreeMap::new();
+    for (name, v) in items {
+        if let Some(pid) = name.strip_prefix("pid_").and_then(|r| r.split('_').next()?.parse::<u32>().ok()) {
+            *m.entry(pid).or_default() += v.max(0.0) as u64;
+        }
+    }
+    m
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -93,5 +136,20 @@ mod tests {
         assert_eq!(engine_label("VideoProcessing"), "Video Processing");
         assert_eq!(engine_label("3D"), "3D");
         assert_eq!(engine_label("LegacyOverlay"), "Legacy Overlay");
+    }
+
+    #[test]
+    fn per_process_is_the_busiest_engine() {
+        let items = [
+            ("pid_10_luid_0x00000000_0x0000D1A3_phys_0_eng_0_engtype_3D", 30.0),
+            ("pid_10_luid_0x00000000_0x0000D1A3_phys_0_eng_3_engtype_VideoDecode", 45.0),
+            ("pid_10_luid_0x00000000_0x0000D1A3_phys_0_eng_0_engtype_3D", 5.0),
+            ("pid_20_luid_0x00000000_0x0000D1A3_phys_0_eng_0_engtype_3D", 2.0),
+        ];
+        let p = per_process(items);
+        assert_eq!(p[0], ProcessGpu { pid: 10, percent: 45.0, engine: "Video Decode".into() });
+        assert_eq!(p[1].pid, 20);
+        let mem = per_process_memory([("pid_10_luid_x_phys_0", 1000.0), ("pid_10_luid_y_phys_0", 24.0)]);
+        assert_eq!(mem[&10], 1024);
     }
 }

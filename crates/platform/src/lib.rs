@@ -7,6 +7,7 @@
 
 pub mod cpu_os;
 pub mod cstates;
+pub mod desktop;
 pub mod direct_io;
 pub mod disk_io;
 pub mod display;
@@ -20,6 +21,9 @@ pub mod memory;
 pub mod net_io;
 pub mod os;
 pub mod partitions;
+pub mod pdh;
+pub mod proc_ops;
+pub mod procs;
 
 pub mod cpu {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]

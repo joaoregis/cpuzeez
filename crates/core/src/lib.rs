@@ -24,6 +24,7 @@ pub mod memory;
 pub mod metrics;
 pub mod netio;
 pub mod pci;
+pub mod procs;
 pub mod query;
 pub mod report;
 #[cfg(test)]

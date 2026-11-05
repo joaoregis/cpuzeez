@@ -68,6 +68,54 @@ fn perform(a: &Action) -> Result<String, String> {
     match a {
         Action::LoadKernelModule { module } => load_kernel_module(module.name()),
         Action::InstallPawnIo => install_pawnio(),
+        Action::Process { target, .. } => perform_process(target),
+    }
+}
+
+fn perform_process(op: &actions::ProcessOp) -> Result<String, String> {
+    use actions::ProcessOp;
+    use cpuzeez_platform::proc_ops;
+    match op {
+        ProcessOp::End { pids, force } => {
+            if pids.is_empty() {
+                return Err("no process selected".into());
+            }
+            for &pid in pids {
+                if *force {
+                    proc_ops::kill(pid)?;
+                } else {
+                    proc_ops::end(pid)?;
+                }
+            }
+            Ok(format!("ended {} process(es)", pids.len()))
+        }
+        ProcessOp::Suspend { pid, on } => {
+            proc_ops::suspend(*pid, *on)?;
+            Ok(if *on { format!("suspended {pid}") } else { format!("resumed {pid}") })
+        }
+        ProcessOp::Priority { pid, priority } => {
+            proc_ops::set_priority(*pid, *priority)?;
+            Ok(format!("priority of {pid} set to {}", priority.label()))
+        }
+        ProcessOp::Affinity { pid, mask } => {
+            proc_ops::set_affinity(*pid, *mask)?;
+            Ok(format!("affinity of {pid} set to {mask:#x}"))
+        }
+        ProcessOp::Eco { pid, on } => {
+            proc_ops::eco(*pid, *on)?;
+            Ok(if *on { format!("Efficiency mode on for {pid}") } else { format!("Efficiency mode off for {pid}") })
+        }
+        ProcessOp::Virtualization { pid, on } => {
+            proc_ops::set_virtualization(*pid, *on)?;
+            Ok(format!("UAC virtualization of {pid} set to {on}"))
+        }
+        ProcessOp::Dump { pid } => {
+            let dir = std::env::temp_dir();
+            let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+            let path = dir.join(format!("cpuzeez-pid{pid}-{ts}.dmp"));
+            proc_ops::dump(*pid, &path)?;
+            Ok(path.display().to_string())
+        }
     }
 }
 
