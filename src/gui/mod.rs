@@ -526,9 +526,7 @@ impl App {
         detail::set(ui.ctx(), cpuzeez_core::detail::Level::Expert);
         match self.page {
             Page::Overview => {
-                let tel = self.mon.tel();
-                let core_mhz = crate::telemetry::core_mhz(&tel.snapshot(), 0);
-                let navs = overview::page(ui, &self.ctx, r, &tel, core_mhz, &mut self.mon.settings, &mut self.overview);
+                let navs = overview::page(ui, &self.ctx, r, &mut self.mon, &mut self.overview);
                 for n in navs {
                     match n {
                         overview::Nav::Page(p) => self.page = p,

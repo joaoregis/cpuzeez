@@ -279,11 +279,13 @@ pub(super) fn page(
     ui: &mut Ui,
     ctx: &Ctx,
     r: &[Section],
-    tel: &Telemetry,
-    core_mhz: Option<f64>,
-    s: &mut crate::settings::Settings,
+    mon: &mut super::sensors::Monitor,
     st: &mut State,
 ) -> Vec<Nav> {
+    let tel = &mon.tel();
+    let core_mhz = crate::telemetry::core_mhz(&tel.snapshot(), 0);
+    let alerts = mon.alerts().to_vec();
+    let s = &mut mon.settings;
     let mut nav = Vec::new();
     let p = theme::palette(ui);
     let c = crate::cpu::get(ctx);
@@ -318,6 +320,21 @@ pub(super) fn page(
         }
     });
     st.customize = customize;
+    if !alerts.is_empty() {
+        let p = theme::palette(ui);
+        egui::Frame::default()
+            .fill(p.danger.gamma_multiply(0.15))
+            .stroke(egui::Stroke::new(1.0, p.danger))
+            .corner_radius(egui::CornerRadius::same(theme::RADIUS_CARD))
+            .inner_margin(egui::Margin::same(theme::PAD_CARD))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                for a in &alerts {
+                    ui.label(RichText::new(format!("{}  {a}", icon::WARNING_OCTAGON)).color(p.text));
+                }
+            });
+        ui.add_space(theme::GAP);
+    }
     identity(ui, ctx, r, &board, &mut nav);
     health(ui, ctx, r, st, &mut nav);
     if st.customize {

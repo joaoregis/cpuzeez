@@ -56,6 +56,9 @@ pub struct Settings {
     pub pins: Vec<Pin>,
     /// The Overview's tiles; None = the default set.
     pub overview_tiles: Option<Vec<cpuzeez_core::layout::Widget>>,
+    /// Local alerts are opt-in (P1): off until turned on in Settings.
+    pub alerts_on: bool,
+    pub alerts: Vec<cpuzeez_core::alerts::Rule>,
 }
 
 /// A row pinned to the Overview (S1-U03).
@@ -91,6 +94,8 @@ impl Default for Settings {
             detail: Default::default(),
             pins: Vec::new(),
             overview_tiles: None,
+            alerts_on: false,
+            alerts: cpuzeez_core::alerts::defaults(),
         }
     }
 }

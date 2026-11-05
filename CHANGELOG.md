@@ -28,6 +28,7 @@ generated from its section below.
 - **Per-adapter network traffic** the same way: download/upload in Mbps, packets per second, errors and drops.
 - **GPU engine load**: 3D, copy, video encode and decode, compute and the rest per GPU on Windows (as the Task Manager counts them); the busy figure on Linux (AMD) and Device/Renderer/Tiler on macOS.
 - **A new Overview**: a one-line, clickable summary of the build; health pills (build checks, drive health, battery wear); tiles you choose (presets *Gamer*, *Overclocker*, *Laptop*, *Workstation*) that open the Sensors page on their metric; quick actions; *Customize* to add, order and remove tiles.
+- **Local alerts** (opt-in, *Settings › Alerts*): rules such as "CPU above 90 °C for 30 s" show on the Overview and in the tray tooltip. They're checked on this computer and never sent anywhere.
 - **Build health**: CpuZeeZ spots common setup mistakes and says how to fix them: a single memory module, XMP/EXPO not enabled, the graphics card on fewer PCIe lanes than it supports, the power-saving plan, a monitor below its refresh rate, or the monitor plugged into the motherboard while a graphics card is installed.
 - **Sensors page on a real table**: sort any column, filter with the search syntax (`cur>80`, `unit:°`, `id:disk`), one-click presets (temperatures, clocks, power…), select several rows to plot, pin or copy them, and *Export view* to CSV.
 - **Command palette** (`Ctrl+K`): search any value CpuZeeZ reads ("tRFC", "PCIe", "BIOS"), any page or an action such as saving the report, then press Enter to go there.

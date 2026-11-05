@@ -12,6 +12,7 @@ pub const NAME: &str = "cpuzeez";
 pub const DISPLAY_NAME: &str = "CpuZeeZ";
 
 pub mod actions;
+pub mod alerts;
 pub mod availability;
 pub mod config;
 pub mod detail;

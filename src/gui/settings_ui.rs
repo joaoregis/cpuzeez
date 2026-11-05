@@ -9,6 +9,19 @@ use crate::settings::{Settings, Theme};
 use eframe::egui::{self, RichText};
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Alerts", "Alertas"),
+    ("Show local alerts on the Overview and in the tray", "Mostrar alertas locais na Visão geral e na bandeja"),
+    (
+        "Checked on this computer, from its own sensor history; never sent anywhere.",
+        "Verificados neste computador, pelo histórico dos próprios sensores; nunca enviados a lugar nenhum.",
+    ),
+    ("above", "acima de"),
+    ("below", "abaixo de"),
+    ("for", "por"),
+    ("CPU temperature", "Temperatura da CPU"),
+    ("GPU temperature", "Temperatura da GPU"),
+    ("Memory load", "Uso da memória"),
+    ("Disk active time", "Tempo ativo do disco"),
     ("Units", "Unidades"),
     ("Temperature", "Temperatura"),
     ("Clocks", "Clocks"),
@@ -85,6 +98,19 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Alerts", "Alertas"),
+    ("Show local alerts on the Overview and in the tray", "Mostrar alertas locales en el Resumen y en la bandeja"),
+    (
+        "Checked on this computer, from its own sensor history; never sent anywhere.",
+        "Se comprueban en este equipo, con el historial de sus sensores; nunca se envían a ningún sitio.",
+    ),
+    ("above", "por encima de"),
+    ("below", "por debajo de"),
+    ("for", "durante"),
+    ("CPU temperature", "Temperatura de la CPU"),
+    ("GPU temperature", "Temperatura de la GPU"),
+    ("Memory load", "Uso de memoria"),
+    ("Disk active time", "Tiempo activo del disco"),
     ("Units", "Unidades"),
     ("Temperature", "Temperatura"),
     ("Clocks", "Relojes"),
@@ -286,6 +312,34 @@ fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
 }
 
 /// The Settings page. `updates_allowed` is false when cpuzeez.ini turns update
+/// Opt-in local alert rules (S1-G01).
+fn alerts(ui: &mut egui::Ui, s: &mut Settings) {
+    ui.checkbox(&mut s.alerts_on, tr("Show local alerts on the Overview and in the tray"));
+    ui.add_enabled_ui(s.alerts_on, |ui| {
+        for (i, r) in s.alerts.iter_mut().enumerate() {
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut r.enabled, tr(&r.label));
+                egui::ComboBox::from_id_salt(("alert-op", i))
+                    .width(90.0)
+                    .selected_text(tr(if r.above { "above" } else { "below" }))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut r.above, true, tr("above"));
+                        ui.selectable_value(&mut r.above, false, tr("below"));
+                    });
+                ui.add(egui::DragValue::new(&mut r.threshold).speed(0.5));
+                ui.label(tr("for"));
+                ui.add(egui::DragValue::new(&mut r.secs).range(1..=3600).suffix(" s"));
+            });
+        }
+    });
+    let p = theme::palette(ui);
+    ui.label(
+        RichText::new(tr("Checked on this computer, from its own sensor history; never sent anywhere."))
+            .small()
+            .color(p.text_muted),
+    );
+}
+
 /// °C/°F, MHz/GHz, MB/MiB, decimals (S1-U04).
 fn units(ui: &mut egui::Ui, u: &mut cpuzeez_core::units::Units) {
     use cpuzeez_core::units::{Clock, Size, Temp};
@@ -387,6 +441,9 @@ pub fn page(ui: &mut egui::Ui, s: &mut Settings, updates_allowed: bool, persist:
                 .on_hover_text(tr("Used by the stress monitor when the CPU's Tjmax is unknown."));
         });
     });
+    ui.add_space(theme::GAP);
+
+    widgets::card(ui, icon::BELL, tr("Alerts"), |ui| alerts(ui, s));
     ui.add_space(theme::GAP);
 
     widgets::card(ui, icon::ARROW_CIRCLE_UP, tr("Updates"), |ui| {

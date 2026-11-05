@@ -32,6 +32,8 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Avg", "Méd."),
     ("Search…", "Pesquisar…"),
     ("Plot", "Plotar"),
+    ("{} above {} for {} s (now {})", "{} acima de {} por {} s (agora {})"),
+    ("{} below {} for {} s (now {})", "{} abaixo de {} por {} s (agora {})"),
     ("Stop plotting", "Parar de plotar"),
     ("Unit", "Unidade"),
     ("All", "Todos"),
@@ -73,6 +75,8 @@ pub const ES: &[(&str, &str)] = &[
     ("Avg", "Prom."),
     ("Search…", "Buscar…"),
     ("Plot", "Graficar"),
+    ("{} above {} for {} s (now {})", "{} por encima de {} durante {} s (ahora {})"),
+    ("{} below {} for {} s (now {})", "{} por debajo de {} durante {} s (ahora {})"),
     ("Stop plotting", "Dejar de graficar"),
     ("Unit", "Unidad"),
     ("All", "Todos"),
@@ -133,6 +137,7 @@ pub struct Monitor {
     pub show_sensors: bool,
     pub show_stress: bool,
     pub show_mini: bool,
+    alerts: Vec<String>,
     /// Sidebar layout: Sensors/Stress are pages, so `frame` only raises the
     /// `show_*` flags (tray menu) and the app navigates instead of opening windows.
     pub pages: bool,
@@ -150,6 +155,7 @@ impl Monitor {
             ctx,
             tel: None,
             show_mini: settings.mini,
+            alerts: Vec::new(),
             settings,
             show_sensors: false,
             show_stress: false,
@@ -169,6 +175,11 @@ impl Monitor {
     }
 
     /// The shared sampler, started on first use.
+    /// Local alerts firing right now (S1-G01), already worded.
+    pub fn alerts(&self) -> &[String] {
+        &self.alerts
+    }
+
     /// Opens on these rows (the Overview's tiles link here).
     pub fn focus(&mut self, filter: String) {
         self.view.table.filter = filter;
@@ -286,14 +297,30 @@ impl Monitor {
             if self.show_mini {
                 tel.want("mini", &shown);
             }
+            if self.settings.alerts_on {
+                let ws: Vec<cpuzeez_core::layout::Widget> = self
+                    .settings
+                    .alerts
+                    .iter()
+                    .filter(|r| r.enabled)
+                    .map(|r| cpuzeez_core::layout::Widget::metric(cpuzeez_core::layout::Kind::Value, &r.metric, ""))
+                    .collect();
+                let lease = super::layout_view::prefixes(&ws);
+                tel.want("alerts", &lease.iter().map(String::as_str).collect::<Vec<_>>());
+            }
             let series = tel.series_with(|_| false);
             let (limit, tjmax) = (self.stress_limit(), self.tjmax());
             self.stress.tick(&series, limit);
-            let tip = summary(&series)
+            self.alerts =
+                if self.settings.alerts_on { firing_alerts(&self.settings.alerts, &series, tel) } else { Vec::new() };
+            let mut tip = summary(&series)
                 .iter()
                 .filter_map(|(n, t)| t.map(|t| format!("{n} {}", fmt0(t))))
                 .collect::<Vec<_>>()
                 .join(" · ");
+            for a in &self.alerts {
+                tip = format!("{} {a}\n{tip}", icon::WARNING);
+            }
             self.tray.update(cpu_temp(&series).map(|s| s.current), tjmax, &tip);
             if self.stress.running() || self.tray.active() || self.show_mini {
                 ectx.request_repaint_after(Duration::from_secs(1));
@@ -597,6 +624,21 @@ pub fn page(ui: &mut egui::Ui, mon: &mut Monitor) {
     widgets::card(ui, icon::CHART_LINE, tr("History"), |ui| {
         charts(ui, &series, &v.plotted, mon.settings.graph_seconds as f64);
     });
+}
+
+/// "CPU temperature above 90 °C for 30 s (now 93 °C)" for each rule that holds.
+fn firing_alerts(rules: &[cpuzeez_core::alerts::Rule], series: &[Series], tel: &Telemetry) -> Vec<String> {
+    rules
+        .iter()
+        .filter(|r| r.enabled)
+        .filter_map(|r| {
+            let s = super::layout_view::resolve(&r.metric, series)?;
+            cpuzeez_core::alerts::firing(r, &tel.points(&s.id)).then(|| {
+                let key = if r.above { "{} above {} for {} s (now {})" } else { "{} below {} for {} s (now {})" };
+                super::i18n::trf(key, &[&tr(&r.label), &fmt(r.threshold, s.unit), &r.secs, &fmt(s.current, s.unit)])
+            })
+        })
+        .collect()
 }
 
 /// One-click filters over the table's own syntax (S1-G08); the filter box
