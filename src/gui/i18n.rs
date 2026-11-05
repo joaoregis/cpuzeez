@@ -37,6 +37,7 @@ fn tables() -> &'static [(Table, Table)] {
         (super::welcome::PT_BR, super::welcome::ES),
         (super::table::PT_BR, super::table::ES),
         (super::layout_view::PT_BR, super::layout_view::ES),
+        (super::detail::PT_BR, super::detail::ES),
     ]
 }
 

@@ -50,6 +50,8 @@ pub struct Settings {
     pub log_retention_days: u32,
     /// °C/°F, MHz/GHz, MB/MiB and decimals for every displayed value.
     pub units: cpuzeez_core::units::Units,
+    /// Detail level per page ("Processor" → Basic/Advanced/Expert).
+    pub detail: std::collections::BTreeMap<String, cpuzeez_core::detail::Level>,
 }
 
 impl Default for Settings {
@@ -69,6 +71,7 @@ impl Default for Settings {
             privacy_seen: 0,
             log_retention_days: 0,
             units: Default::default(),
+            detail: Default::default(),
         }
     }
 }

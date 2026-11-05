@@ -7,6 +7,7 @@
 mod access_ui;
 mod bench_tab;
 mod bmp;
+pub mod detail;
 mod devices;
 pub mod i18n;
 pub mod overview;
@@ -383,11 +384,36 @@ fn shown<'a>(key: &str, v: &'a str) -> &'a str {
     if report::is_private(key) { "••••••••" } else { v }
 }
 
-/// A card of label/value rows (labels translated, private values masked).
+/// A card of label/value rows (labels translated, private values masked),
+/// keeping the rows the page's detail level shows; nothing at all if none.
 fn boxed(ui: &mut egui::Ui, title: &str, rows: &[(&str, String)]) {
-    let rows: Vec<(&str, String)> = rows.iter().map(|(k, v)| (tr(k), shown(k, v).to_string())).collect();
+    use cpuzeez_core::detail::{level_of, shows};
+    let level = detail::get(ui.ctx());
+    let rows: Vec<(&str, String)> =
+        rows.iter().filter(|(k, _)| shows(level, level_of(k))).map(|(k, v)| (tr(k), shown(k, v).to_string())).collect();
+    if rows.is_empty() {
+        return;
+    }
     widgets::card(ui, "", tr(title), |ui| widgets::kv_list(ui, &rows));
     ui.add_space(theme::GAP);
+}
+
+/// Expert: thread 0's raw CPUID leaves and MSRs, from the report's thread dumps.
+fn cpuid_dump(ui: &mut egui::Ui, r: &[Section]) {
+    let Some(t0) = sec(r, "Thread dumps").and_then(|s| report::groups(&s.nodes, "CPU Thread").into_iter().next())
+    else {
+        return;
+    };
+    for (group, title) in [("CPUID", "CPUID leaves (thread 0)"), ("MSR", "MSRs (thread 0)")] {
+        let Some((_, rows)) = report::groups(t0.1, group).into_iter().next() else { continue };
+        heading(ui, tr(title));
+        widgets::card(ui, "", "", |ui| {
+            for (k, v) in report::fields(rows) {
+                ui.label(RichText::new(format!("{k}  {}", v.replace('\t', "  "))).monospace());
+            }
+        });
+        ui.add_space(theme::GAP);
+    }
 }
 
 /// Section label between cards.
@@ -454,8 +480,26 @@ impl App {
             .id()
     }
 
+    /// A page header with the detail switch; the chosen level is remembered per page.
+    fn info_header(&mut self, ui: &mut egui::Ui, title: &str, sub: &str) {
+        let key = format!("{:?}", self.page);
+        let mut level = self.mon.settings.detail.get(&key).copied().unwrap_or_default();
+        let mut changed = false;
+        widgets::page_header(ui, title, sub, |ui| changed = detail::switch(ui, &mut level));
+        if changed {
+            self.mon.settings.detail.insert(key, level);
+            if self.auto.is_none() {
+                self.mon.settings.save();
+            }
+        }
+        detail::set(ui.ctx(), level);
+    }
+
     fn page_body(&mut self, ui: &mut egui::Ui, r: &[Section]) {
-        let c = crate::cpu::get(&self.ctx);
+        let ctx = self.ctx.clone();
+        let c = crate::cpu::get(&ctx);
+        // Pages without the switch draw everything (as at Expert); boxed() reads this.
+        detail::set(ui.ctx(), cpuzeez_core::detail::Level::Expert);
         match self.page {
             Page::Overview => {
                 let tel = self.mon.tel();
@@ -468,15 +512,18 @@ impl App {
                     .flatten()
                     .collect::<Vec<_>>()
                     .join(" · ");
-                widgets::page_header(ui, &c.name, &sub, |_| {});
+                self.info_header(ui, &c.name, &sub);
                 self.cpu_tab(ui, r);
                 heading(ui, tr("Caches"));
                 self.caches_tab(ui);
+                if detail::get(ui.ctx()) == cpuzeez_core::detail::Level::Expert {
+                    cpuid_dump(ui, r);
+                }
             }
             Page::Mainboard => {
                 let board =
                     format!("{} {}", sgi(r, "DMI", "DMI Baseboard", "vendor"), sgi(r, "DMI", "DMI Baseboard", "model"));
-                widgets::page_header(ui, tr("Mainboard"), board.trim(), |_| {});
+                self.info_header(ui, tr("Mainboard"), board.trim());
                 mainboard_tab(ui, r);
             }
             Page::Memory => {
@@ -486,13 +533,13 @@ impl App {
                     .filter(|s| !s.is_empty())
                     .collect::<Vec<_>>()
                     .join(" · ");
-                widgets::page_header(ui, tr("Memory"), &sub, |_| {});
+                self.info_header(ui, tr("Memory"), &sub);
                 memory_tab(ui, r);
                 heading(ui, "SPD");
                 self.spd_tab(ui, r);
             }
             Page::Graphics => {
-                widgets::page_header(ui, tr("Graphics"), "", |_| {});
+                self.info_header(ui, tr("Graphics"), "");
                 self.graphics_tab(ui, r);
             }
             Page::Devices => self.devices.page(ui, &self.ctx),
@@ -1145,5 +1192,33 @@ mod tests {
         assert_eq!(super::shown("Machine", "x"), "x");
         assert_eq!(super::shown("Name", "x"), "x");
         super::MASK_PRIVATE.store(false, Ordering::Relaxed);
+    }
+
+    /// S1-U01: a card keeps the rows its page's level shows, and vanishes when none.
+    #[test]
+    fn detail_levels_filter_cards() {
+        use cpuzeez_core::detail::Level;
+        use eframe::egui;
+        use egui_kittest::{Harness, kittest::Queryable};
+        let draw = |level: Level| {
+            let mut h = Harness::builder().with_size(egui::vec2(600.0, 400.0)).build_ui(move |ui| {
+                if !ui.style().text_styles.contains_key(&egui::TextStyle::Name("title".into())) {
+                    super::theme::install(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                super::detail::set(ui.ctx(), level);
+                super::boxed(ui, "Processor", &[("Name", "Ryzen".into()), ("Microcode", "0xA601209".into())]);
+                super::boxed(ui, "Only advanced", &[("Bus Speed", "100 MHz".into())]);
+            });
+            h.run();
+            h
+        };
+        let basic = draw(Level::Basic);
+        assert!(basic.query_by_label("Ryzen").is_some());
+        assert!(basic.query_by_label("0xA601209").is_none(), "Microcode is Advanced");
+        assert!(basic.query_by_label("Only advanced").is_none(), "an empty card isn't drawn");
+        let advanced = draw(Level::Advanced);
+        assert!(advanced.query_by_label("0xA601209").is_some() && advanced.query_by_label("100 MHz").is_some());
     }
 }

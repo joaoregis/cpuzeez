@@ -14,6 +14,7 @@ pub const DISPLAY_NAME: &str = "CpuZeeZ";
 pub mod actions;
 pub mod availability;
 pub mod config;
+pub mod detail;
 pub mod diskio;
 pub mod layout;
 pub mod memory;
