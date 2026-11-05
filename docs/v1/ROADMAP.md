@@ -130,6 +130,18 @@ Goal: fix what's broken, build the shared building blocks, and set up the tests 
 
 **S0 gate:** every 🐞 closed; the building blocks have tests and benches; existing features behave exactly as in 0.3.0 (visual regression), but run on the new architecture; every spike has an ADR. *No pre-release: nothing new for users yet.*
 
+**S0 gate status (2026-11-05): closed for S1, with spikes carried.**
+- Every 🐞 is closed, every building block has tests, and CI is green on Windows, Linux (x64, arm64, Debian, Ubuntu 22.04, Arch) and macOS (Intel, ARM).
+- The spikes that need hardware, games or another OS stay open. None of them blocks S1, which improves the existing pages; each must close before the gate of the stage it de-risks:
+
+  | Spike | Waiting on | Blocks |
+  |---|---|---|
+  | X02 (rest): DX12/Vulkan/OpenGL/FG, 240+ FPS | Games with those APIs | S2b gate |
+  | X03, X09: overlay over games × display modes; overlay GPU cost | A play session with the overlay prototype (S2b) | S2b gate |
+  | X04, X07, X11: macOS overlay over fullscreen, Metal HUD, per-process GPU | Mac results ([docs/testing/macos.md](../testing/macos.md)) | S2a/S2b gates |
+  | X05, X06: Wayland layer-shell, MangoHud | A Linux desktop (KDE/Hyprland) | S2b gate |
+  | X08 (rest): in-match with sensors on; FACEIT/EAC/BattlEye | The account owner, at their own risk | S2b gate |
+
 ---
 
 ## S1. Existing features, improved
