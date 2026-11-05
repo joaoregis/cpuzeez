@@ -250,6 +250,7 @@ struct InspectorCache {
 pub struct State {
     pub tab: SysTab,
     pub sampler: Sampler,
+    pub perf: super::system_perf::State,
     pub mode: ProcMode,
     pub tree: bool,
     pub preset: Preset,
@@ -278,6 +279,7 @@ impl Default for State {
         State {
             tab: SysTab::Processes,
             sampler: Sampler::new(1000),
+            perf: Default::default(),
             mode: ProcMode::Grouped,
             tree: false,
             preset,
@@ -331,15 +333,20 @@ impl State {
         }
     }
 
-    pub fn page(&mut self, ui: &mut Ui) {
+    pub fn page(&mut self, ui: &mut Ui, ctx: &Arc<crate::Ctx>, mon: &mut super::sensors::Monitor) {
         self.sampler.want();
         self.poll_running(ui.ctx());
         let snap = self.sampler.snapshot();
-        self.page_with_snapshot(ui, &snap);
+        if self.tab == SysTab::Performance {
+            self.header_and_tabs(ui, &snap);
+            self.perf.show(ui, ctx, mon, &snap);
+            self.modals(ui, &snap);
+        } else {
+            self.page_with_snapshot(ui, &snap);
+        }
     }
 
-    /// Renders the System hub using a provided snapshot (used by `page` and unit/GUI tests).
-    pub fn page_with_snapshot(&mut self, ui: &mut Ui, snap: &Snapshot) {
+    fn header_and_tabs(&mut self, ui: &mut Ui, snap: &Snapshot) {
         let sub = trf(
             "{} processes · {} threads · {} handles",
             &[&snap.totals.processes, &snap.totals.threads, &snap.totals.handles],
@@ -398,16 +405,17 @@ impl State {
             }
             ui.add_space(4.0);
         }
+    }
+
+    /// Renders the System hub using a provided snapshot (used by `page` and unit/GUI tests).
+    pub fn page_with_snapshot(&mut self, ui: &mut Ui, snap: &Snapshot) {
+        self.header_and_tabs(ui, snap);
 
         match self.tab {
             SysTab::Processes => self.processes_tab(ui, snap),
             SysTab::Performance => {
-                widgets::empty_state(
-                    ui,
-                    icon::CHART_LINE_UP,
-                    tr("Performance"),
-                    tr("Per-device live performance graphs (S2a-06)."),
-                );
+                let ctx = Arc::new(crate::Ctx::new(Default::default()));
+                self.perf.show_with_series(ui, &ctx, &[], 0.0, snap);
             }
             SysTab::AppHistory => {
                 widgets::empty_state(

@@ -47,6 +47,7 @@ static BATTERIES: Cached<Vec<crate::battery::Battery>> = Cached::new(Duration::f
 static FIRMWARE: Cached<cpuzeez_platform::firmware::Firmware> = Cached::new(Duration::from_secs(3600));
 static CPU_OS: Cached<CpuOs> = Cached::new(Duration::from_secs(10));
 static GPUS: Cached<Vec<String>> = Cached::new(Duration::from_secs(3600));
+static NPUS: Cached<Vec<crate::npu::Npu>> = Cached::new(Duration::from_secs(3600));
 
 /// What the OS says about the CPU (vulnerabilities, virtualization, power policy).
 pub struct CpuOs {
@@ -78,6 +79,10 @@ pub fn cpu_os(ctx: &Arc<Ctx>) -> Option<Arc<CpuOs>> {
 /// GPU adapters for the benchmark (creating a wgpu instance takes ~0.9 s).
 pub fn gpu_adapters(ctx: &Arc<Ctx>) -> Option<Arc<Vec<String>>> {
     GPUS.get(ctx, |_| crate::gpubench::adapters())
+}
+
+pub fn npus(ctx: &Arc<Ctx>) -> Arc<Vec<crate::npu::Npu>> {
+    NPUS.get(ctx, crate::npu::list).unwrap_or_default()
 }
 
 #[cfg(test)]

@@ -35,6 +35,7 @@ mod plot;
 pub mod sensors;
 pub mod stress;
 pub mod system;
+pub mod system_perf;
 pub mod table;
 mod tray;
 mod trayicon;
@@ -608,7 +609,7 @@ impl App {
                     }
                 }
             }
-            Page::System => self.system.page(ui),
+            Page::System => self.system.page(ui, &self.ctx, &mut self.mon),
             Page::Processor => {
                 let sub = [c.info.codename.clone(), c.info.package.clone(), c.info.technology.clone()]
                     .into_iter()

@@ -40,6 +40,44 @@ pub fn logical_cpus() -> usize {
     std::thread::available_parallelism().map_or(1, |n| n.get())
 }
 
+/// System uptime in seconds since boot.
+pub fn uptime_secs() -> u64 {
+    #[cfg(windows)]
+    {
+        // SAFETY: GetTickCount64 takes no arguments and never fails.
+        (unsafe { windows_sys::Win32::System::SystemInformation::GetTickCount64() }) / 1000
+    }
+    #[cfg(target_os = "linux")]
+    {
+        read_trim("/proc/uptime").and_then(|s| s.split_whitespace().next()?.parse::<f64>().ok()).map_or(0, |s| s as u64)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let mut tv = libc::timeval { tv_sec: 0, tv_usec: 0 };
+        let mut len = std::mem::size_of::<libc::timeval>();
+        // SAFETY: sysctlbyname with a timeval buffer.
+        let ok = unsafe {
+            libc::sysctlbyname(
+                c"kern.boottime".as_ptr(),
+                (&mut tv as *mut libc::timeval).cast(),
+                &mut len,
+                std::ptr::null_mut(),
+                0,
+            ) == 0
+        };
+        if ok && tv.tv_sec > 0 {
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+            now.saturating_sub(tv.tv_sec as u64)
+        } else {
+            0
+        }
+    }
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+    {
+        0
+    }
+}
+
 /// Run `f` on the calling thread while it is pinned to logical CPU `cpu`
 /// (global index), then restore the thread's previous affinity.
 /// Returns None if the OS can't pin (macOS) so callers can fall back.
