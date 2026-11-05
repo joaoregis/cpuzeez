@@ -178,6 +178,7 @@ struct App {
     overview: overview::State,
     /// Processor › Cores table (sort, columns).
     cores_table: table::State,
+    pcie_table: table::State,
 }
 
 pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
@@ -243,6 +244,7 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         palette: Default::default(),
         overview: Default::default(),
         cores_table: Default::default(),
+        pcie_table: Default::default(),
     };
     if app.auto.is_none() {
         crate::data::expire_logs(app.mon.settings.log_retention_days);
@@ -563,6 +565,7 @@ impl App {
                     format!("{} {}", sgi(r, "DMI", "DMI Baseboard", "vendor"), sgi(r, "DMI", "DMI Baseboard", "model"));
                 self.info_header(ui, tr("Mainboard"), board.trim());
                 mainboard_tab(ui, r);
+                self.mainboard_more(ui, r);
             }
             Page::Memory => {
                 let k = |key: &str| sget(r, "Chipset", key);

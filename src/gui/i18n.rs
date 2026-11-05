@@ -41,6 +41,7 @@ fn tables() -> &'static [(Table, Table)] {
         (super::pins::PT_BR, super::pins::ES),
         (super::palette::PT_BR, super::palette::ES),
         (super::pages::processor_more::PT_BR, super::pages::processor_more::ES),
+        (super::pages::mainboard_more::PT_BR, super::pages::mainboard_more::ES),
     ]
 }
 

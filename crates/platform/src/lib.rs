@@ -9,6 +9,7 @@ pub mod cpu_os;
 pub mod disk_io;
 pub mod display;
 pub mod elevation;
+pub mod firmware;
 pub mod gpu_engines;
 pub mod hw;
 pub mod memory;

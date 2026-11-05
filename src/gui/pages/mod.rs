@@ -3,6 +3,7 @@
 mod about;
 mod graphics;
 mod mainboard;
+pub(crate) mod mainboard_more;
 mod memory;
 mod processor;
 pub(crate) mod processor_more;

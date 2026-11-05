@@ -22,7 +22,7 @@ impl std::fmt::Display for Bdf {
 }
 
 /// PCIe link, speeds in Link Status encoding (1 = 2.5 GT/s ... 6 = 64 GT/s).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Link {
     pub speed: u8,
     pub width: u8,
