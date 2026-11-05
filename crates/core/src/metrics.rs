@@ -92,6 +92,34 @@ pub struct Series {
 }
 
 /// Every metric's current value and statistics after the latest tick.
+/// How long a source's reads take. The first read discovers the hardware
+/// (WMI, SPD scan, chip detection) and can take seconds, so it's kept apart
+/// from the steady mean instead of inflating it.
+#[derive(Debug, Clone, Default)]
+pub struct Cost {
+    pub name: &'static str,
+    pub reads: u64,
+    pub first: Duration,
+    /// Sum of every read after the first.
+    rest: Duration,
+}
+
+impl Cost {
+    fn add(&mut self, took: Duration) {
+        if self.reads == 0 {
+            self.first = took;
+        } else {
+            self.rest += took;
+        }
+        self.reads += 1;
+    }
+
+    /// Mean of the reads after the first (the first alone if that's all).
+    pub fn mean(&self) -> Duration {
+        if self.reads <= 1 { self.first } else { self.rest / (self.reads - 1) as u32 }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Snapshot {
     /// Engine time of the tick.
@@ -333,7 +361,7 @@ struct Inner {
     slow_latest: Mutex<HashMap<&'static str, Vec<Reading>>>,
     failures: Mutex<HashMap<&'static str, String>>,
     /// Per-source read time: (reads, total).
-    costs: Mutex<HashMap<&'static str, (u64, Duration)>>,
+    costs: Mutex<HashMap<&'static str, Cost>>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -378,8 +406,7 @@ impl Inner {
         a.busy = None;
         {
             let mut costs = lock(&self.costs);
-            let e = costs.entry(a.name).or_default();
-            (e.0, e.1) = (e.0 + 1, e.1 + took);
+            costs.entry(a.name).or_insert_with(|| Cost { name: a.name, ..Default::default() }).add(took);
         }
         match r {
             Ok(mut out) => {
@@ -475,10 +502,10 @@ impl Engine {
 
     /// Average time per read of each source so far: (name, reads, mean),
     /// slowest first. The performance budget (P6) is checked against this.
-    pub fn costs(&self) -> Vec<(&'static str, u64, Duration)> {
-        let mut v: Vec<_> =
-            lock(&self.inner.costs).iter().map(|(k, (n, t))| (*k, *n, *t / (*n).max(1) as u32)).collect();
-        v.sort_by_key(|a| std::cmp::Reverse(a.2));
+    /// Read time per source, slowest (steady mean) first.
+    pub fn costs(&self) -> Vec<Cost> {
+        let mut v: Vec<Cost> = lock(&self.inner.costs).values().cloned().collect();
+        v.sort_by_key(|c| std::cmp::Reverse(c.mean()));
         v
     }
 
@@ -691,6 +718,17 @@ mod tests {
 
     /// Performance budget (P6, S0-T08): the per-tick work the engine itself
     /// adds (history push + snapshot) for 300 metrics with 10 minutes of history.
+    #[test]
+    fn the_first_read_does_not_skew_the_mean() {
+        let mut c = Cost::default();
+        c.add(Duration::from_millis(1700));
+        assert_eq!(c.mean(), Duration::from_millis(1700));
+        for _ in 0..9 {
+            c.add(Duration::from_millis(20));
+        }
+        assert_eq!((c.reads, c.first, c.mean()), (10, Duration::from_millis(1700), Duration::from_millis(20)));
+    }
+
     #[test]
     fn tick_overhead_budget() {
         let mut h = History::new(Duration::from_secs(600));

@@ -55,6 +55,8 @@ pub fn on_cpu<T>(cpu: usize, f: impl FnOnce() -> T) -> Option<T> {
 struct Pinned {
     #[cfg(windows)]
     prev: win::GroupAffinity,
+    #[cfg(windows)]
+    priority: i32,
     #[cfg(target_os = "linux")]
     prev: libc::cpu_set_t,
 }
@@ -70,11 +72,17 @@ impl Pinned {
                 if rest < n {
                     let ga = win::GroupAffinity { mask: 1usize << rest, group: grp, reserved: [0; 3] };
                     let mut prev = win::GroupAffinity { mask: 0, group: 0, reserved: [0; 3] };
+                    // For the few microseconds we're pinned, run ahead of whatever
+                    // keeps that core busy (a game): otherwise the move waits for
+                    // its time slice to end, tens of ms per core under load.
+                    let priority = win::GetThreadPriority(win::GetCurrentThread());
+                    win::SetThreadPriority(win::GetCurrentThread(), win::THREAD_PRIORITY_TIME_CRITICAL);
                     if win::SetThreadGroupAffinity(win::GetCurrentThread(), &ga, &mut prev) == 0 {
+                        win::SetThreadPriority(win::GetCurrentThread(), priority);
                         return None;
                     }
                     std::thread::yield_now(); // migrate now, before `f` runs
-                    return Some(Pinned { prev });
+                    return Some(Pinned { prev, priority });
                 }
                 rest -= n;
             }
@@ -113,7 +121,10 @@ impl Drop for Pinned {
         // SAFETY: restores the affinity saved by `to` on the same thread.
         unsafe {
             #[cfg(windows)]
-            win::SetThreadGroupAffinity(win::GetCurrentThread(), &self.prev, std::ptr::null_mut());
+            {
+                win::SetThreadGroupAffinity(win::GetCurrentThread(), &self.prev, std::ptr::null_mut());
+                win::SetThreadPriority(win::GetCurrentThread(), self.priority);
+            }
             #[cfg(target_os = "linux")]
             libc::sched_setaffinity(0, std::mem::size_of::<libc::cpu_set_t>(), &self.prev);
         }
@@ -185,6 +196,8 @@ pub mod win {
     #![allow(non_snake_case)]
     use std::ffi::c_void;
 
+    pub const THREAD_PRIORITY_TIME_CRITICAL: i32 = 15;
+
     #[repr(C)]
     pub struct GroupAffinity {
         pub mask: usize,
@@ -198,6 +211,8 @@ pub mod win {
         pub fn GetActiveProcessorCount(group: u16) -> u32;
         pub fn GetCurrentThread() -> *mut c_void;
         pub fn SetThreadGroupAffinity(t: *mut c_void, a: *const GroupAffinity, prev: *mut GroupAffinity) -> i32;
+        pub fn GetThreadPriority(t: *mut c_void) -> i32;
+        pub fn SetThreadPriority(t: *mut c_void, p: i32) -> i32;
         pub fn GetSystemFirmwareTable(provider: u32, id: u32, buf: *mut u8, size: u32) -> u32;
         pub fn QueryPerformanceFrequency(f: *mut i64) -> i32;
         pub fn QueryPerformanceCounter(c: *mut i64) -> i32;

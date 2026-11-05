@@ -96,7 +96,8 @@ pub fn active_mhz(ctx: &Ctx, cpu: usize) -> Option<f64> {
     static LAST: Mutex<Vec<Option<(u64, u64)>>> = Mutex::new(Vec::new());
     let tsc = tsc_hz()?;
     let (ra, rm) = aperf_mperf_regs(ctx);
-    let (a, m) = (ctx.hw.rdmsr(cpu, ra)?, ctx.hw.rdmsr(cpu, rm)?);
+    let [a, m] = ctx.hw.rdmsr_many(cpu, &[ra, rm])[..] else { return None };
+    let (a, m) = (a?, m?);
     let prev = {
         let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
         if last.len() <= cpu {

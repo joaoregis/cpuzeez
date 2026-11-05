@@ -418,6 +418,12 @@ impl Hw for PawnIo {
         crate::os::on_cpu(cpu, || m.exec1("ioctl_read_msr", &[msr as u64]))?
     }
 
+    fn rdmsr_many(&self, cpu: usize, msrs: &[u32]) -> Vec<Option<u64>> {
+        let Some(m) = self.msr.as_ref() else { return vec![None; msrs.len()] };
+        crate::os::on_cpu(cpu, || msrs.iter().map(|&r| m.exec1("ioctl_read_msr", &[r as u64])).collect())
+            .unwrap_or_else(|| vec![None; msrs.len()])
+    }
+
     fn io_in8(&self, port: u16) -> Option<u8> {
         self.pio(port, None).map(|v| v as u8)
     }

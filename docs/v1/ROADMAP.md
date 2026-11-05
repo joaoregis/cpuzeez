@@ -156,7 +156,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 | S1-D02 | Per-adapter network throughput, errors and drops | 🧱 | task-manager §4 | Same |
 | S1-D03 | Memory composition (commit, pools, standby, compressed, *wired*), page file/swap | 🧱 | task-manager §4 | Same |
 | S1-D04 | GPU per-engine utilization (adapter level) | 🧱 | zeez-live §4 | Same |
-| S1-D05 | **Split the `cpu+board` source by device** (CPU, Super I/O, DIMMs, SMU, chipset) so a lease reads only what it needs, and find the ~170 ms of waiting per read (measured 2026-11-04 on the reference machine, elevated: 193 ms mean latency but ~19 ms of CPU) | 🐞 | P6, measurement below | Overlay lease "cpu temp + clock" reads < 5 ms per tick |
+| S1-D05 | **Split the `cpu+board` source by device** (CPU, Super I/O, DIMMs, SMU, chipset) so a lease reads only what it needs, and find the ~170 ms of waiting per read (measured 2026-11-04 on the reference machine, elevated: 193 ms mean latency but ~19 ms of CPU) | 🐞 | P6, measurement below | Overlay lease "cpu temp + clock" reads < 5 ms per tick. ✅ Sources `cpu`, `board`, `dimms`; the "waiting" was the first read averaged in (now reported apart); typical cpu tick ~3 ms under game load. 🟡 Rare ~30 ms spikes on busy cores: a per-core pinned reader pool is the next step if ZeeZ Live's SP8 budget needs it |
 
 ### S1.2 Shared page patterns
 
@@ -292,4 +292,5 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 | 2026-11-04 | Ryzen 9 7900X, Windows 11, elevated, PawnIO 2.2.0 (AMDFamily17, LpcIO, SmbusPIIX4, RyzenSMU) | Sampler CPU after warm-up, every sensor (168) read at 1 Hz (`-log`), 40 s window | 0.3.0: 3.24% of one core · S0: **2.42%** |
 | 2026-11-04 | same | Mean read time per source (S0) | cpu+board 193 ms (≈19 ms CPU), storage 61 ms every 10 s, gpu 1.5 ms, memory and battery ≈0 |
 | 2026-11-04 | same | First pass (`-sensors`), one-time initialization | SMBus detection 1.1 s, OS counters 0.34 s, CPU monitor 0.2–0.5 s |
+| 2026-11-05 | same, with VALORANT and NVIDIA FrameView's busy PresentMon loading the CPU (96 °C) | S1-D05. The "193 ms" was the first read's 1.7 s of discovery averaged in; steady state was ~22 ms in one pass (Super I/O 11, DIMMs 8, CPU 3). After the split, with the first read reported apart | cpu 7.5–19 ms mean (typical tick ~3 ms; rare ~30 ms spikes on the busy cores), board 11 ms, dimms 9 ms, gpu 1.7 ms. Per-core clocks: 3.5–32 ms → **0.4–0.6 ms** typical (one move per core for APERF+MPERF, time-critical priority while pinned, MSR probe cached) |
 

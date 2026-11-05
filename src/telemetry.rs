@@ -130,7 +130,7 @@ fn group_rank(g: &str) -> u8 {
 pub fn read_all(ctx: &Ctx) -> Vec<Reading> {
     let mut o = Out::default();
     let bats = crate::battery::batteries(ctx);
-    monitors(ctx, &mut o, !bats.is_empty());
+    route(ctx, &crate::sensors::monitors(ctx), &mut o, !bats.is_empty(), true);
     cpu_extra(ctx, &mut o);
     gpu(ctx, &crate::gpu::live(ctx), &mut o);
     memory(&mut o);
@@ -140,13 +140,14 @@ pub fn read_all(ctx: &Ctx) -> Vec<Reading> {
     o.v
 }
 
-/// Every `crate::sensors` monitor, routed to its group.
-fn monitors(ctx: &Ctx, o: &mut Out, have_batteries: bool) {
+/// `crate::sensors` monitors, routed to their groups. `with_cpu`: `mons`
+/// includes the CPU's own monitor, so the kernel's CPU temperatures fill in
+/// when it has none.
+fn route(ctx: &Ctx, mons: &[crate::sensors::Monitor], o: &mut Out, have_batteries: bool, with_cpu: bool) {
     let c = crate::cpu::get(ctx);
     let cpu_name = if c.name.is_empty() { "CPU" } else { c.name.as_str() };
-    let mons = crate::sensors::monitors(ctx);
     #[cfg(target_os = "linux")]
-    if !mons.iter().any(|m| m.name == cpu_name && m.readings.iter().any(|r| r.kind == Kind::Temperature)) {
+    if with_cpu && !mons.iter().any(|m| m.name == cpu_name && m.readings.iter().any(|r| r.kind == Kind::Temperature)) {
         // No MSR access: the kernel's k10temp/zenpower/coretemp has them.
         for r in crate::sensors::os_cpu_temps() {
             o.sensor("cpu", "CPU", &r);
@@ -154,7 +155,9 @@ fn monitors(ctx: &Ctx, o: &mut Out, have_batteries: bool) {
     }
     let mut clocks = Vec::new();
     let mut dimm = 0;
-    for m in &mons {
+    #[cfg(not(target_os = "linux"))]
+    let _ = with_cpu;
+    for m in mons {
         let (pre, group) = match m.name.as_str() {
             n if n == cpu_name => ("cpu", "CPU"),
             // Kernel CPU drivers: temperatures were taken (relabelled) above.
@@ -279,25 +282,62 @@ fn battery(bats: &[crate::battery::Battery], o: &mut Out) {
 
 // ---------------------------------------------------------------- sources
 
-/// Hardware monitors (CPU, mainboard Super I/O, chipset, DIMMs) plus OS load and
-/// the AMD SMU limits. One source because `sensors::monitors` reads them in one
-/// pass and their ids must stay unique together.
-struct CpuBoard {
+/// The CPU's sensors (MSRs, SMU), OS load and the AMD SMU limits.
+struct Cpu {
+    ctx: Arc<Ctx>,
+}
+
+impl Source for Cpu {
+    fn name(&self) -> &'static str {
+        "cpu"
+    }
+    fn prefixes(&self) -> &'static [&'static str] {
+        &["cpu/"]
+    }
+    fn read(&mut self, out: &mut Vec<Reading>) {
+        let mut o = Out::default();
+        route(&self.ctx, &crate::sensors::cpu_monitors(&self.ctx), &mut o, true, true);
+        cpu_extra(&self.ctx, &mut o);
+        out.append(&mut o.v);
+    }
+}
+
+/// The OS monitors, the Super I/O and the chipset. On macOS and Linux they
+/// also carry CPU readings (SMC, k10temp/coretemp), so they answer `cpu/` there.
+struct Board {
     ctx: Arc<Ctx>,
     have_batteries: bool,
 }
 
-impl Source for CpuBoard {
+impl Source for Board {
     fn name(&self) -> &'static str {
-        "cpu+board"
+        "board"
     }
     fn prefixes(&self) -> &'static [&'static str] {
-        &["cpu/", "board/", "chipset/", "mem/temp/", "battery"]
+        if cfg!(windows) { &["board/", "chipset/", "battery"] } else { &["board/", "chipset/", "battery", "cpu/"] }
     }
     fn read(&mut self, out: &mut Vec<Reading>) {
         let mut o = Out::default();
-        monitors(&self.ctx, &mut o, self.have_batteries);
-        cpu_extra(&self.ctx, &mut o);
+        route(&self.ctx, &crate::sensors::board_monitors(&self.ctx), &mut o, self.have_batteries, false);
+        out.append(&mut o.v);
+    }
+}
+
+/// DIMM temperatures over the SMBus.
+struct Dimms {
+    ctx: Arc<Ctx>,
+}
+
+impl Source for Dimms {
+    fn name(&self) -> &'static str {
+        "dimms"
+    }
+    fn prefixes(&self) -> &'static [&'static str] {
+        &["mem/temp/"]
+    }
+    fn read(&mut self, out: &mut Vec<Reading>) {
+        let mut o = Out::default();
+        route(&self.ctx, &crate::sensors::dimm_monitors(&self.ctx), &mut o, true, false);
         out.append(&mut o.v);
     }
 }
@@ -634,7 +674,9 @@ impl Telemetry {
         let have_batteries = !crate::battery::batteries(&ctx).is_empty();
         #[allow(unused_mut)]
         let mut sources: Vec<Box<dyn Source>> = vec![
-            Box::new(CpuBoard { ctx: ctx.clone(), have_batteries }),
+            Box::new(Cpu { ctx: ctx.clone() }),
+            Box::new(Board { ctx: ctx.clone(), have_batteries }),
+            Box::new(Dimms { ctx: ctx.clone() }),
             Box::new(Gpus { ctx: ctx.clone(), last: gpu_live.clone() }),
             Box::new(Memory),
             Box::new(Drives { ctx: ctx.clone() }),
@@ -703,8 +745,8 @@ impl Telemetry {
         lock(&self.gpu_live).clone()
     }
 
-    /// Mean read time per source, slowest first.
-    pub fn costs(&self) -> Vec<(&'static str, u64, Duration)> {
+    /// Read time per source (first read apart), slowest first.
+    pub fn costs(&self) -> Vec<cpuzeez_core::metrics::Cost> {
         self.engine.costs()
     }
 
@@ -804,9 +846,13 @@ pub fn cli_log(ctx: Ctx, file: &str, seconds: Option<u64>) {
     }
     tel.stop_csv();
     eprintln!("\nwrote {}", path.display());
-    let costs: Vec<String> =
-        tel.costs().iter().map(|(n, k, t)| format!("{n} {:.1} ms x{k}", t.as_secs_f64() * 1e3)).collect();
-    eprintln!("source read time (mean): {}", costs.join(", "));
+    let ms = |d: Duration| d.as_secs_f64() * 1e3;
+    let costs: Vec<String> = tel
+        .costs()
+        .iter()
+        .map(|c| format!("{} {:.1} ms x{} (first {:.0} ms)", c.name, ms(c.mean()), c.reads, ms(c.first)))
+        .collect();
+    eprintln!("source read time (mean after the first read): {}", costs.join(", "));
 }
 
 #[cfg(test)]

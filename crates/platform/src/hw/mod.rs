@@ -56,6 +56,11 @@ pub trait Hw: Send + Sync {
     fn rdmsr(&self, _cpu: usize, _msr: u32) -> Option<u64> {
         None
     }
+    /// Several MSRs of one CPU, read together: on Windows that's one move to
+    /// the CPU instead of one per register, and the values are close in time.
+    fn rdmsr_many(&self, cpu: usize, msrs: &[u32]) -> Vec<Option<u64>> {
+        msrs.iter().map(|&m| self.rdmsr(cpu, m)).collect()
+    }
     fn pci_read(&self, _bdf: Bdf, _off: u16, _buf: &mut [u8]) -> bool {
         false
     }

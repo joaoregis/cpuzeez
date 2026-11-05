@@ -475,7 +475,10 @@ fn powercap(m: &mut Monitor) {
 /// Current MHz of each physical core: APERF/MPERF deltas since the previous
 /// sample when MSRs are readable (no load added), else the OS's own figure.
 fn core_clocks(ctx: &Ctx, cores: &[usize]) -> Vec<Option<f64>> {
-    if ctx.hw.rdmsr(0, 0xE8).is_some() || ctx.hw.rdmsr(0, 0xC000_00E8).is_some() {
+    // Probed once: each probe is a move to core 0, and access doesn't change
+    // while the app runs.
+    static APERF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *APERF.get_or_init(|| ctx.hw.rdmsr(0, 0xE8).is_some() || ctx.hw.rdmsr(0, 0xC000_00E8).is_some()) {
         let read = || cores.iter().map(|&c| crate::cpu::clocks::active_mhz(ctx, c)).collect::<Vec<_>>();
         let v = read();
         if v.iter().any(Option::is_some) {
