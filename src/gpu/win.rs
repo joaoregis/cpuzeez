@@ -656,6 +656,7 @@ pub fn probe(use_api: bool) -> Probe {
             }
             a.mem_size_mb = Some(x.dedicated_video as u64 >> 20);
             a.driver_model = wddm(x.luid);
+            a.luid = Some(x.luid);
         }
         if let Some(k) = &d.driver_key {
             a.driver_version = reg_str(&format!("{class}{k}"), "DriverVersion");

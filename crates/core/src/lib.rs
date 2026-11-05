@@ -32,6 +32,7 @@ pub mod cpu {
 pub mod gpu {
     pub mod db;
     pub mod edid;
+    pub mod engines;
 }
 pub mod sensors {
     pub mod amd_pm;

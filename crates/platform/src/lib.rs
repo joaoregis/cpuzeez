@@ -7,6 +7,7 @@
 
 pub mod disk_io;
 pub mod elevation;
+pub mod gpu_engines;
 pub mod hw;
 pub mod memory;
 pub mod net_io;

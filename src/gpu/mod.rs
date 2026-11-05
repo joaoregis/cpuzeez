@@ -68,6 +68,8 @@ pub struct Adapter {
     pub link: Link,
     pub link_max: Link,
     pub pci: Option<Bdf>,
+    /// Windows: DXGI adapter LUID ([low, high]); ties performance counters to it.
+    pub luid: Option<[u32; 2]>,
     pub root: Option<Bdf>,
     pub perf: Vec<Perf>,
     pub driver_version: Option<String>,

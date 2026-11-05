@@ -393,6 +393,45 @@ impl Source for Disks {
 
 type DiskSnap = [(String, cpuzeez_core::diskio::Counters)];
 
+/// GPU engine load per adapter (S1-D04): 3D, copy, video encode/decode,
+/// compute… on Windows; the busy figure elsewhere.
+struct GpuEngines {
+    ctx: Arc<Ctx>,
+}
+
+impl Source for GpuEngines {
+    fn name(&self) -> &'static str {
+        "gpu-engines"
+    }
+    fn prefixes(&self) -> &'static [&'static str] {
+        &["gpu"]
+    }
+    fn read(&mut self, out: &mut Vec<Reading>) {
+        use cpuzeez_platform::gpu_engines::{self as ge, Key};
+        let adapters = crate::gpu::adapters(&self.ctx);
+        let mut o = Out::default();
+        for (key, engines) in ge::read() {
+            let i = match &key {
+                Key::Luid(l) => adapters.iter().position(|a| a.luid.map(ge::luid_key).as_ref() == Some(l)),
+                Key::Pci(p) => adapters.iter().position(|a| a.pci.map(|b| b.to_string()).as_ref() == Some(p)),
+                Key::Index(n) => (*n < adapters.len()).then_some(*n),
+            };
+            // An adapter we don't list (a basic display driver, a remote session) is left out.
+            let Some(i) = i else { continue };
+            for (ty, v) in engines {
+                o.add(
+                    format!("gpu{i}/engine/{}", slug(&ty)),
+                    &gpu_group(&self.ctx, i),
+                    format!("{ty} engine"),
+                    Unit::Percent,
+                    v,
+                );
+            }
+        }
+        out.append(&mut o.v);
+    }
+}
+
 /// Per-adapter traffic, errors and drops (S1-D02); same two-snapshot scheme
 /// as [`Disks`].
 #[derive(Default)]
@@ -817,6 +856,7 @@ fn sources(ctx: &Arc<Ctx>, gpu_live: &Arc<Mutex<Vec<crate::gpu::Live>>>) -> Vec<
         Box::new(Dimms { ctx: ctx.clone() }),
         Box::new(Disks::default()),
         Box::new(Net::default()),
+        Box::new(GpuEngines { ctx: ctx.clone() }),
         Box::new(Gpus { ctx: ctx.clone(), last: gpu_live.clone() }),
         Box::new(Memory),
         Box::new(Drives { ctx: ctx.clone() }),
