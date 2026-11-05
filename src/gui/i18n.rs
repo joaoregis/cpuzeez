@@ -75,6 +75,7 @@ fn tables() -> &'static [(Table, Table)] {
         (super::mini::PT_BR, super::mini::ES),
         (super::layout_editor::PT_BR, super::layout_editor::ES),
         (super::system::PT_BR, super::system::ES),
+        (super::system_history::PT_BR, super::system_history::ES),
         (super::system_perf::PT_BR, super::system_perf::ES),
         (super::system_services::PT_BR, super::system_services::ES),
         (super::system_startup::PT_BR, super::system_startup::ES),

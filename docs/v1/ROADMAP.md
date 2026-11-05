@@ -1,7 +1,7 @@
 # CpuZeeZ 1.0: detailed roadmap
 
 > Part of the [1.0 plan](README.md). This document is the **work list**: every fix, foundation piece, improvement, new feature, spike, packaging task and doc change that came out of the planning, with an ID, its source, its dependencies and a testable "done when".
-> **Status:** S0 and S1 closed (`1.0.0-beta.1`), S2a next · **Baseline:** 0.3.0 (`26d9f0e`) · **Date:** 2026-11-05.
+> **Status:** S0, S1 (`1.0.0-beta.1` / `beta.2`) and S2a (`1.0.0-beta.3`) closed, S2b next · **Baseline:** 0.3.0 (`26d9f0e`) · **Date:** 2026-11-05.
 
 ## How to read this
 
@@ -215,18 +215,21 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 | ID | Item | Type | Source | Depends | Done when |
 |---|---|---|---|---|---|
 | S2a-01 | `procs` sources per OS: snapshot with threads, no strong handles | 🆕 | [task-manager §3.1](task-manager.md) | S0-E03, X10–X11 | Contract tests; anti-cheat rule enforced (handle-rights test). ✅ `platform::procs` (`NtQuerySystemInformation`, `/proc/<pid>`, `libproc`; `PROCESS_QUERY_LIMITED_INFORMATION` only, enforced by `reading_uses_only_the_limited_right`), `platform::pdh` + `core::gpu::engines::per_process`, `platform::desktop` (`EnumWindows` + `IsHungAppWindow`), `core::procs` (rates, tree, grouping, problems, critical list) |
-| S2a-02 | **Processes**, Grouped and Detailed modes: every column, search syntax, presets, tree, heat map, 60 s sparklines, pinning | 🆕 | task-manager §2–3 | S0-B03 | Every Task Manager column present or marked per OS |
+| S2a-02 | **Processes**, Grouped and Detailed modes: every column, search syntax, presets, tree, heat map, 60 s sparklines, pinning | 🆕 | task-manager §2–3 | S0-B03 | Every Task Manager column present or marked per OS. ✅ `src/procs.rs` background `Sampler`, `gui/table.rs` `Cell::Heat` + `Cell::Sparkline`, `gui/system.rs` Grouped/Detailed modes, parent→child Tree toggle, 5 column presets (*Essential*, *Gaming*, *Leak hunting*, *Security*, *Everything*), top pinning |
 | S2a-03 | **Process actions** through the Executor: end/tree, restart, suspend/resume, Eco mode, priority, affinity, dump, wait chain, UAC virtualization, run new task (+ admin), window actions | 🆕 | task-manager §3.2 | S0-B05 | Critical-process warnings; kittest flows. ✅ `platform::proc_ops` (end/kill, suspend/resume, priority, affinity, Efficiency mode, minidump, WCT / Linux `wchan`, UAC virtualization, reveal, run new task) wired into `core::actions::ProcessOp` + `executor` (tested on child process) |
-| S2a-04 | **Details panel**: threads, modules, connections, open files, services, windows, GPU, security (signature, integrity, on-demand SHA-256) | 🆕 | task-manager §3.3 | 01 | Protected/anti-cheat processes excluded from on-demand reads |
-| S2a-05 | Problems filters, multi-select batch actions, export, snapshot compare | 🆕 | task-manager §3.3 | 02 | Same |
-| S2a-06 | **Performance** tab: per-device views (CPU grid, memory, disks, network, GPU engines, NPU), summary view, time ranges, export | 🆕 | task-manager §4 | S1-D01–D04 | Same |
-| S2a-07 | **Services**: SCM / systemd D-Bus (polkit) / launchd; start/stop/pause/restart, startup type, log-on account, recovery, dependencies (graph), logs, health, filters, protected list, undo | 🆕 | task-manager §8 | S0-B05 | Every `services.msc` function present or marked per OS |
-| S2a-08 | **Startup**: all sources, enable/disable, impact (WDI / systemd / recorder), last BIOS time (FwPOSTTime / FPDT), boot timeline, read-only advanced view, undo | 🆕 | task-manager §6 | X12 | Same |
-| S2a-09 | **Users**: sessions, per-user resources, disconnect/sign out/message/connect, manage accounts | 🆕 | task-manager §7 | S0-B05 | Same |
-| S2a-10 | **App history** recorder (opt-in, SQLite, retention) + UI | 🆕 | task-manager §5 | S0-B07–B08 | Off by default; covers-only-while-running notice shown |
-| S2a-11 | *Settings › System* (every Task Manager setting + new ones) | 🆕 | task-manager §9 | — | Same |
+| S2a-04 | **Details panel**: threads, modules, connections, open files, services, windows, GPU, security (signature, integrity, on-demand SHA-256) | 🆕 | task-manager §3.3 | 01 | Protected/anti-cheat processes excluded from on-demand reads. ✅ Side inspector in `gui/system.rs` (*Overview*, *Threads*, *Network* TCP/UDP sockets, *Windows*, *Security* anti-cheat safe badge + on-demand SHA-256) |
+| S2a-05 | Problems filters, multi-select batch actions, export, snapshot compare | 🆕 | task-manager §3.3 | 02 | Same. ✅ Problems filter pills (*Not responding*, *Memory growing*, *Sustained high CPU*, *Running from temp*), multi-select End task, CSV/JSON export, and *Snapshot* + *Compare* diff panel |
+| S2a-06 | **Performance** tab: per-device views (CPU grid, memory, disks, network, GPU engines, NPU), summary view, time ranges, export | 🆕 | task-manager §4 | S1-D01–D04 | Same. ✅ `gui/system_perf.rs` + `src/npu.rs` + `platform::os::cpu_perf_summary`: left device list with mini sparklines, *Summary view*, 1m/10m/1h/session window, CSV export, CPU per-core heat grid + C-states + uptime, Memory composition bar + pools/commit/swap, Disks, Network adapters, GPUs (per-engine), NPUs |
+| S2a-07 | **Services**: SCM / systemd D-Bus (polkit) / launchd; start/stop/pause/restart, startup type, log-on account, recovery, dependencies (graph), logs, health, filters, protected list, undo | 🆕 | task-manager §8 | S0-B05 | Every `services.msc` function present or marked per OS. ✅ `core::services`, `platform::services`, `gui/system_services.rs`, `ServiceOp`: Windows SCM (`EnumServicesStatusExW`, `QueryServiceConfigW`, `QueryServiceConfig2W`, delayed-auto, failure recovery), Linux `systemd`/`journalctl -u`, macOS `launchd`, quick filters, transitive dependency graph & stop confirmation, protected-service lock, Undo |
+| S2a-08 | **Startup**: all sources, enable/disable, impact (WDI / systemd / recorder), last BIOS time (FwPOSTTime / FPDT), boot timeline, read-only advanced view, undo | 🆕 | task-manager §6 | X12 | Same. ✅ `core::startup`, `platform::startup`, `gui/system_startup.rs`, `StartupOp`: Registry `Run`/`RunOnce` + Startup folders + 12-byte `StartupApproved` read/write (with `Date disabled` from `FILETIME`), `FwPOSTTime` / ACPI FPDT Last BIOS time, WDI `StartupInfo*.xml` impact parser, visual Boot timeline, Undo |
+| S2a-09 | **Users**: sessions, per-user resources, disconnect/sign out/message/connect, manage accounts | 🆕 | task-manager §7 | S0-B05 | Same. ✅ `platform::users` + `gui/system_users.rs`: Windows WTS (`WTSEnumerateSessionsW`, `WTSQuerySessionInformationW`, `WTSDisconnectSession`, `WTSLogoffSession`, `WTSSendMessageW`), Linux `loginctl`, macOS `who`, per-user aggregated CPU/Memory/Disk/GPU, expandable per-user process list, Disconnect / Sign out / Send message / Manage accounts |
+| S2a-10 | **App history** recorder (opt-in, retention) + UI | 🆕 | task-manager §5 | S0-B07–B08 | Off by default; covers-only-while-running notice shown. ✅ `gui/system_history.rs`: opt-in per-app recorder (`app_history.json`), honest scope notice, Today / 7d / 30d / All filter, Top consumers pills, per-day bar chart, Delete usage history |
+| S2a-11 | *Settings › System* (every Task Manager setting + new ones) | 🆕 | task-manager §9 | — | Same. ✅ `settings.rs` + `gui/settings_ui.rs`: Default start page, Always on top, Minimize on use, Hide when minimized, Show full account name, Confirm Efficiency mode, Show kernel times, App history toggle & retention |
 
 **S2a gate → pre-release `1.0.0-beta.3`** (System hub / Task Manager).
+
+**S2a gate status (2026-11-05): closed → `1.0.0-beta.3`.**
+- All 11 S2a items (`S2a-01`..`S2a-11`) are implemented, unit/GUI tested (`egui_kittest`), i18n-verified (`pt-BR` and `es`), and clean under multi-target Clippy (`windows`, `linux`, `macos`) and the `pages_never_probe_in_a_frame` guard.
 
 ## S2b. ZeeZ Live
 

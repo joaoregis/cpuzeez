@@ -66,6 +66,24 @@ pub struct Settings {
     pub tray_click: cpuzeez_core::layout::tray::Click,
     /// Mini monitors (S1-M02). Empty = one default, open when `mini` is set.
     pub minis: Vec<cpuzeez_core::layout::mini::Mini>,
+    /// Default start page when CpuZeeZ opens (S2a-11, e.g. "Overview" or "System").
+    pub default_start_page: String,
+    /// Keep the main window always on top (S2a-11).
+    pub always_on_top: bool,
+    /// Minimize main window on "Switch to" / "Run new task" (S2a-11).
+    pub minimize_on_use: bool,
+    /// Hide to tray when minimized (S2a-11).
+    pub hide_when_minimized: bool,
+    /// Show full account name (DOMAIN\user) in System › Processes / Users (S2a-11).
+    pub show_full_account_name: bool,
+    /// Ask confirmation before enabling Efficiency mode (EcoQoS) (S2a-11).
+    pub confirm_eco_mode: bool,
+    /// Show kernel times in CPU performance charts (S2a-11).
+    pub show_kernel_times: bool,
+    /// Opt-in per-application resource usage history recorder (S2a-10 / S2a-11).
+    pub app_history_enabled: bool,
+    /// Retention days for app usage history (S2a-10 / S2a-11).
+    pub app_history_retention_days: u32,
 }
 
 /// A row pinned to the Overview (S1-U03).
@@ -107,6 +125,15 @@ impl Default for Settings {
             tray_items: vec![Default::default()],
             tray_click: Default::default(),
             minis: Vec::new(),
+            default_start_page: "Overview".into(),
+            always_on_top: false,
+            minimize_on_use: false,
+            hide_when_minimized: false,
+            show_full_account_name: false,
+            confirm_eco_mode: true,
+            show_kernel_times: true,
+            app_history_enabled: false,
+            app_history_retention_days: 30,
         }
     }
 }

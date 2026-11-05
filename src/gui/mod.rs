@@ -35,6 +35,7 @@ mod plot;
 pub mod sensors;
 pub mod stress;
 pub mod system;
+pub mod system_history;
 pub mod system_perf;
 pub mod system_services;
 pub mod system_startup;
@@ -232,16 +233,21 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
     }
     i18n::set(if shots.is_some() { i18n::Lang::En } else { settings_ui::lang_of(&mon.settings) });
 
+    let always_top = mon.settings.always_on_top;
+    let start_page =
+        NAV.iter().find(|n| n.2.eq_ignore_ascii_case(&mon.settings.default_start_page)).map_or(Page::Overview, |n| n.0);
     // OpenGL (glow) by default: it uses far less memory than wgpu (ADR 0013).
     // CZ_RENDERER=wgpu forces wgpu, e.g. to work around a broken GL driver.
-    let opts = |renderer| eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
+    let opts = |renderer| {
+        let mut vp = egui::ViewportBuilder::default()
             .with_title(crate::DISPLAY_NAME)
             .with_icon(app_icon())
             .with_inner_size([1120.0, 760.0])
-            .with_min_inner_size([860.0, 560.0]),
-        renderer,
-        ..Default::default()
+            .with_min_inner_size([860.0, 560.0]);
+        if always_top {
+            vp = vp.with_always_on_top();
+        }
+        eframe::NativeOptions { viewport: vp, renderer, ..Default::default() }
     };
     let theme = mon.settings.theme;
     let app = App {
@@ -249,7 +255,7 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         report,
         access: Default::default(),
         welcome: (shots.is_none() && mon.settings.privacy_seen < welcome::PRIVACY_VERSION).then(Default::default),
-        page: Page::Overview,
+        page: if shots.is_some() { Page::Overview } else { start_page },
         history_dirty: true,
         mini_edit: None,
         mini_import: String::new(),

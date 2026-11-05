@@ -117,6 +117,15 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("No actions yet.", "Nenhuma ação ainda."),
     ("ms", "ms"),
     ("s", "s"),
+    ("System (Task Manager)", "Sistema (Gerenciador de Tarefas)"),
+    ("Default start page", "Página inicial padrão"),
+    ("Always on top", "Sempre no topo"),
+    ("Minimize on use (Switch to / Run task)", "Minimizar ao usar (Alternar para / Executar tarefa)"),
+    ("Hide when minimized", "Ocultar quando minimizado"),
+    ("Show full account name", "Mostrar nome completo da conta"),
+    ("Confirm before enabling Efficiency mode", "Confirmar antes de ativar o Modo de eficiência"),
+    ("Show kernel times in CPU graphs", "Mostrar tempos de kernel nos gráficos de CPU"),
+    ("App history retention", "Retenção do histórico de apps"),
 ];
 
 pub const ES: &[(&str, &str)] = &[
@@ -228,6 +237,15 @@ pub const ES: &[(&str, &str)] = &[
     ("No actions yet.", "Aún no hay acciones."),
     ("ms", "ms"),
     ("s", "s"),
+    ("System (Task Manager)", "Sistema (Administrador de tareas)"),
+    ("Default start page", "Página de inicio predeterminada"),
+    ("Always on top", "Siempre visible"),
+    ("Minimize on use (Switch to / Run task)", "Minimizar al usar (Cambiar a / Ejecutar tarea)"),
+    ("Hide when minimized", "Ocultar al minimizar"),
+    ("Show full account name", "Mostrar nombre completo de la cuenta"),
+    ("Confirm before enabling Efficiency mode", "Confirmar antes de habilitar el Modo de eficiencia"),
+    ("Show kernel times in CPU graphs", "Mostrar tiempos del kernel en gráficos de CPU"),
+    ("App history retention", "Retención del historial de aplicaciones"),
 ];
 
 pub fn theme_pref(t: Theme) -> egui::ThemePreference {
@@ -477,6 +495,58 @@ fn units(ui: &mut egui::Ui, u: &mut cpuzeez_core::units::Units) {
     );
 }
 
+/// System (Task Manager) preferences (S2a-11, docs/v1/task-manager.md §9).
+pub(super) fn system_settings(ui: &mut egui::Ui, s: &mut Settings) {
+    const PAGES: &[&str] = &[
+        "Overview",
+        "System",
+        "Processor",
+        "Mainboard",
+        "Memory",
+        "Graphics",
+        "Devices",
+        "Sensors",
+        "Benchmarks",
+        "Tools",
+    ];
+    row(ui, tr("Default start page"), |ui| {
+        let cur = if s.default_start_page.is_empty() { "Overview" } else { &s.default_start_page };
+        egui::ComboBox::from_id_salt("sys_default_start_page").selected_text(tr(cur)).show_ui(ui, |ui| {
+            for &p in PAGES {
+                ui.selectable_value(&mut s.default_start_page, p.to_string(), tr(p));
+            }
+        });
+    });
+    row(ui, tr("Always on top"), |ui| {
+        ui.checkbox(&mut s.always_on_top, "");
+    });
+    row(ui, tr("Minimize on use (Switch to / Run task)"), |ui| {
+        ui.checkbox(&mut s.minimize_on_use, "");
+    });
+    row(ui, tr("Hide when minimized"), |ui| {
+        ui.checkbox(&mut s.hide_when_minimized, "");
+    });
+    row(ui, tr("Show full account name"), |ui| {
+        ui.checkbox(&mut s.show_full_account_name, "");
+    });
+    row(ui, tr("Confirm before enabling Efficiency mode"), |ui| {
+        ui.checkbox(&mut s.confirm_eco_mode, "");
+    });
+    row(ui, tr("Show kernel times in CPU graphs"), |ui| {
+        ui.checkbox(&mut s.show_kernel_times, "");
+    });
+    row(ui, tr("Record app resource history"), |ui| {
+        ui.checkbox(&mut s.app_history_enabled, "");
+    });
+    row(ui, tr("App history retention"), |ui| {
+        ui.add(
+            egui::DragValue::new(&mut s.app_history_retention_days)
+                .range(1..=365)
+                .suffix(format!(" {}", tr("days (0 = keep)"))),
+        );
+    });
+}
+
 /// checks off; `persist` = save changes (off while taking screenshots).
 pub fn page(ui: &mut egui::Ui, s: &mut Settings, updates_allowed: bool, persist: bool, report: Option<&[Section]>) {
     let before = serde_json::to_string(s).unwrap_or_default();
@@ -514,6 +584,9 @@ pub fn page(ui: &mut egui::Ui, s: &mut Settings, updates_allowed: bool, persist:
     ui.add_space(theme::GAP);
 
     widgets::card(ui, icon::RULER, tr("Units"), |ui| units(ui, &mut s.units));
+    ui.add_space(theme::GAP);
+
+    widgets::card(ui, icon::LIST_BULLETS, tr("System (Task Manager)"), |ui| system_settings(ui, s));
     ui.add_space(theme::GAP);
 
     widgets::card(ui, icon::GAUGE, tr("Monitoring"), |ui| {
@@ -611,5 +684,26 @@ mod tests {
         h.get_by_label("Mini monitor").click();
         h.run();
         assert_eq!(h.state().tray_click, cpuzeez_core::layout::tray::Click::Mini);
+    }
+
+    /// S2a-11: System (Task Manager) settings card renders and binds options.
+    #[test]
+    fn system_task_manager_settings() {
+        let mut h = Harness::builder().with_size(egui::vec2(900.0, 500.0)).build_ui_state(
+            |ui, s: &mut crate::settings::Settings| {
+                if !ui.style().text_styles.contains_key(&egui::TextStyle::Name("title".into())) {
+                    super::super::theme::install(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                super::system_settings(ui, s);
+            },
+            crate::settings::Settings::default(),
+        );
+        h.run();
+        h.run();
+        h.get_by_label("Default start page");
+        h.get_by_label("Always on top");
+        h.get_by_label("Show kernel times in CPU graphs");
     }
 }

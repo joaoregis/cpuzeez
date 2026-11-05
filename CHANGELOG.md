@@ -7,9 +7,32 @@ generated from its section below.
 
 ## [Unreleased]
 
+## [1.0.0-beta.3] - 2026-11-05
+
+Stage S2a of the [1.0 roadmap](docs/v1/ROADMAP.md): the cross-platform **System hub** (Task Manager + `services.msc` + Startup + Users + Performance + App history). ZeeZ Live (`1.0.0-beta.4`) and the Bottleneck detector (`1.0.0-beta.5`) follow next.
+
 ### Added
 
-- **System hub foundation (S2a-01, S2a-03)**: cross-platform process and thread snapshots without opening strong process handles (`NtQuerySystemInformation` + `PROCESS_QUERY_LIMITED_INFORMATION` on Windows, `/proc` on Linux, `libproc` on macOS), per-process GPU engine and VRAM counters, top-level window detection (`IsHungAppWindow`), and audited process actions through the Executor (end task, suspend/resume, priority, CPU affinity, Efficiency mode, memory dump, wait-chain analysis, UAC virtualization, reveal in file manager and run new task).
+- **System › Processes** (`S2a-01`..`S2a-05`):
+  - **Anti-cheat safe process & thread snapshots**: `NtQuerySystemInformation(SystemProcessInformation)` + `PROCESS_QUERY_LIMITED_INFORMATION` on Windows (never `PROCESS_VM_READ`, verified by test), `/proc` on Linux, and `libproc` on macOS, plus per-process GPU engine/VRAM usage and hung-window detection (`IsHungAppWindow`).
+  - **Grouped and Detailed views**: Task Manager-style heat-mapped resource cells, 60-second inline CPU sparklines, parent→child **Tree** hierarchy, top pinning, 5 column presets (*Essential*, *Gaming*, *Leak hunting*, *Security*, *Everything*), and **Problems** quick filters (*Not responding*, *Memory growing*, *Sustained high CPU*, *Running from temp*).
+  - **Side Details Inspector**: live per-process *Overview*, *Threads* (TID, CPU delta, priority, wait reason), *Network* (active TCP/UDP sockets), *Windows* (bring to front, minimize, maximize, close), and *Security* (account, anti-cheat safe badge, on-demand SHA-256).
+  - **Audited process actions**: end task / process tree (with critical OS process warning), suspend/resume, priority class, CPU core affinity dialog, Efficiency mode (EcoQoS), minidump creation, Wait Chain Traversal (`OpenThreadWaitChainSession` / Linux `/proc/<pid>/wchan`), UAC virtualization toggle, reveal in file manager, **Run new task** (with optional elevation), CSV/JSON export, and **Snapshot compare** (processes started, exited, or with significant memory delta).
+- **System › Performance** (`S2a-06`):
+  - Left device navigation list with live mini sparklines, compact **Summary view** mode, selectable history window (*1 min*, *10 min*, *1 hour*, *Session*), and one-click CSV export.
+  - Per-device views for **CPU** (per-thread heat grid, utilization, speed/base speed, processes/threads/handles, uptime, C-state residency, L1/L2/L3 cache), **Memory** (usage graph, Windows/Linux/macOS composition bar, committed, cached/standby, paged/non-paged pools, compressed, pagefile/swap, speed, slots used, form factor), **Disks** (read/write throughput, active time, average response time, queue depth, capacity), **Network** (download/upload Mbps, packets/s, errors/drops, IPv4/MAC/MTU/link speed), **GPUs** (per-engine 3D/Copy/Video Encode/Video Decode/Compute graphs, dedicated & shared VRAM, temperature, power, clocks, PCIe link), and **NPUs** (AMD XDNA / Intel NPU / Qualcomm Hexagon discovery).
+- **System › Services** (`S2a-07`):
+  - Full `services.msc` replacement across Windows SCM (`EnumServicesStatusExW`, `QueryServiceConfigW`, `QueryServiceConfig2W`), Linux `systemd` (`systemctl` / `journalctl -u`), and macOS `launchd`.
+  - Quick filters (*All*, *Running*, *Should be running (Auto + Stopped)*, *Disabled*, *Third-party*, *Failed recently*), start/stop/pause/resume/restart, startup type (*Automatic*, *Automatic (Delayed)*, *Manual*, *Disabled*), failure recovery actions, transitive dependency graph (*Depends on* / *Depended on by*) with dependent-stop confirmation modal, service logs, protected-service lock explanations, and one-click **Undo**.
+- **System › Startup** (`S2a-08`):
+  - Enumerates Registry (`HKCU`/`HKLM` `Run` & `RunOnce`, including `WOW6432Node`) and Startup folders on Windows, XDG autostart (`.desktop`) on Linux, and `LaunchAgents` (`.plist`) on macOS.
+  - Reads and writes Windows' 12-byte `StartupApproved` binary format (preserving Task Manager compatibility and decoding the exact `FILETIME` **Date disabled**), parses WDI `StartupInfo*.xml` CPU/disk boot impact (`High`/`Medium`/`Low`), reads **Last BIOS time** (`FwPOSTTime` / ACPI `FPDT`), renders a visual **Boot timeline** (*Firmware POST → OS Loader & Kernel → User Logon & Startup Apps*), and supports **Undo**.
+- **System › Users** (`S2a-09`):
+  - Enumerates signed-in user sessions via Windows Terminal Services (`WTSEnumerateSessionsW`, `WTSQuerySessionInformationW`), Linux `loginctl`, and macOS `who`, aggregating CPU, memory, disk, GPU, and process counts per user.
+  - Expandable per-user process table plus *Disconnect*, *Sign out*, *Send message* (`WTSSendMessageW` / `notify-send`), and *Manage accounts*.
+- **System › App history & Settings › System** (`S2a-10`, `S2a-11`):
+  - Opt-in per-application resource usage recorder (CPU time, GPU time, disk bytes, peak memory, run time) with honest scope banner (*Covers only the time CpuZeeZ was running*), period filters (*Today*, *Last 7 days*, *Last 30 days*, *All time*), top-consumer pills, per-day bar chart, and *Delete usage history*.
+  - New **System (Task Manager)** card in *Settings* with Default start page, Always on top, Minimize on use, Hide when minimized, Show full account name, Confirm Efficiency mode, Show kernel times, and App history retention.
 
 ## [1.0.0-beta.2] - 2026-11-05
 

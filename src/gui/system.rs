@@ -250,6 +250,7 @@ struct InspectorCache {
 pub struct State {
     pub tab: SysTab,
     pub sampler: Sampler,
+    pub history: super::system_history::State,
     pub perf: super::system_perf::State,
     pub services: super::system_services::State,
     pub startup: super::system_startup::State,
@@ -282,6 +283,7 @@ impl Default for State {
         State {
             tab: SysTab::Processes,
             sampler: Sampler::new(1000),
+            history: Default::default(),
             perf: Default::default(),
             services: Default::default(),
             startup: Default::default(),
@@ -342,13 +344,22 @@ impl State {
     pub fn page(&mut self, ui: &mut Ui, ctx: &Arc<crate::Ctx>, mon: &mut super::sensors::Monitor) {
         self.sampler.want();
         self.poll_running(ui.ctx());
+        self.history.enabled = mon.settings.app_history_enabled;
+        self.history.retention_days = mon.settings.app_history_retention_days;
         let snap = self.sampler.snapshot();
+        if self.tab != SysTab::AppHistory {
+            self.history.ingest_snapshot(&snap);
+        }
         if self.tab == SysTab::Performance {
             self.header_and_tabs(ui, &snap);
             self.perf.show(ui, ctx, mon, &snap);
             self.modals(ui, &snap);
         } else {
             self.page_with_snapshot(ui, &snap);
+        }
+        if self.history.enabled != mon.settings.app_history_enabled {
+            let on = self.history.enabled;
+            mon.set_setting(|s| s.app_history_enabled = on);
         }
     }
 
@@ -423,14 +434,7 @@ impl State {
                 let ctx = Arc::new(crate::Ctx::new(Default::default()));
                 self.perf.show_with_series(ui, &ctx, &[], 0.0, snap);
             }
-            SysTab::AppHistory => {
-                widgets::empty_state(
-                    ui,
-                    icon::CLOCK_COUNTER_CLOCKWISE,
-                    tr("App history"),
-                    tr("Per-application resource usage history (S2a-10)."),
-                );
-            }
+            SysTab::AppHistory => self.history.show(ui, snap),
             SysTab::Startup => self.startup.show(ui),
             SysTab::Users => self.users.show(ui, snap),
             SysTab::Services => self.services.show(ui),
