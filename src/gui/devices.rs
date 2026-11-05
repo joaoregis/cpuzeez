@@ -13,7 +13,6 @@ use std::sync::{Arc, Mutex};
 pub const PT_BR: &[(&str, &str)] = &[
     ("Encryption", "Criptografia"),
     ("BitLocker on", "BitLocker ativado"),
-    ("Off", "Desativada"),
     ("BitLocker (encrypting)", "BitLocker (criptografando)"),
     ("BitLocker (decrypting)", "BitLocker (descriptografando)"),
     ("BitLocker suspended", "BitLocker suspenso"),
@@ -109,7 +108,6 @@ pub const PT_BR: &[(&str, &str)] = &[
 pub const ES: &[(&str, &str)] = &[
     ("Encryption", "Cifrado"),
     ("BitLocker on", "BitLocker activado"),
-    ("Off", "Desactivado"),
     ("BitLocker (encrypting)", "BitLocker (cifrando)"),
     ("BitLocker (decrypting)", "BitLocker (descifrando)"),
     ("BitLocker suspended", "BitLocker suspendido"),
