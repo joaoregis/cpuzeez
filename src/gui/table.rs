@@ -676,6 +676,32 @@ mod tests {
         assert!(h.query_by_label("game.exe, 99, 55.0 %").is_some());
     }
 
+    /// Right-clicking an unselected row opens its menu for that row on the very
+    /// first frame (an empty first frame left the menu stuck at zero width).
+    #[test]
+    fn right_click_menu_gets_the_row_at_once() {
+        use egui_kittest::{Harness, kittest::Queryable};
+        let r = rows();
+        let mut h = Harness::new_ui_state(
+            |ui, seen: &mut Vec<Vec<u64>>| {
+                let mut st = ui.data_mut(|d| d.get_temp::<State>(egui::Id::new("st")).unwrap_or_default());
+                let t = Table { id: "procs", cols: cols(), key: Box::new(|p: &P| p.pid), group: None };
+                t.show(ui, &r, &mut st, |_, sel| seen.push(sel.iter().map(|p| p.pid).collect()));
+                ui.data_mut(|d| d.insert_temp(egui::Id::new("st"), st));
+            },
+            Vec::new(),
+        );
+        h.run();
+        h.get_by_label("game.exe, 99, 55.0 %").click_secondary();
+        h.run();
+        assert!(!h.state().is_empty(), "the menu opened");
+        assert!(
+            h.state().iter().all(|s| s == &[99]),
+            "every menu frame acts on the right-clicked row: {:?}",
+            h.state()
+        );
+    }
+
     #[test]
     fn ten_thousand_rows_filter_and_sort_quickly() {
         let _heavy = crate::heavy_test();
