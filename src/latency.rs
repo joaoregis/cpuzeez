@@ -109,6 +109,7 @@ mod tests {
     #[test]
     #[cfg(any(windows, target_os = "linux"))]
     fn two_cores_answer() {
+        let _heavy = crate::heavy_test();
         if cpuzeez_platform::os::logical_cpus() < 2 {
             return;
         }

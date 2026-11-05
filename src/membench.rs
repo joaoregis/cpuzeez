@@ -618,6 +618,7 @@ mod tests {
 
     #[test]
     fn short_runs() {
+        let _heavy = crate::heavy_test();
         let stop = AtomicBool::new(false);
         let mut buf = alloc(64 << 10);
         assert!(latency(&mut buf, 32 << 10, 0.01, &stop).unwrap() > 0.0);

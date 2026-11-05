@@ -256,6 +256,7 @@ mod tests {
 
     #[test]
     fn small_run() {
+        let _heavy = crate::heavy_test();
         let ctl = Ctl::default();
         let one = [None];
         assert!(triad(&one, 1 << 16, 0.05, &ctl) > 0.0);

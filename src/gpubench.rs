@@ -400,6 +400,7 @@ pub fn stress(index: usize, ctl: &Ctl) -> Result<(), String> {
 mod tests {
     #[test]
     fn runs_where_a_gpu_exists() {
+        let _heavy = crate::heavy_test();
         // CI runners may have no adapter at all; that's an answer too.
         let names = super::adapters();
         if names.is_empty() {
@@ -413,6 +414,7 @@ mod tests {
 
     #[test]
     fn gpu_stress_stops_when_cancelled() {
+        let _heavy = crate::heavy_test();
         if super::adapters().is_empty() {
             return;
         }

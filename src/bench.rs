@@ -429,7 +429,7 @@ pub fn stress(threads: usize, load: Load) -> StressHandle {
                     let heavy = match load {
                         Load::Light => false,
                         Load::Heavy => true,
-                        Load::Mixed => t0.elapsed().as_millis() / 50 % 2 == 0,
+                        Load::Mixed => (t0.elapsed().as_millis() / 50).is_multiple_of(2),
                     };
                     let v = if heavy { Variant::best() } else { Variant::Scalar };
                     steps(v, &mut s, table(), CHUNK);
@@ -542,6 +542,7 @@ mod tests {
 
     #[test]
     fn short_run() {
+        let _heavy = crate::heavy_test();
         // 500 ms: a slow, shared CI runner (macOS x64) can finish no iteration in 100 ms.
         let b = Bench::spawn(vec![None, None], Variant::best(), Duration::from_millis(500));
         assert!(b.progress() < 1.0);

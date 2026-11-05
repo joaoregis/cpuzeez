@@ -206,7 +206,7 @@ impl Stress {
         });
         if let Some(g) = self.gpu.take() {
             g.cancel();
-            let _ = g.wait_quietly();
+            g.wait_quietly();
         }
         let max = self.max_temp.map(|t| format!(", {} {}", tr("max"), sensors::fmt(t, Unit::Celsius)));
         let why = reason.map(|r| format!(" — {r}")).unwrap_or_default();
@@ -509,6 +509,7 @@ mod tests {
 
     #[test]
     fn auto_stop_limits() {
+        let _heavy = crate::heavy_test();
         let mut s = Stress { cpu_on: true, load: Load::Light, ..Default::default() };
         s.start(1);
         s.tick(&[temp("cpu/temp/package", "CPU", 70.0)], 95.0);

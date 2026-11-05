@@ -534,6 +534,7 @@ mod tests {
 
     #[test]
     fn ten_thousand_rows_filter_and_sort_quickly() {
+        let _heavy = crate::heavy_test();
         let r: Vec<P> = (0..10_000)
             .map(|i| P { pid: i, name: if i % 3 == 0 { "a.exe" } else { "b.exe" }, cpu: (i % 97) as f64, kind: "Apps" })
             .collect();

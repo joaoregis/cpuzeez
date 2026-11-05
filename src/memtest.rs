@@ -178,6 +178,7 @@ mod tests {
 
     #[test]
     fn runs_and_stops() {
+        let _heavy = crate::heavy_test();
         let t = MemTest::start(8 << 20, 2);
         let start = std::time::Instant::now();
         while t.rounds() < 1 && start.elapsed().as_secs() < 20 {

@@ -48,6 +48,14 @@ use std::sync::OnceLock;
 // Pure logic lives in cpuzeez-core (docs/adr/0011); these keep the old `crate::` paths.
 pub use cpuzeez_core::{DISPLAY_NAME, NAME, config, report};
 pub use cpuzeez_platform::{hw, os};
+
+/// Tests that load every core (benchmarks, stress) or time themselves take
+/// turns: run in parallel they starve each other and fail on a busy runner.
+#[cfg(test)]
+pub fn heavy_test() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const REPO_URL: &str = env!("CARGO_PKG_REPOSITORY");
 

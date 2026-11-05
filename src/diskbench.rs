@@ -271,6 +271,7 @@ mod tests {
 
     #[test]
     fn a_tiny_run_measures_and_cleans_up() {
+        let _heavy = crate::heavy_test();
         let dir = std::env::temp_dir().join(format!("cz-diskbench-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let scores = start(&dir, 16 << 20, 0.15).wait().expect("benchmark ran");
@@ -292,6 +293,7 @@ mod tests {
 
     #[test]
     fn a_tiny_sustained_write_cleans_up() {
+        let _heavy = crate::heavy_test();
         let dir = std::env::temp_dir().join(format!("cz-sustained-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let series = sustained(&dir, 64 << 20, &Default::default()).unwrap();

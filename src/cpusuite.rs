@@ -713,6 +713,7 @@ mod tests {
 
     #[test]
     fn every_test_runs() {
+        let _heavy = crate::heavy_test();
         let ctl = Ctl::default();
         for t in &TESTS {
             let v = rate(t, &[None], 0.05, &ctl);
