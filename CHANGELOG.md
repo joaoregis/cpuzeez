@@ -29,6 +29,8 @@ generated from its section below.
 
 - README (English and pt-BR): the install section now explains why the builds are unsigned (a paid certificate the project can't fund yet), what the SmartScreen/Gatekeeper warning means, and how to verify a download with `SHA256SUMS.txt`.
 
+- **Per-disk activity** in the Sensors list and CSV logs: read/write speed, IOPS, latency, active time and queue for every physical disk, on Windows, Linux and macOS, without administrator rights.
+
 ### Fixed
 
 - With PawnIO installed but its modules missing, the banner said "PawnIO has no module for this CPU". It now says the `pawnio-modules` folder is missing.

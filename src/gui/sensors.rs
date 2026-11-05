@@ -344,6 +344,11 @@ pub fn fmt(v: f64, u: Unit) -> String {
         Unit::Percent => format!("{v:.1} %"),
         Unit::Megabytes if v >= 10240.0 => format!("{:.1} GB", v / 1024.0),
         Unit::Megabytes => format!("{v:.0} MB"),
+        Unit::MegabytesPerSec if v < 10.0 => format!("{v:.2} MB/s"),
+        Unit::MegabytesPerSec => format!("{v:.0} MB/s"),
+        Unit::PerSec => format!("{v:.0} /s"),
+        Unit::Millis => format!("{v:.2} ms"),
+        Unit::Count => format!("{v:.1}"),
     }
 }
 

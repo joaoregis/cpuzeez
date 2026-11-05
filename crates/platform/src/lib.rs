@@ -5,6 +5,7 @@
 //! are written here; existing collection code in the binary moves here as
 //! each page is rebuilt (docs/v1/engineering.md §10).
 
+pub mod disk_io;
 pub mod elevation;
 pub mod hw;
 pub mod os;

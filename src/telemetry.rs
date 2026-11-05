@@ -323,6 +323,63 @@ impl Source for Board {
     }
 }
 
+/// Per-disk throughput, IOPS, latency, active time and queue (S1-D01).
+/// Rates need two snapshots: the first read takes a second one 100 ms later,
+/// so the metrics exist from the first tick (a CSV log fixes its columns there).
+#[derive(Default)]
+struct Disks {
+    last: Option<(std::time::Instant, Vec<(String, cpuzeez_core::diskio::Counters)>)>,
+}
+
+impl Source for Disks {
+    fn name(&self) -> &'static str {
+        "disks"
+    }
+    fn prefixes(&self) -> &'static [&'static str] {
+        &["disk"]
+    }
+    fn read(&mut self, out: &mut Vec<Reading>) {
+        let snap = || (std::time::Instant::now(), cpuzeez_platform::disk_io::read());
+        if self.last.is_none() {
+            self.last = Some(snap());
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        let (t1, cur) = snap();
+        if let Some((t0, prev)) = &self.last {
+            let mut o = Out::default();
+            disks(prev, &cur, (t1 - *t0).as_secs_f64(), &mut o);
+            out.append(&mut o.v);
+        }
+        self.last = Some((t1, cur));
+    }
+}
+
+type DiskSnap = [(String, cpuzeez_core::diskio::Counters)];
+
+fn disks(prev: &DiskSnap, cur: &DiskSnap, secs: f64, o: &mut Out) {
+    for (i, (name, c)) in cur.iter().enumerate() {
+        let Some((_, p)) = prev.iter().find(|(n, _)| n == name) else { continue };
+        let Some(r) = cpuzeez_core::diskio::rates(p, c, secs) else { continue };
+        let (g, k) = (format!("Disk · {name}"), format!("disk{i}"));
+        for (id, label, unit, v) in [
+            ("rate/read", "Read speed", Unit::MegabytesPerSec, Some(r.read_mbps)),
+            ("rate/write", "Write speed", Unit::MegabytesPerSec, Some(r.write_mbps)),
+            ("iops/read", "Reads", Unit::PerSec, Some(r.read_iops)),
+            ("iops/write", "Writes", Unit::PerSec, Some(r.write_iops)),
+            ("load/active", "Active time", Unit::Percent, Some(r.active_pct)),
+            // 0 ms with no requests, as the Task Manager shows it: a column
+            // that comes and goes with activity would churn the CSV header.
+            ("latency/read", "Read latency", Unit::Millis, Some(r.read_ms.unwrap_or(0.0))),
+            ("latency/write", "Write latency", Unit::Millis, Some(r.write_ms.unwrap_or(0.0))),
+            ("queue/depth", "Queue", Unit::Count, r.queue),
+        ] {
+            if let Some(v) = v {
+                o.add(format!("{k}/{id}"), &g, label, unit, v);
+            }
+        }
+    }
+}
+
 /// DIMM temperatures over the SMBus.
 struct Dimms {
     ctx: Arc<Ctx>,
@@ -668,23 +725,29 @@ pub struct Telemetry {
     gpu_live: Arc<Mutex<Vec<crate::gpu::Live>>>,
 }
 
+/// Every source the app reads.
+fn sources(ctx: &Arc<Ctx>, gpu_live: &Arc<Mutex<Vec<crate::gpu::Live>>>) -> Vec<Box<dyn Source>> {
+    let have_batteries = !crate::battery::batteries(ctx).is_empty();
+    #[allow(unused_mut)]
+    let mut v: Vec<Box<dyn Source>> = vec![
+        Box::new(Cpu { ctx: ctx.clone() }),
+        Box::new(Board { ctx: ctx.clone(), have_batteries }),
+        Box::new(Dimms { ctx: ctx.clone() }),
+        Box::new(Disks::default()),
+        Box::new(Gpus { ctx: ctx.clone(), last: gpu_live.clone() }),
+        Box::new(Memory),
+        Box::new(Drives { ctx: ctx.clone() }),
+        Box::new(Batteries { ctx: ctx.clone() }),
+    ];
+    #[cfg(target_os = "macos")]
+    v.push(Box::new(MeasuredClock));
+    v
+}
+
 impl Telemetry {
     pub fn start(ctx: Arc<Ctx>, period: Duration, keep: Duration) -> Telemetry {
         let gpu_live = Arc::new(Mutex::new(Vec::new()));
-        let have_batteries = !crate::battery::batteries(&ctx).is_empty();
-        #[allow(unused_mut)]
-        let mut sources: Vec<Box<dyn Source>> = vec![
-            Box::new(Cpu { ctx: ctx.clone() }),
-            Box::new(Board { ctx: ctx.clone(), have_batteries }),
-            Box::new(Dimms { ctx: ctx.clone() }),
-            Box::new(Gpus { ctx: ctx.clone(), last: gpu_live.clone() }),
-            Box::new(Memory),
-            Box::new(Drives { ctx: ctx.clone() }),
-            Box::new(Batteries { ctx: ctx.clone() }),
-        ];
-        #[cfg(target_os = "macos")]
-        sources.push(Box::new(MeasuredClock));
-        let engine = Engine::start(sources, metrics::Config { period, keep, ..Default::default() });
+        let engine = Engine::start(sources(&ctx, &gpu_live), metrics::Config { period, keep, ..Default::default() });
         let t = Telemetry { engine, throttles: Arc::default(), csv: Arc::default(), logging: Arc::default(), gpu_live };
         t.engine.add_hook(throttle_hook(ctx, t.throttles.clone()));
         let csv = t.csv.clone();
@@ -858,6 +921,17 @@ pub fn cli_log(ctx: Ctx, file: &str, seconds: Option<u64>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// S0-T03: every real source keeps the Source contract on the machine
+    /// running the tests (each CI OS, and whatever hardware it has).
+    #[test]
+    fn every_source_keeps_the_contract() {
+        let ctx = Arc::new(Ctx::new(crate::config::Config::default()));
+        for mut s in sources(&ctx, &Arc::default()) {
+            let n = metrics::check_contract(s.as_mut()).unwrap_or_else(|e| panic!("{e}"));
+            println!("{}: {n} readings", s.name());
+        }
+    }
 
     fn r(id: &str, unit: Unit, value: f64) -> Reading {
         Reading { id: id.into(), group: "CPU".into(), label: id.into(), unit, value }

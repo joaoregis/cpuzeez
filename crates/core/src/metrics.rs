@@ -32,6 +32,12 @@ pub enum Unit {
     Rpm,
     Percent,
     Megabytes,
+    MegabytesPerSec,
+    /// Operations per second (IOPS).
+    PerSec,
+    Millis,
+    /// A plain number (queue depth).
+    Count,
 }
 
 impl Unit {
@@ -45,6 +51,10 @@ impl Unit {
             Unit::Rpm => "RPM",
             Unit::Percent => "%",
             Unit::Megabytes => "MB",
+            Unit::MegabytesPerSec => "MB/s",
+            Unit::PerSec => "/s",
+            Unit::Millis => "ms",
+            Unit::Count => "",
         }
     }
 }
@@ -155,6 +165,48 @@ pub trait Source: Send {
         Duration::ZERO
     }
     fn read(&mut self, out: &mut Vec<Reading>);
+}
+
+/// The contract every [`Source`] keeps (S0-T03), checked against the real
+/// sources on each CI machine and against fakes in unit tests:
+/// - a name and at least one prefix;
+/// - every id starts with one of its prefixes (or a lease would never read it);
+/// - ids are unique within a read, and keep their unit from one read to the next;
+/// - group and label are set, and values are finite.
+pub fn check_contract(s: &mut dyn Source) -> Result<usize, String> {
+    let name = s.name();
+    if name.is_empty() || s.prefixes().is_empty() {
+        return Err(format!("{name:?}: a source needs a name and at least one prefix"));
+    }
+    let mut units: HashMap<String, Unit> = HashMap::new();
+    let mut n = 0;
+    for pass in 0..2 {
+        let mut out = Vec::new();
+        s.read(&mut out);
+        let mut seen = std::collections::HashSet::new();
+        for r in &out {
+            let id = &r.id;
+            if !s.prefixes().iter().any(|p| id.starts_with(p)) {
+                return Err(format!("{name}: {id} isn't under its prefixes {:?}", s.prefixes()));
+            }
+            if !seen.insert(id.as_str()) {
+                return Err(format!("{name}: {id} twice in one read"));
+            }
+            if r.group.is_empty() || r.label.is_empty() {
+                return Err(format!("{name}: {id} has no group or label"));
+            }
+            if !r.value.is_finite() {
+                return Err(format!("{name}: {id} = {}", r.value));
+            }
+            if let Some(u) = units.insert(id.clone(), r.unit)
+                && u != r.unit
+            {
+                return Err(format!("{name}: {id} changed unit {u:?} -> {:?} (pass {pass})", r.unit));
+            }
+        }
+        n = n.max(out.len());
+    }
+    Ok(n)
 }
 
 /// What a hook sees after each tick.
@@ -718,6 +770,36 @@ mod tests {
 
     /// Performance budget (P6, S0-T08): the per-tick work the engine itself
     /// adds (history push + snapshot) for 300 metrics with 10 minutes of history.
+    #[test]
+    fn the_contract_catches_what_breaks_leases() {
+        let (mut ok, _) = fake("cpu", &["cpu/"], Class::Fast);
+        assert!(check_contract(ok.as_mut()).is_ok());
+        struct Bad(&'static str);
+        impl Source for Bad {
+            fn name(&self) -> &'static str {
+                "bad"
+            }
+            fn prefixes(&self) -> &'static [&'static str] {
+                &["cpu/"]
+            }
+            fn read(&mut self, out: &mut Vec<Reading>) {
+                let r = |id: &str| Reading {
+                    id: id.into(),
+                    group: "G".into(),
+                    label: "L".into(),
+                    unit: Unit::Celsius,
+                    value: 1.0,
+                };
+                out.push(r(self.0));
+                if self.0 == "cpu/dup" {
+                    out.push(r("cpu/dup"));
+                }
+            }
+        }
+        assert!(check_contract(&mut Bad("gpu/temp")).unwrap_err().contains("isn't under its prefixes"));
+        assert!(check_contract(&mut Bad("cpu/dup")).unwrap_err().contains("twice"));
+    }
+
     #[test]
     fn the_first_read_does_not_skew_the_mean() {
         let mut c = Cost::default();

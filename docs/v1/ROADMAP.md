@@ -74,8 +74,8 @@ Goal: fix what's broken, build the shared building blocks, and set up the tests 
 |---|---|---|---|
 | S0-T01 | CI matrix: Windows, Ubuntu X11 + Wayland (headless compositor), macOS Intel + ARM | 🧪 | Every job is required for merge. ✅ Wayland: headless Weston 13 renders all 17 screens on x64 and arm64 |
 | S0-T02 | `rustfmt`, `clippy -D warnings` (agreed pedantic subset), MSRV, **`cargo-deny`** (licenses, advisories, duplicates) | 🧪 | Required checks |
-| S0-T03 | **Fakes** for every source trait + the **contract test** harness | 🧪 | Every trait has a suite; every platform runs it |
-| S0-T04 | **Fixture** framework (recorded `/proc`, SMART/NVMe dumps, SMU tables, PresentMon/MangoHud CSV) | 🧪 | Fixture tests in CI on every OS |
+| S0-T03 | **Fakes** for every source trait + the **contract test** harness | 🧪 | Every trait has a suite; every platform runs it. ✅ `metrics::check_contract`; every real source checked on each CI OS (`every_source_keeps_the_contract`) |
+| S0-T04 | **Fixture** framework (recorded `/proc`, SMART/NVMe dumps, SMU tables, PresentMon/MangoHud CSV) | 🧪 | Fixture tests in CI on every OS. ✅ `crates/core/fixtures/` (convention + privacy rule in its README); first: `/proc/diskstats`. Each later parser adds its own |
 | S0-T05 | **GUI interaction tests** with `egui_kittest` | 🧪 | At least one test per existing page, as the template |
 | S0-T06 | **Visual regression** from the `-screenshots` set (light and dark, with tolerance) | 🧪 | Diffs fail CI |
 | S0-T07 | **Fuzz** targets: SMBIOS, SPD, EDID, CSV import, session/report JSON, elevated-op parser | 🧪 | Scheduled runs; corpus committed |
@@ -152,7 +152,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 
 | ID | Item | Type | Source | Done when |
 |---|---|---|---|---|
-| S1-D01 | Per-disk I/O (bytes, IOPS, queue, latency, active time) | 🧱 | task-manager §4 | Win/Linux/macOS sources + contract tests |
+| S1-D01 | Per-disk I/O (bytes, IOPS, queue, latency, active time) | 🧱 | task-manager §4 | Win/Linux/macOS sources + contract tests. ✅ `disks` source (`disk<N>/…`): `IOCTL_DISK_PERFORMANCE`, `/proc/diskstats` (fixture-tested), IOKit statistics (macOS: active time estimated, no queue); no privileges |
 | S1-D02 | Per-adapter network throughput, errors and drops | 🧱 | task-manager §4 | Same |
 | S1-D03 | Memory composition (commit, pools, standby, compressed, *wired*), page file/swap | 🧱 | task-manager §4 | Same |
 | S1-D04 | GPU per-engine utilization (adapter level) | 🧱 | zeez-live §4 | Same |
