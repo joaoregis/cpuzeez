@@ -9,6 +9,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub const PT_BR: &[(&str, &str)] = &[
+    (
+        "This OS doesn't let a program pin threads to cores, so this runs two free threads many times and shows the spread: the low end is cores sharing a cluster, the high end cores far apart.",
+        "Este sistema não deixa um programa fixar threads em núcleos; então isto roda duas threads livres muitas vezes e mostra a dispersão: a ponta baixa são núcleos do mesmo cluster, a alta, núcleos distantes.",
+    ),
     ("Core-to-core latency", "Latência entre núcleos"),
     (
         "How long one core takes to see a value another core wrote. Cores that share an L3 cache answer fastest.",
@@ -25,6 +29,10 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    (
+        "This OS doesn't let a program pin threads to cores, so this runs two free threads many times and shows the spread: the low end is cores sharing a cluster, the high end cores far apart.",
+        "Este sistema no permite fijar hilos a núcleos; así que ejecuta dos hilos libres muchas veces y muestra la dispersión: el extremo bajo son núcleos del mismo clúster, el alto, núcleos lejanos.",
+    ),
     ("Core-to-core latency", "Latencia entre núcleos"),
     (
         "How long one core takes to see a value another core wrote. Cores that share an L3 cache answer fastest.",
@@ -43,6 +51,9 @@ type Matrix = Vec<Vec<Option<f64>>>;
 pub struct State {
     running: Option<(Arc<AtomicUsize>, usize, Arc<Mutex<Option<Matrix>>>)>,
     result: Option<Matrix>,
+    /// macOS (no pinning): sorted samples of the statistical mode.
+    stats: Option<Vec<f64>>,
+    stat_run: Option<(Arc<AtomicUsize>, Arc<Mutex<Option<Vec<f64>>>>)>,
     conditions: crate::benchkit::Conditions,
     label: String,
     status: String,
@@ -66,7 +77,7 @@ impl State {
                     .color(p.text_secondary),
             );
             if cfg!(target_os = "macos") {
-                ui.label(RichText::new(tr("This OS doesn't let a program pin threads to cores.")).color(p.text_muted));
+                self.statistical(ui);
                 return;
             }
             match &self.running {
@@ -118,6 +129,54 @@ impl State {
                 ui.add_space(theme::GAP);
                 super::benchkit_view::save(ui, ctx, &saved, &mut self.label, &mut self.status);
             }
+        }
+    }
+}
+
+impl State {
+    /// macOS can't pin threads: many unpinned ping-pongs, shown as a spread.
+    fn statistical(&mut self, ui: &mut egui::Ui) {
+        const SAMPLES: usize = 200;
+        let p = theme::palette(ui);
+        ui.label(RichText::new(tr("This OS doesn't let a program pin threads to cores, so this runs two free threads many times and shows the spread: the low end is cores sharing a cluster, the high end cores far apart.")).color(p.text_muted));
+        if let Some((done, slot)) = self.stat_run.clone() {
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
+            let finished = slot.lock().unwrap_or_else(|e| e.into_inner()).take();
+            match finished {
+                Some(v) => {
+                    self.stats = Some(v);
+                    self.stat_run = None;
+                }
+                None => {
+                    let d = done.load(Ordering::Relaxed);
+                    widgets::progress(ui, d as f32 / SAMPLES as f32, &format!("{d} / {SAMPLES}"));
+                    return;
+                }
+            }
+        }
+        if widgets::primary_button(ui, &format!("{}  {}", icon::PLAY, tr("Run"))).clicked() {
+            let (done, slot) = (Arc::new(AtomicUsize::new(0)), Arc::new(Mutex::new(None)));
+            let (d, s) = (done.clone(), slot.clone());
+            std::thread::spawn(move || {
+                let v = crate::latency::statistical(SAMPLES, 5_000, &d);
+                *s.lock().unwrap_or_else(|e| e.into_inner()) = Some(v);
+            });
+            self.stat_run = Some((done, slot));
+        }
+        if let Some(v) = self.stats.as_ref().filter(|v| !v.is_empty()) {
+            let at = |q: f64| v[((v.len() - 1) as f64 * q).round() as usize];
+            ui.label(
+                RichText::new(format!(
+                    "min {:.0} · p10 {:.0} · median {:.0} · p90 {:.0} · max {:.0} ns",
+                    at(0.0),
+                    at(0.1),
+                    at(0.5),
+                    at(0.9),
+                    at(1.0)
+                ))
+                .monospace()
+                .color(p.text),
+            );
         }
     }
 }

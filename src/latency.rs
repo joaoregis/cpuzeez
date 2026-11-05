@@ -19,7 +19,7 @@ pub fn measure(cpus: &[usize], rounds: u64, done: &AtomicUsize) -> Vec<Vec<Optio
     let mut m = vec![vec![None; n]; n];
     for i in 0..n {
         for j in i + 1..n {
-            let ns = pair(cpus[i], cpus[j], rounds);
+            let ns = pair(Some(cpus[i]), Some(cpus[j]), rounds);
             m[i][j] = ns;
             m[j][i] = ns;
             done.fetch_add(1, Ordering::Relaxed);
@@ -28,7 +28,8 @@ pub fn measure(cpus: &[usize], rounds: u64, done: &AtomicUsize) -> Vec<Vec<Optio
     m
 }
 
-fn pair(a: usize, b: usize, rounds: u64) -> Option<f64> {
+/// One ping-pong between two threads, pinned to `a` and `b` when given.
+fn pair(a: Option<usize>, b: Option<usize>, rounds: u64) -> Option<f64> {
     // Own cache line, so nothing else shares it.
     #[repr(align(128))]
     struct Line(AtomicU64);
@@ -36,7 +37,7 @@ fn pair(a: usize, b: usize, rounds: u64) -> Option<f64> {
     let total = WARMUP + rounds;
     let l2 = line.clone();
     let peer = std::thread::spawn(move || {
-        if !cpuzeez_platform::os::pin(b) {
+        if b.is_some_and(|b| !cpuzeez_platform::os::pin(b)) {
             l2.0.store(u64::MAX, Ordering::Release);
             return;
         }
@@ -53,7 +54,7 @@ fn pair(a: usize, b: usize, rounds: u64) -> Option<f64> {
     });
     let ok = std::thread::scope(|s| {
         s.spawn(|| {
-            if !cpuzeez_platform::os::pin(a) {
+            if a.is_some_and(|a| !cpuzeez_platform::os::pin(a)) {
                 line.0.store(u64::MAX, Ordering::Release);
                 return None;
             }
@@ -79,6 +80,22 @@ fn pair(a: usize, b: usize, rounds: u64) -> Option<f64> {
     });
     let _ = peer.join();
     ok
+}
+
+/// Statistical mode, for an OS that can't pin threads (macOS): `samples`
+/// ping-pongs between two unpinned threads, wherever the scheduler puts them.
+/// The spread shows same-cluster vs cross-cluster latency without naming the
+/// cores. `done` counts finished samples.
+pub fn statistical(samples: usize, rounds: u64, done: &AtomicUsize) -> Vec<f64> {
+    let mut v: Vec<f64> = (0..samples)
+        .filter_map(|_| {
+            let ns = pair(None, None, rounds);
+            done.fetch_add(1, Ordering::Relaxed);
+            ns
+        })
+        .collect();
+    v.sort_by(f64::total_cmp);
+    v
 }
 
 /// (min, median, max) over the measured pairs.
@@ -118,5 +135,14 @@ mod tests {
         let ns = m[0][1].expect("pinned pair");
         assert!(ns > 0.0 && ns < 100_000.0, "{ns} ns");
         assert_eq!(done.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn statistical_mode_measures_unpinned() {
+        let _heavy = crate::heavy_test();
+        let done = AtomicUsize::new(0);
+        let v = statistical(5, 1_000, &done);
+        assert_eq!((v.len(), done.load(Ordering::Relaxed)), (5, 5));
+        assert!(v.windows(2).all(|w| w[0] <= w[1]) && v[0] > 0.0, "{v:?}");
     }
 }
