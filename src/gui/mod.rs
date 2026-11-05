@@ -576,6 +576,7 @@ impl App {
                     .join(" · ");
                 self.info_header(ui, tr("Memory"), &sub);
                 memory_tab(ui, r);
+                self.memory_more(ui, r);
                 heading(ui, "SPD");
                 self.spd_tab(ui, r);
             }

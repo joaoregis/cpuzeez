@@ -5,6 +5,7 @@ mod graphics;
 mod mainboard;
 pub(crate) mod mainboard_more;
 mod memory;
+pub(crate) mod memory_more;
 mod processor;
 pub(crate) mod processor_more;
 mod tools;

@@ -185,8 +185,10 @@ fn route(ctx: &Ctx, mons: &[crate::sensors::Monitor], o: &mut Out, have_batterie
             if pre == "cpu" && r.kind == Kind::Clock {
                 clocks.push(r.value);
             }
-            if pre == "board" && r.label.starts_with("CPU") {
-                o.sensor("cpu", "CPU", r); // Apple SMC mixes CPU and board sensors
+            // Apple's SMC mixes CPU and board sensors; elsewhere a Super I/O
+            // "CPU Vcore" is a mainboard reading and stays under board/.
+            if cfg!(target_os = "macos") && pre == "board" && r.label.starts_with("CPU") {
+                o.sensor("cpu", "CPU", r);
             } else {
                 o.sensor(pre, group, r);
             }

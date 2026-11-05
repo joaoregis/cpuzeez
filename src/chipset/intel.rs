@@ -237,6 +237,7 @@ pub fn decode(l: &Layout, bclk: f64, rd: impl Fn(u32) -> Option<u32>) -> Option<
         let rp = get(base, l.rp)? * k;
         let ras = get(base, l.ras)? * k;
         Some(Timings {
+            extra: Vec::new(),
             cl: get(base, l.cl)? * k,
             trcd: l.rcd.map_or(Some(rp), |r| get(base, r).map(|v| v * k))?,
             trp: rp,

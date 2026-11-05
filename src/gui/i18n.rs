@@ -17,7 +17,29 @@ pub enum Lang {
 pub const LANGS: [(Lang, &str, &str); 3] =
     [(Lang::En, "en", "English"), (Lang::PtBr, "pt-BR", "Português (Brasil)"), (Lang::Es, "es", "Español")];
 
+#[cfg(not(test))]
 static CURRENT: AtomicUsize = AtomicUsize::new(0);
+
+// Tests run in parallel threads: each keeps its own language, so a test that
+// switches to Portuguese can't change the labels another test clicks.
+#[cfg(test)]
+thread_local! {
+    static CURRENT: AtomicUsize = const { AtomicUsize::new(0) };
+}
+
+fn store(i: usize) {
+    #[cfg(not(test))]
+    CURRENT.store(i, Ordering::Relaxed);
+    #[cfg(test)]
+    CURRENT.with(|c| c.store(i, Ordering::Relaxed));
+}
+
+fn load() -> usize {
+    #[cfg(not(test))]
+    return CURRENT.load(Ordering::Relaxed);
+    #[cfg(test)]
+    CURRENT.with(|c| c.load(Ordering::Relaxed))
+}
 
 type Table = &'static [(&'static str, &'static str)];
 
@@ -42,15 +64,16 @@ fn tables() -> &'static [(Table, Table)] {
         (super::palette::PT_BR, super::palette::ES),
         (super::pages::processor_more::PT_BR, super::pages::processor_more::ES),
         (super::pages::mainboard_more::PT_BR, super::pages::mainboard_more::ES),
+        (super::pages::memory_more::PT_BR, super::pages::memory_more::ES),
     ]
 }
 
 pub fn set(lang: Lang) {
-    CURRENT.store(LANGS.iter().position(|l| l.0 == lang).unwrap_or(0), Ordering::Relaxed);
+    store(LANGS.iter().position(|l| l.0 == lang).unwrap_or(0));
 }
 
 pub fn current() -> Lang {
-    LANGS[CURRENT.load(Ordering::Relaxed)].0
+    LANGS[load()].0
 }
 
 pub fn from_code(code: &str) -> Lang {
