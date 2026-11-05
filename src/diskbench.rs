@@ -182,6 +182,83 @@ fn phase(
     Ok((bytes.load(Ordering::Relaxed), ops.load(Ordering::Relaxed), el))
 }
 
+/// Sustained write (S1-K06): `bytes` written sequentially, uncached, by 4
+/// threads each on its own quarter of a test file; the MB/s of every second.
+/// Shows the SLC-cache cliff of consumer SSDs. The file is always deleted.
+pub fn sustained(dir: &Path, bytes: u64, ctl: &crate::benchkit::Ctl) -> Result<Vec<(f64, f64)>, String> {
+    const THREADS: u64 = 4;
+    const BLOCK: u64 = 1 << 20;
+    let path = dir.join("cpuzeez-sustained.tmp");
+    let _guard = TempFile(path.clone());
+    let file = direct_io::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let quarter = bytes / THREADS / BLOCK * BLOCK;
+    let written = AtomicU64::new(0);
+    let error: Mutex<Option<String>> = Mutex::new(None);
+    let series = std::thread::scope(|s| {
+        let handles: Vec<_> = (0..THREADS)
+            .map(|k| {
+                let (file, written, error) = (&file, &written, &error);
+                s.spawn(move || {
+                    let mut buf = Buffer::new(BLOCK as usize);
+                    let mut seed = 0xABCD_0000 + k;
+                    buf.bytes().as_chunks_mut::<8>().0.iter_mut().for_each(|c| *c = next(&mut seed).to_le_bytes());
+                    let mut off = k * quarter;
+                    while off < (k + 1) * quarter && !ctl.cancelled() {
+                        if let Err(e) = write_at(file, buf.bytes(), off) {
+                            *error.lock().unwrap_or_else(|p| p.into_inner()) = Some(e.to_string());
+                            return;
+                        }
+                        written.fetch_add(BLOCK, Ordering::Relaxed);
+                        off += BLOCK;
+                    }
+                })
+            })
+            .collect();
+        let (t0, mut last, mut series) = (Instant::now(), (0.0f64, 0u64), Vec::new());
+        let total = quarter * THREADS;
+        while !handles.iter().all(|h| h.is_finished()) {
+            std::thread::sleep(Duration::from_millis(50));
+            let (t, w) = (t0.elapsed().as_secs_f64(), written.load(Ordering::Relaxed));
+            if t - last.0 >= 1.0 {
+                series.push((t, (w - last.1) as f64 / (t - last.0) / 1e6));
+                last = (t, w);
+                ctl.set("Sustained write", w as f32 / total.max(1) as f32);
+            }
+        }
+        series
+    });
+    if let Some(e) = error.lock().unwrap_or_else(|p| p.into_inner()).take() {
+        return Err(e);
+    }
+    ctl.check()?;
+    Ok(series)
+}
+
+/// Start (first 5 s), end (last 10 %), average and the GB written before the
+/// speed first fell under half the start: roughly the SLC cache.
+pub fn sustained_subs(series: &[(f64, f64)]) -> Vec<crate::benchkit::Sub> {
+    use crate::benchkit::Sub;
+    let avg = |v: &[(f64, f64)]| if v.is_empty() { 0.0 } else { v.iter().map(|p| p.1).sum::<f64>() / v.len() as f64 };
+    let start = avg(&series[..series.len().min(5)]);
+    let end = avg(&series[series.len() - (series.len() / 10).max(1).min(series.len())..]);
+    let mut out = vec![
+        Sub::new("Start", start, "MB/s", true),
+        Sub::new("End", end, "MB/s", true),
+        Sub::new("Average", avg(series), "MB/s", true),
+    ];
+    let mut gb = 0.0;
+    let mut prev = 0.0;
+    for &(t, mbps) in series {
+        if mbps < start / 2.0 {
+            out.push(Sub::new("Cache", gb, "GB", true));
+            break;
+        }
+        gb += mbps * (t - prev) / 1000.0;
+        prev = t;
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -200,6 +277,26 @@ mod tests {
         assert_eq!(scores.len(), TESTS.len());
         assert!(scores.iter().all(|s| s.read_mbps > 0.0 && s.write_mbps > 0.0), "{scores:?}");
         assert!(!dir.join("cpuzeez-bench.tmp").exists(), "the test file is deleted");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn sustained_finds_the_cache_cliff() {
+        // 10 s at 3000 MB/s, then 10 s at 900 MB/s.
+        let series: Vec<(f64, f64)> = (1..=20).map(|t| (t as f64, if t <= 10 { 3000.0 } else { 900.0 })).collect();
+        let s = sustained_subs(&series);
+        assert_eq!((s[0].value, s[1].value), (3000.0, 900.0));
+        assert_eq!(s[3].name, "Cache");
+        assert!((s[3].value - 30.0).abs() < 1e-9, "10 s × 3 GB/s: {}", s[3].value);
+    }
+
+    #[test]
+    fn a_tiny_sustained_write_cleans_up() {
+        let dir = std::env::temp_dir().join(format!("cz-sustained-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let series = sustained(&dir, 64 << 20, &Default::default()).unwrap();
+        assert!(series.iter().all(|p| p.1 >= 0.0));
+        assert!(!dir.join("cpuzeez-sustained.tmp").exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

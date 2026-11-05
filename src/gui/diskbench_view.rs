@@ -10,6 +10,20 @@ use eframe::egui::{self, RichText};
 use std::path::PathBuf;
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Sustained write", "Gravação sustentada"),
+    (
+        "Writes continuously until the size below is reached. Fast SSDs write into a cache first; the curve shows where it runs out. The file is deleted afterwards.",
+        "Grava sem parar até atingir o tamanho abaixo. SSDs rápidos gravam primeiro num cache; a curva mostra onde ele acaba. O arquivo é apagado depois.",
+    ),
+    (
+        "This writes {} GB to the drive. SSDs wear a little with every write.",
+        "Isto grava {} GB no disco. SSDs se desgastam um pouco a cada gravação.",
+    ),
+    ("Start", "Início"),
+    ("End", "Fim"),
+    ("Average", "Média"),
+    ("Cache", "Cache"),
+    ("Storage sustained", "Armazenamento sustentado"),
     ("Storage", "Armazenamento"),
     ("Where", "Onde"),
     ("App data folder", "Pasta de dados do app"),
@@ -25,6 +39,20 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Sustained write", "Escritura sostenida"),
+    (
+        "Writes continuously until the size below is reached. Fast SSDs write into a cache first; the curve shows where it runs out. The file is deleted afterwards.",
+        "Escribe sin parar hasta alcanzar el tamaño de abajo. Los SSD rápidos escriben primero en una caché; la curva muestra dónde se agota. El archivo se borra después.",
+    ),
+    (
+        "This writes {} GB to the drive. SSDs wear a little with every write.",
+        "Esto escribe {} GB en la unidad. Los SSD se desgastan un poco con cada escritura.",
+    ),
+    ("Start", "Inicio"),
+    ("End", "Fin"),
+    ("Average", "Promedio"),
+    ("Cache", "Caché"),
+    ("Storage sustained", "Almacenamiento sostenido"),
     ("Storage", "Almacenamiento"),
     ("Where", "Dónde"),
     ("App data folder", "Carpeta de datos de la app"),
@@ -51,6 +79,12 @@ pub struct State {
     saved: Option<kit::Saved>,
     label: String,
     status: String,
+    sus_gb: u64,
+    sus: Option<crate::benchkit::Job<Vec<(f64, f64)>>>,
+    sus_result: Option<kit::Saved>,
+    sus_error: Option<String>,
+    sus_label: String,
+    sus_status: String,
 }
 
 impl Default for State {
@@ -65,6 +99,12 @@ impl Default for State {
             saved: None,
             label: String::new(),
             status: String::new(),
+            sus_gb: 32,
+            sus: None,
+            sus_result: None,
+            sus_error: None,
+            sus_label: String::new(),
+            sus_status: String::new(),
         }
     }
 }
@@ -161,6 +201,86 @@ impl State {
             if let Some(r) = &self.saved {
                 kit::save(ui, ctx, r, &mut self.label, &mut self.status);
             }
+        }
+        ui.add_space(theme::GAP);
+        self.sustained(ui, ctx, start_temp, data);
+    }
+
+    /// Sustained write (S1-K06): how long the drive keeps its speed.
+    fn sustained(&mut self, ui: &mut egui::Ui, ctx: &Ctx, start_temp: Option<f64>, data: Option<PathBuf>) {
+        let p = theme::palette(ui);
+        let dir = self.dir.clone().or(data);
+        // Free space of the volume holding `dir` (longest matching root).
+        let free = dir.as_ref().and_then(|d| {
+            let d = d.to_string_lossy().to_lowercase();
+            crate::storage::drives(ctx)
+                .iter()
+                .flat_map(|x| x.volumes.iter())
+                .filter(|v| !v.name.is_empty() && d.starts_with(&v.name.to_lowercase()))
+                .max_by_key(|v| v.name.len())
+                .map(|v| v.free)
+        });
+        widgets::card(ui, icon::TRAY_ARROW_DOWN, tr("Sustained write"), |ui| {
+            ui.label(RichText::new(tr("Writes continuously until the size below is reached. Fast SSDs write into a cache first; the curve shows where it runs out. The file is deleted afterwards.")).color(p.text_secondary));
+            ui.add_enabled_ui(self.sus.is_none(), |ui| {
+                ui.horizontal(|ui| {
+                    for gb in [8u64, 32, 64] {
+                        let fits = free.is_some_and(|f| gb << 30 < f / 10 * 8);
+                        ui.add_enabled_ui(fits, |ui| ui.selectable_value(&mut self.sus_gb, gb, format!("{gb} GB")));
+                    }
+                });
+            });
+            let fits = free.is_some_and(|f| self.sus_gb << 30 < f / 10 * 8);
+            ui.label(
+                RichText::new(trf(
+                    "This writes {} GB to the drive. SSDs wear a little with every write.",
+                    &[&self.sus_gb],
+                ))
+                .color(p.warning),
+            );
+            if let Some(r) = kit::poll(ui, &mut self.sus) {
+                match r {
+                    Ok(series) if !series.is_empty() => {
+                        let subs = crate::diskbench::sustained_subs(&series);
+                        self.sus_result = Some(kit::Saved {
+                            kind: "Storage sustained",
+                            score: subs.get(2).map_or(0.0, |x| x.value),
+                            unit: "MB/s",
+                            variant: format!("{} GB", self.sus_gb),
+                            threads: 4,
+                            subs,
+                            conditions: crate::benchkit::conditions(start_temp, 1),
+                            series,
+                        });
+                        self.sus_status.clear();
+                    }
+                    Ok(_) => {}
+                    Err(e) => self.sus_error = Some(e),
+                }
+            }
+            if self.sus.is_none()
+                && self.run.is_none()
+                && let Some(dir) = dir.clone()
+                && ui.add_enabled(fits, egui::Button::new(format!("{}  {}", icon::PLAY, tr("Run")))).clicked()
+            {
+                self.sus_error = None;
+                self.sus_result = None;
+                let bytes = self.sus_gb << 30;
+                self.sus = Some(crate::benchkit::Job::spawn(move |ctl| crate::diskbench::sustained(&dir, bytes, ctl)));
+            }
+            if let Some(e) = &self.sus_error {
+                ui.label(RichText::new(trf("Stopped: {}", &[e])).color(p.danger));
+            }
+        });
+        if let Some(r) = &self.sus_result {
+            ui.add_space(theme::GAP);
+            widgets::card(ui, "", "", |ui| {
+                let s = [super::tools::Series { name: String::new(), color: p.series[0], points: r.series.clone() }];
+                super::tools::line_chart(ui, &s, false, &|x| format!("{x:.0} s"), &|y| format!("{y:.0} MB/s"));
+                kit::table(ui, "sustained", &r.subs);
+            });
+            ui.add_space(theme::GAP);
+            kit::save(ui, ctx, r, &mut self.sus_label, &mut self.sus_status);
         }
     }
 }

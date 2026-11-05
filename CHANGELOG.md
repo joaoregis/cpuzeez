@@ -32,6 +32,7 @@ generated from its section below.
 - **More memory tests** (*Benchmarks › Memory*): STREAM triad bandwidth, GUPS random updates, a random walk on 4 KiB and on large pages (the cost of TLB misses) and DRAM latency from each CCD or NUMA node. Large pages on Windows need the *Lock pages in memory* right; the test says so when it's missing.
 - **Benchmarks are reproducible**: each result records the app version, power plan and starting CPU temperature; the suite can run 3 or 5 times and report the median and the spread.
 - **History for every benchmark**: the CPU suite, storage and core-to-core latency results can be saved too, and comparing two results lists every sub-test side by side.
+- **Sustained write** (*Benchmarks › Storage*): writes 8, 32 or 64 GB in a row and draws the speed over time, showing where a fast SSD's cache runs out. It says up front how much it writes, only offers sizes that fit in 80 % of the free space, and deletes its file.
 - **Core-to-core latency** (*Benchmarks › Latency*): a heat map of how long each core takes to see another core's writes, which shows the CCD/CCX layout at a glance.
 - **Devices page**: USB devices with the speed they run at and the USB version they support (with a warning when a USB 3 device runs at USB 2 speed), and each display's refresh rate against what it supports.
 - **Drives**: partition alignment, the OS's TRIM setting and NVMe thermal throttling (how often and for how long) on each drive's card.
