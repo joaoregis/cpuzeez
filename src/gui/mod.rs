@@ -23,6 +23,7 @@ mod cpusuite_view;
 mod diskbench_view;
 mod latency_view;
 pub mod layout_view;
+mod memplus_view;
 mod plot;
 pub mod sensors;
 pub mod stress;
@@ -187,6 +188,7 @@ struct App {
     pcie_table: table::State,
     latency: latency_view::State,
     cpusuite: cpusuite_view::State,
+    memplus: memplus_view::State,
     diskbench: diskbench_view::State,
 }
 
@@ -256,6 +258,7 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         pcie_table: Default::default(),
         latency: Default::default(),
         cpusuite: Default::default(),
+        memplus: Default::default(),
         diskbench: Default::default(),
     };
     if app.auto.is_none() {
@@ -626,7 +629,9 @@ impl App {
                     }
                     BenchView::Memory => {
                         let t0 = benchkit_view::cpu_temp(&mut self.mon);
-                        self.bench.memory_page(ui, &self.ctx, t0)
+                        self.bench.memory_page(ui, &self.ctx, t0);
+                        ui.add_space(theme::GAP);
+                        self.memplus.page(ui, &self.ctx, t0);
                     }
                     BenchView::Latency => {
                         let t0 = benchkit_view::cpu_temp(&mut self.mon);

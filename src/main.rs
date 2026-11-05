@@ -24,6 +24,7 @@ mod health;
 mod history;
 mod latency;
 mod membench;
+mod memplus;
 mod network;
 mod npu;
 mod pci;

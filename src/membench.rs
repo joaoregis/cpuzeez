@@ -363,7 +363,7 @@ impl Plan {
     }
 }
 
-fn ram_bytes(ctx: &Ctx) -> u64 {
+pub fn ram_bytes(ctx: &Ctx) -> u64 {
     let mb = crate::chipset::summary(ctx).memory.size_mb;
     let mb = if mb > 0 { mb } else { crate::smbios::memory_devices(ctx).iter().map(|d| d.size_mb).sum() };
     if mb > 0 { mb << 20 } else { 2 << 30 } // unknown: assume 2 GiB

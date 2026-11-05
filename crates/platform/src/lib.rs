@@ -13,6 +13,7 @@ pub mod elevation;
 pub mod firmware;
 pub mod gpu_engines;
 pub mod hw;
+pub mod large_pages;
 pub mod memory;
 pub mod net_io;
 pub mod os;
