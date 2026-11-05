@@ -33,6 +33,8 @@ pub enum Unit {
     Percent,
     Megabytes,
     MegabytesPerSec,
+    /// Megabits per second (network).
+    Mbps,
     /// Operations per second (IOPS).
     PerSec,
     Millis,
@@ -52,6 +54,7 @@ impl Unit {
             Unit::Percent => "%",
             Unit::Megabytes => "MB",
             Unit::MegabytesPerSec => "MB/s",
+            Unit::Mbps => "Mbps",
             Unit::PerSec => "/s",
             Unit::Millis => "ms",
             Unit::Count => "",

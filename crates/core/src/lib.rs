@@ -17,6 +17,7 @@ pub mod config;
 pub mod diskio;
 pub mod layout;
 pub mod metrics;
+pub mod netio;
 pub mod pci;
 pub mod query;
 pub mod report;

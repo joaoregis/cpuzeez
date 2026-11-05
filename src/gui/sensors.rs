@@ -346,6 +346,8 @@ pub fn fmt(v: f64, u: Unit) -> String {
         Unit::Megabytes => format!("{v:.0} MB"),
         Unit::MegabytesPerSec if v < 10.0 => format!("{v:.2} MB/s"),
         Unit::MegabytesPerSec => format!("{v:.0} MB/s"),
+        Unit::Mbps if v < 10.0 => format!("{v:.2} Mbps"),
+        Unit::Mbps => format!("{v:.0} Mbps"),
         Unit::PerSec => format!("{v:.0} /s"),
         Unit::Millis => format!("{v:.2} ms"),
         Unit::Count => format!("{v:.1}"),

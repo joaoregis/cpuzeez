@@ -25,6 +25,7 @@ generated from its section below.
   - [THIRD_PARTY.md](THIRD_PARTY.md) and *About › Third-party components* list what is bundled and under which license.
 - **The GUI opens on machines without a working OpenGL driver**, such as VMs, Remote Desktop and missing GPU drivers. If OpenGL fails, CpuZeeZ restarts its window on wgpu (DX12/WARP, Vulkan or Metal). `CZ_RENDERER=wgpu` forces it ([ADR 0013](docs/adr/0013-gui-renders-with-glow-and-falls-back-to-wgpu.md)).
 - **Per-disk activity** in the Sensors list and CSV logs: read/write speed, IOPS, latency, active time and queue for every physical disk, on Windows, Linux and macOS, without administrator rights.
+- **Per-adapter network traffic** the same way: download/upload in Mbps, packets per second, errors and drops.
 
 ### Changed
 

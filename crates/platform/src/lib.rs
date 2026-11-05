@@ -8,6 +8,7 @@
 pub mod disk_io;
 pub mod elevation;
 pub mod hw;
+pub mod net_io;
 pub mod os;
 
 pub mod cpu {

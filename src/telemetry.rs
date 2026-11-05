@@ -356,6 +356,51 @@ impl Source for Disks {
 
 type DiskSnap = [(String, cpuzeez_core::diskio::Counters)];
 
+/// Per-adapter traffic, errors and drops (S1-D02); same two-snapshot scheme
+/// as [`Disks`].
+#[derive(Default)]
+struct Net {
+    last: Option<(Instant, Vec<(String, cpuzeez_core::netio::Counters)>)>,
+}
+
+impl Source for Net {
+    fn name(&self) -> &'static str {
+        "net"
+    }
+    fn prefixes(&self) -> &'static [&'static str] {
+        &["net"]
+    }
+    fn read(&mut self, out: &mut Vec<Reading>) {
+        let snap = || (Instant::now(), cpuzeez_platform::net_io::read());
+        if self.last.is_none() {
+            self.last = Some(snap());
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        let (t1, cur) = snap();
+        if let Some((t0, prev)) = &self.last {
+            let mut o = Out::default();
+            let secs = (t1 - *t0).as_secs_f64();
+            for (i, (name, c)) in cur.iter().enumerate() {
+                let Some((_, p)) = prev.iter().find(|(n, _)| n == name) else { continue };
+                let Some(r) = cpuzeez_core::netio::rates(p, c, secs) else { continue };
+                let (g, k) = (format!("Network · {name}"), format!("net{i}"));
+                for (id, label, unit, v) in [
+                    ("rate/rx", "Download", Unit::Mbps, r.rx_mbps),
+                    ("rate/tx", "Upload", Unit::Mbps, r.tx_mbps),
+                    ("pps/rx", "Packets in", Unit::PerSec, r.rx_pps),
+                    ("pps/tx", "Packets out", Unit::PerSec, r.tx_pps),
+                    ("errors/total", "Errors", Unit::PerSec, r.errors_ps),
+                    ("drops/total", "Drops", Unit::PerSec, r.drops_ps),
+                ] {
+                    o.add(format!("{k}/{id}"), &g, label, unit, v);
+                }
+            }
+            out.append(&mut o.v);
+        }
+        self.last = Some((t1, cur));
+    }
+}
+
 fn disks(prev: &DiskSnap, cur: &DiskSnap, secs: f64, o: &mut Out) {
     for (i, (name, c)) in cur.iter().enumerate() {
         let Some((_, p)) = prev.iter().find(|(n, _)| n == name) else { continue };
@@ -734,6 +779,7 @@ fn sources(ctx: &Arc<Ctx>, gpu_live: &Arc<Mutex<Vec<crate::gpu::Live>>>) -> Vec<
         Box::new(Board { ctx: ctx.clone(), have_batteries }),
         Box::new(Dimms { ctx: ctx.clone() }),
         Box::new(Disks::default()),
+        Box::new(Net::default()),
         Box::new(Gpus { ctx: ctx.clone(), last: gpu_live.clone() }),
         Box::new(Memory),
         Box::new(Drives { ctx: ctx.clone() }),
