@@ -120,6 +120,13 @@ pub enum ServiceOp {
     SetStartup { name: String, startup: crate::services::StartupType },
 }
 
+/// Startup entry operations (S2a-08): reversible enable/disable via `StartupApproved` / XDG / launchctl.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum StartupOp {
+    SetEnabled { id: String, source: crate::startup::StartupSource, enabled: bool },
+}
+
 /// Everything the app can be asked to do with side effects.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "kebab-case", deny_unknown_fields)]
@@ -134,6 +141,8 @@ pub enum Action {
     Process { target: ProcessOp, elevate: bool },
     /// Act on a system service (S2a-07).
     Service { target: ServiceOp, elevate: bool },
+    /// Enable or disable a startup entry (S2a-08).
+    Startup { target: StartupOp, elevate: bool },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -157,8 +166,12 @@ impl Action {
     pub fn privilege(&self) -> Privilege {
         match self {
             Action::LoadKernelModule { .. } | Action::InstallPawnIo => Privilege::Admin,
-            Action::Process { elevate: true, .. } | Action::Service { elevate: true, .. } => Privilege::Admin,
-            Action::Process { elevate: false, .. } | Action::Service { elevate: false, .. } => Privilege::User,
+            Action::Process { elevate: true, .. }
+            | Action::Service { elevate: true, .. }
+            | Action::Startup { elevate: true, .. } => Privilege::Admin,
+            Action::Process { elevate: false, .. }
+            | Action::Service { elevate: false, .. }
+            | Action::Startup { elevate: false, .. } => Privilege::User,
         }
     }
 
@@ -171,7 +184,7 @@ impl Action {
                 if pids.iter().any(|&p| crate::procs::critical("", p)) { Risk::Critical } else { Risk::Irreversible }
             }
             Action::Process { target: ProcessOp::Priority { priority: Priority::Realtime, .. }, .. } => Risk::Critical,
-            Action::Process { .. } => Risk::Normal,
+            Action::Process { .. } | Action::Startup { .. } => Risk::Normal,
             Action::Service { target, .. } => {
                 let name = match target {
                     ServiceOp::Start { name }
@@ -218,6 +231,13 @@ impl Action {
                     format!("Set service {name} startup type to {}", startup.label())
                 }
             },
+            Action::Startup { target: StartupOp::SetEnabled { id, enabled, .. }, .. } => {
+                if *enabled {
+                    format!("Enable startup entry {id}")
+                } else {
+                    format!("Disable startup entry {id}")
+                }
+            }
         }
     }
 }

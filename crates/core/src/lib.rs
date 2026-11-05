@@ -31,6 +31,7 @@ pub mod report;
 mod robustness;
 pub mod services;
 pub mod smbios;
+pub mod startup;
 pub mod units;
 
 pub mod cpu {

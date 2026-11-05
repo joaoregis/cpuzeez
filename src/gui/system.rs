@@ -252,6 +252,7 @@ pub struct State {
     pub sampler: Sampler,
     pub perf: super::system_perf::State,
     pub services: super::system_services::State,
+    pub startup: super::system_startup::State,
     pub mode: ProcMode,
     pub tree: bool,
     pub preset: Preset,
@@ -282,6 +283,7 @@ impl Default for State {
             sampler: Sampler::new(1000),
             perf: Default::default(),
             services: Default::default(),
+            startup: Default::default(),
             mode: ProcMode::Grouped,
             tree: false,
             preset,
@@ -427,14 +429,7 @@ impl State {
                     tr("Per-application resource usage history (S2a-10)."),
                 );
             }
-            SysTab::Startup => {
-                widgets::empty_state(
-                    ui,
-                    icon::ROCKET_LAUNCH,
-                    tr("Startup"),
-                    tr("Startup applications and boot impact (S2a-08)."),
-                );
-            }
+            SysTab::Startup => self.startup.show(ui),
             SysTab::Users => {
                 widgets::empty_state(
                     ui,

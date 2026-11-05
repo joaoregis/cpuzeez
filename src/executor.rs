@@ -70,6 +70,7 @@ fn perform(a: &Action) -> Result<String, String> {
         Action::InstallPawnIo => install_pawnio(),
         Action::Process { target, .. } => perform_process(target),
         Action::Service { target, .. } => cpuzeez_platform::services::apply(target),
+        Action::Startup { target, .. } => cpuzeez_platform::startup::apply(target),
     }
 }
 

@@ -37,6 +37,7 @@ pub mod stress;
 pub mod system;
 pub mod system_perf;
 pub mod system_services;
+pub mod system_startup;
 pub mod table;
 mod tray;
 mod trayicon;
