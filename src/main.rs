@@ -33,6 +33,7 @@ mod network;
 mod npu;
 mod pci;
 mod peripherals;
+mod procs;
 mod sensors;
 mod settings;
 mod smbios;

@@ -66,6 +66,19 @@ pub fn run_task(command: &str, admin: bool) -> Result<(), String> {
     imp::run_task(command.trim(), admin)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NetConn {
+    pub proto: &'static str,
+    pub local: String,
+    pub remote: String,
+    pub state: &'static str,
+}
+
+/// Active TCP/UDP sockets owned by `pid` (S2a-04).
+pub fn connections(pid: u32) -> Vec<NetConn> {
+    imp::connections(pid)
+}
+
 #[cfg(windows)]
 mod imp {
     use super::Priority;
@@ -323,6 +336,78 @@ mod imp {
         assert_eq!(split_command("notepad file.txt"), ("notepad".into(), "file.txt".into()));
         assert_eq!(split_command("calc"), ("calc".into(), String::new()));
     }
+
+    pub fn connections(pid: u32) -> Vec<super::NetConn> {
+        use std::net::Ipv4Addr;
+        use windows_sys::Win32::NetworkManagement::IpHelper::{
+            GetExtendedTcpTable, GetExtendedUdpTable, MIB_TCP_STATE_CLOSE_WAIT, MIB_TCP_STATE_CLOSED,
+            MIB_TCP_STATE_CLOSING, MIB_TCP_STATE_DELETE_TCB, MIB_TCP_STATE_ESTAB, MIB_TCP_STATE_FIN_WAIT1,
+            MIB_TCP_STATE_FIN_WAIT2, MIB_TCP_STATE_LAST_ACK, MIB_TCP_STATE_LISTEN, MIB_TCP_STATE_SYN_RCVD,
+            MIB_TCP_STATE_SYN_SENT, MIB_TCP_STATE_TIME_WAIT, MIB_TCPROW_OWNER_PID, MIB_UDPROW_OWNER_PID,
+            TCP_TABLE_OWNER_PID_ALL, UDP_TABLE_OWNER_PID,
+        };
+        let mut out = Vec::new();
+        let addr = |ip: u32, port: u32| format!("{}:{}", Ipv4Addr::from(ip.to_be()), (port as u16).to_be());
+        // SAFETY: two-call sizing pattern documented for GetExtendedTcpTable / GetExtendedUdpTable.
+        unsafe {
+            let mut size = 0u32;
+            let _ = GetExtendedTcpTable(std::ptr::null_mut(), &mut size, 0, 2, TCP_TABLE_OWNER_PID_ALL, 0);
+            if size >= 4 {
+                let mut buf = vec![0u8; size as usize];
+                if GetExtendedTcpTable(buf.as_mut_ptr().cast(), &mut size, 0, 2, TCP_TABLE_OWNER_PID_ALL, 0) == 0 {
+                    let count = u32::from_ne_bytes(buf[..4].try_into().unwrap_or_default()) as usize;
+                    let rows = std::slice::from_raw_parts(
+                        buf.as_ptr().add(4).cast::<MIB_TCPROW_OWNER_PID>(),
+                        count.min((buf.len() - 4) / size_of::<MIB_TCPROW_OWNER_PID>()),
+                    );
+                    for r in rows.iter().filter(|r| r.dwOwningPid == pid) {
+                        let st = match r.dwState as i32 {
+                            MIB_TCP_STATE_CLOSED => "CLOSED",
+                            MIB_TCP_STATE_LISTEN => "LISTEN",
+                            MIB_TCP_STATE_SYN_SENT => "SYN_SENT",
+                            MIB_TCP_STATE_SYN_RCVD => "SYN_RCVD",
+                            MIB_TCP_STATE_ESTAB => "ESTABLISHED",
+                            MIB_TCP_STATE_FIN_WAIT1 => "FIN_WAIT1",
+                            MIB_TCP_STATE_FIN_WAIT2 => "FIN_WAIT2",
+                            MIB_TCP_STATE_CLOSE_WAIT => "CLOSE_WAIT",
+                            MIB_TCP_STATE_CLOSING => "CLOSING",
+                            MIB_TCP_STATE_LAST_ACK => "LAST_ACK",
+                            MIB_TCP_STATE_TIME_WAIT => "TIME_WAIT",
+                            MIB_TCP_STATE_DELETE_TCB => "DELETE_TCB",
+                            _ => "UNKNOWN",
+                        };
+                        out.push(super::NetConn {
+                            proto: "TCP",
+                            local: addr(r.dwLocalAddr, r.dwLocalPort),
+                            remote: addr(r.dwRemoteAddr, r.dwRemotePort),
+                            state: st,
+                        });
+                    }
+                }
+            }
+            let mut size = 0u32;
+            let _ = GetExtendedUdpTable(std::ptr::null_mut(), &mut size, 0, 2, UDP_TABLE_OWNER_PID, 0);
+            if size >= 4 {
+                let mut buf = vec![0u8; size as usize];
+                if GetExtendedUdpTable(buf.as_mut_ptr().cast(), &mut size, 0, 2, UDP_TABLE_OWNER_PID, 0) == 0 {
+                    let count = u32::from_ne_bytes(buf[..4].try_into().unwrap_or_default()) as usize;
+                    let rows = std::slice::from_raw_parts(
+                        buf.as_ptr().add(4).cast::<MIB_UDPROW_OWNER_PID>(),
+                        count.min((buf.len() - 4) / size_of::<MIB_UDPROW_OWNER_PID>()),
+                    );
+                    for r in rows.iter().filter(|r| r.dwOwningPid == pid) {
+                        out.push(super::NetConn {
+                            proto: "UDP",
+                            local: addr(r.dwLocalAddr, r.dwLocalPort),
+                            remote: "*:*".into(),
+                            state: "OPEN",
+                        });
+                    }
+                }
+            }
+        }
+        out
+    }
 }
 
 #[cfg(unix)]
@@ -456,6 +541,57 @@ mod imp {
             c
         };
         c.spawn().map(|_| ()).map_err(|e| e.to_string())
+    }
+
+    pub fn connections(pid: u32) -> Vec<super::NetConn> {
+        use std::collections::BTreeSet;
+        use std::net::Ipv4Addr;
+        let Ok(fds) = std::fs::read_dir(format!("/proc/{pid}/fd")) else {
+            return Vec::new();
+        };
+        let inodes: BTreeSet<u64> = fds
+            .flatten()
+            .filter_map(|e| std::fs::read_link(e.path()).ok())
+            .filter_map(|p| p.to_str()?.strip_prefix("socket:[")?.strip_suffix(']')?.parse().ok())
+            .collect();
+        if inodes.is_empty() {
+            return Vec::new();
+        }
+        let parse_addr = |s: &str| -> String {
+            let Some((h, p)) = s.split_once(':') else { return s.into() };
+            let ip = u32::from_str_radix(h, 16).unwrap_or(0).swap_bytes();
+            let port = u16::from_str_radix(p, 16).unwrap_or(0);
+            format!("{}:{port}", Ipv4Addr::from(ip))
+        };
+        let mut out = Vec::new();
+        for (proto, file) in [("TCP", "/proc/net/tcp"), ("UDP", "/proc/net/udp")] {
+            let Ok(text) = std::fs::read_to_string(file) else { continue };
+            for line in text.lines().skip(1) {
+                let cols: Vec<&str> = line.split_whitespace().collect();
+                if cols.len() < 10 {
+                    continue;
+                }
+                let Ok(ino) = cols[9].parse::<u64>() else { continue };
+                if !inodes.contains(&ino) {
+                    continue;
+                }
+                let state = match cols[3] {
+                    "01" => "ESTABLISHED",
+                    "02" => "SYN_SENT",
+                    "03" => "SYN_RCVD",
+                    "04" => "FIN_WAIT1",
+                    "05" => "FIN_WAIT2",
+                    "06" => "TIME_WAIT",
+                    "07" => "CLOSED",
+                    "08" => "CLOSE_WAIT",
+                    "09" => "LAST_ACK",
+                    "0A" => "LISTEN",
+                    _ => "OPEN",
+                };
+                out.push(super::NetConn { proto, local: parse_addr(cols[1]), remote: parse_addr(cols[2]), state });
+            }
+        }
+        out
     }
 }
 

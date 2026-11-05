@@ -34,6 +34,7 @@ mod mini;
 mod plot;
 pub mod sensors;
 pub mod stress;
+pub mod system;
 pub mod table;
 mod tray;
 mod trayicon;
@@ -57,6 +58,7 @@ use theme::icon;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Page {
     Overview,
+    System,
     Processor,
     Mainboard,
     Memory,
@@ -70,8 +72,9 @@ enum Page {
 }
 
 /// (page, icon, English name: translated when shown, used as-is for file names).
-const NAV: [(Page, &str, &str); 9] = [
+const NAV: [(Page, &str, &str); 10] = [
     (Page::Overview, icon::SQUARES_FOUR, "Overview"),
+    (Page::System, icon::LIST_BULLETS, "System"),
     (Page::Processor, icon::CPU, "Processor"),
     (Page::Mainboard, icon::CIRCUITRY, "Mainboard"),
     (Page::Memory, icon::MEMORY, "Memory"),
@@ -205,6 +208,7 @@ struct App {
     drivehealth: drivehealth_view::State,
     gpubench: gpubench_view::State,
     diskbench: diskbench_view::State,
+    system: system::State,
 }
 
 pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
@@ -279,6 +283,7 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         drivehealth: Default::default(),
         gpubench: Default::default(),
         diskbench: Default::default(),
+        system: Default::default(),
     };
     if app.auto.is_none() {
         crate::data::expire_logs(app.mon.settings.log_retention_days);
@@ -401,7 +406,7 @@ impl eframe::App for App {
                 // The capability banner reflects this machine; CI screenshots would show the runner's.
                 let caps = if self.auto.is_some() { &[][..] } else { access_ui::page_caps(page_name(self.page)) };
                 let t0 = std::time::Instant::now();
-                if self.page == Page::Sensors {
+                if matches!(self.page, Page::Sensors | Page::System) {
                     // Full-height dashboard with its own scrolling table and charts.
                     self.access.banner(ui, &self.ctx, page_name(self.page), caps);
                     self.page_body(ui, r);
@@ -603,6 +608,7 @@ impl App {
                     }
                 }
             }
+            Page::System => self.system.page(ui),
             Page::Processor => {
                 let sub = [c.info.codename.clone(), c.info.package.clone(), c.info.technology.clone()]
                     .into_iter()

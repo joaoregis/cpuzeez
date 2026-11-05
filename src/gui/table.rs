@@ -75,11 +75,15 @@ pub struct Column<'a, R> {
     pub cell: Box<dyn Fn(&R) -> Cell + 'a>,
     /// Text color per row (None: the default); e.g. a hot temperature.
     pub color: Option<Box<dyn Fn(&R) -> Option<egui::Color32> + 'a>>,
+    /// Cell background fill per row (None: transparent); e.g. a Task Manager heat-map cell.
+    pub bg: Option<Box<dyn Fn(&R) -> Option<egui::Color32> + 'a>>,
+    /// Custom cell drawing (e.g. a sparkline) instead of painting the cell text.
+    pub draw: Option<Box<dyn Fn(&egui::Painter, Rect, &R) + 'a>>,
 }
 
 impl<'a, R> Column<'a, R> {
     pub fn new(id: &'static str, title: impl Into<String>, width: f32, cell: impl Fn(&R) -> Cell + 'a) -> Self {
-        Column { id, title: title.into(), width, right: false, cell: Box::new(cell), color: None }
+        Column { id, title: title.into(), width, right: false, cell: Box::new(cell), color: None, bg: None, draw: None }
     }
 
     pub fn right(mut self) -> Self {
@@ -89,6 +93,16 @@ impl<'a, R> Column<'a, R> {
 
     pub fn colored(mut self, f: impl Fn(&R) -> Option<egui::Color32> + 'a) -> Self {
         self.color = Some(Box::new(f));
+        self
+    }
+
+    pub fn tinted(mut self, f: impl Fn(&R) -> Option<egui::Color32> + 'a) -> Self {
+        self.bg = Some(Box::new(f));
+        self
+    }
+
+    pub fn drawn(mut self, f: impl Fn(&egui::Painter, Rect, &R) + 'a) -> Self {
+        self.draw = Some(Box::new(f));
         self
     }
 }
@@ -311,20 +325,29 @@ impl<'a, R> Table<'a, R> {
                             });
                             let mut x = r.left() + 8.0;
                             for c in &shown {
+                                let cell_bg_rect =
+                                    Rect::from_min_size(egui::pos2(x - 3.0, r.top() + 1.0), vec2(c.width, row_h - 2.0));
+                                if !selected && let Some(fill) = c.bg.as_ref().and_then(|f| f(row)) {
+                                    ui.painter().rect_filled(cell_bg_rect, egui::CornerRadius::same(3), fill);
+                                }
                                 let cr = Rect::from_min_size(egui::pos2(x, r.top()), vec2(c.width - 6.0, row_h));
-                                let (anchor, tx) = if c.right {
-                                    (Align2::RIGHT_CENTER, cr.right())
+                                if let Some(draw) = &c.draw {
+                                    draw(&ui.painter().with_clip_rect(cr), cr.shrink2(vec2(2.0, 4.0)), row);
                                 } else {
-                                    (Align2::LEFT_CENTER, cr.left())
-                                };
-                                let color = c.color.as_ref().and_then(|f| f(row)).unwrap_or(p.text);
-                                ui.painter().with_clip_rect(cr).text(
-                                    egui::pos2(tx, cr.center().y),
-                                    anchor,
-                                    (c.cell)(row).shown(),
-                                    font.clone(),
-                                    color,
-                                );
+                                    let (anchor, tx) = if c.right {
+                                        (Align2::RIGHT_CENTER, cr.right())
+                                    } else {
+                                        (Align2::LEFT_CENTER, cr.left())
+                                    };
+                                    let color = c.color.as_ref().and_then(|f| f(row)).unwrap_or(p.text);
+                                    ui.painter().with_clip_rect(cr).text(
+                                        egui::pos2(tx, cr.center().y),
+                                        anchor,
+                                        (c.cell)(row).shown(),
+                                        font.clone(),
+                                        color,
+                                    );
+                                }
                                 x += c.width;
                             }
                             if resp.clicked() {
