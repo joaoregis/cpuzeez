@@ -37,10 +37,6 @@ pub fn wstr(b: &[u16]) -> String {
     String::from_utf16_lossy(&b[..b.iter().position(|&c| c == 0).unwrap_or(b.len())]).trim().to_string()
 }
 
-fn w(s: &str) -> Vec<u16> {
-    s.encode_utf16().chain(Some(0)).collect()
-}
-
 // ---- SetupAPI / cfgmgr32 ----
 
 #[repr(C)]
@@ -121,10 +117,6 @@ fn dev_prop(h: isize, d: &DevInfo, p: u32) -> Option<Vec<u8>> {
 
 fn u16s(b: &[u8]) -> Vec<u16> {
     b.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes([c[0], c[1]])).collect()
-}
-
-fn le32(b: &[u8]) -> Option<u32> {
-    Some(u32::from_le_bytes(b.get(..4)?.try_into().ok()?))
 }
 
 fn cm_u32(dn: u32, p: u32) -> Option<u32> {

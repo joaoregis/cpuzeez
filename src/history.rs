@@ -54,10 +54,6 @@ pub fn remove(index: usize) {
     })
 }
 
-pub fn clear() {
-    update(Vec::clear)
-}
-
 fn update(f: impl FnOnce(&mut Vec<Entry>)) {
     match path() {
         Some(p) => {

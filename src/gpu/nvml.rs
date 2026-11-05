@@ -49,6 +49,8 @@ pub struct Nvml {
     /// nvmlClocksEventReason* / nvmlClocksThrottleReason* bit mask.
     reasons: Option<unsafe extern "C" fn(Dev, *mut u64) -> R>,
     fan_rpm: Option<unsafe extern "C" fn(Dev, *mut FanRpm) -> R>,
+    /// Shown on Linux (Windows reads the driver version from the registry).
+    #[cfg_attr(windows, allow(dead_code))]
     pub driver: Option<String>,
 }
 

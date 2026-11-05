@@ -203,11 +203,6 @@ pub fn adapters(ctx: &Ctx) -> &'static [Adapter] {
     &probe(ctx).adapters
 }
 
-/// Every attached monitor with a readable EDID.
-pub fn monitors(ctx: &Ctx) -> &'static [Monitor] {
-    &probe(ctx).monitors
-}
-
 /// Live clocks / temperatures / fan / power / load / throttling per adapter
 /// (Tools > Clocks, telemetry). At most one entry per adapter.
 pub fn live(ctx: &Ctx) -> Vec<Live> {

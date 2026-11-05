@@ -26,6 +26,7 @@ pub const ES: &[(&str, &str)] = &[
 
 /// Aliases a layout may use instead of exact ids, resolved to the best sensor
 /// on this machine. (alias, what it means), for the layout editor.
+#[allow(dead_code)] // read by the layout editor (S1-M02); the resolver below matches on the same names
 pub const ALIASES: &[(&str, &str)] = &[
     ("@cpu_temp", "CPU temperature (package, Tctl/Tdie)"),
     ("@cpu_clock", "CPU clock (average of the cores)"),

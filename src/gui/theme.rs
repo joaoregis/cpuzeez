@@ -21,7 +21,6 @@ pub struct Palette {
     pub text_secondary: Color32,
     pub text_muted: Color32,
     pub accent: Color32,
-    pub accent_hover: Color32,
     pub accent_soft: Color32,
     pub on_accent: Color32,
     pub success: Color32,
@@ -48,7 +47,6 @@ pub const LIGHT: Palette = Palette {
     text_secondary: rgb(0x5F5C72),
     text_muted: rgb(0x8E8BA3),
     accent: rgb(0x7C3AED),
-    accent_hover: rgb(0x6D28D9),
     accent_soft: rgb(0xEDE9FE),
     on_accent: rgb(0xFFFFFF),
     success: rgb(0x15803D),
@@ -70,7 +68,6 @@ pub const DARK: Palette = Palette {
     text_secondary: rgb(0xA6A3BA),
     text_muted: rgb(0x75728A),
     accent: rgb(0xA78BFA),
-    accent_hover: rgb(0xC4B5FD),
     accent_soft: rgb(0x2E2650),
     on_accent: rgb(0x14121C),
     success: rgb(0x4ADE80),
@@ -84,10 +81,6 @@ pub const DARK: Palette = Palette {
 
 pub fn palette(ui: &egui::Ui) -> &'static Palette {
     if ui.visuals().dark_mode { &DARK } else { &LIGHT }
-}
-
-pub fn palette_ctx(ctx: &egui::Context) -> &'static Palette {
-    if ctx.theme() == Theme::Dark { &DARK } else { &LIGHT }
 }
 
 // ---- spacing / radii (logical px) ----

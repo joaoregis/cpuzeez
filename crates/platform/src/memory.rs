@@ -8,6 +8,7 @@ pub fn composition() -> Composition {
     imp::composition()
 }
 
+#[cfg(any(windows, target_os = "macos"))]
 const MB: f64 = 1024.0 * 1024.0;
 
 #[cfg(target_os = "linux")]
