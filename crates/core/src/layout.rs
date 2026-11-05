@@ -397,45 +397,6 @@ pub mod mini {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn overview_presets_have_four_tiles_each() {
-        for name in presets::OVERVIEW {
-            let tiles = presets::overview(name, 95.0);
-            assert_eq!(tiles.len(), 4, "{name}");
-            assert!(tiles.iter().all(|w| w.metric.as_deref().is_some_and(|m| m.starts_with('@'))), "{name}");
-        }
-        assert_eq!(presets::overview("nope", 95.0), presets::overview("Default", 95.0));
-    }
-
-    #[test]
-    fn thresholds_and_bars() {
-        let w =
-            Widget::metric(Kind::Bar, "@cpu_temp", "CPU").with_thresholds(&temp_thresholds(95.0)).range(20.0, 100.0);
-        assert_eq!(w.tone(60.0), Tone::Normal);
-        assert_eq!(w.tone(85.0), Tone::Warning);
-        assert_eq!(w.tone(96.0), Tone::Danger, "the highest matching threshold wins");
-        assert_eq!(w.fill(60.0), 0.5);
-        assert_eq!((w.fill(0.0), w.fill(200.0)), (0.0, 1.0));
-    }
-
-    #[test]
-    fn json_round_trip_and_versions() {
-        for l in presets::all(95.0) {
-            assert_eq!(Layout::from_json(&l.to_json()), Ok(l.clone()), "{}", l.name);
-            assert!(!l.metrics().is_empty());
-        }
-        // Missing keys take defaults; an unversioned file is version 1.
-        let l = Layout::from_json(r#"{"name":"x","widgets":[{"kind":"value","metric":"cpu/temp/package"}]}"#).unwrap();
-        assert_eq!((l.version, l.widgets[0].max, l.style.scale), (VERSION, 100.0, 1.0));
-        assert!(Layout::from_json(r#"{"version":99}"#).is_err(), "a newer layout is refused, not half-read");
-        assert!(Layout::from_json("not json").is_err());
-    }
-}
-
 /// Tray icons (S1-M01): each one is a Widget Engine widget (metric,
 /// thresholds, range) drawn in one of four styles.
 pub mod tray {
@@ -500,5 +461,44 @@ pub mod tray {
         let m = Mini::default();
         let back: Mini = serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
         assert_eq!(back, m);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn overview_presets_have_four_tiles_each() {
+        for name in presets::OVERVIEW {
+            let tiles = presets::overview(name, 95.0);
+            assert_eq!(tiles.len(), 4, "{name}");
+            assert!(tiles.iter().all(|w| w.metric.as_deref().is_some_and(|m| m.starts_with('@'))), "{name}");
+        }
+        assert_eq!(presets::overview("nope", 95.0), presets::overview("Default", 95.0));
+    }
+
+    #[test]
+    fn thresholds_and_bars() {
+        let w =
+            Widget::metric(Kind::Bar, "@cpu_temp", "CPU").with_thresholds(&temp_thresholds(95.0)).range(20.0, 100.0);
+        assert_eq!(w.tone(60.0), Tone::Normal);
+        assert_eq!(w.tone(85.0), Tone::Warning);
+        assert_eq!(w.tone(96.0), Tone::Danger, "the highest matching threshold wins");
+        assert_eq!(w.fill(60.0), 0.5);
+        assert_eq!((w.fill(0.0), w.fill(200.0)), (0.0, 1.0));
+    }
+
+    #[test]
+    fn json_round_trip_and_versions() {
+        for l in presets::all(95.0) {
+            assert_eq!(Layout::from_json(&l.to_json()), Ok(l.clone()), "{}", l.name);
+            assert!(!l.metrics().is_empty());
+        }
+        // Missing keys take defaults; an unversioned file is version 1.
+        let l = Layout::from_json(r#"{"name":"x","widgets":[{"kind":"value","metric":"cpu/temp/package"}]}"#).unwrap();
+        assert_eq!((l.version, l.widgets[0].max, l.style.scale), (VERSION, 100.0, 1.0));
+        assert!(Layout::from_json(r#"{"version":99}"#).is_err(), "a newer layout is refused, not half-read");
+        assert!(Layout::from_json("not json").is_err());
     }
 }

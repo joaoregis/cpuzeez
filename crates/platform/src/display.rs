@@ -140,17 +140,6 @@ mod imp {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn modes_are_sane() {
-        for m in super::modes() {
-            assert!(m.max_hz >= m.hz, "{m:?}");
-        }
-        let _ = super::power_saver();
-    }
-}
-
 /// The shell's small-icon size in pixels (the tray's), DPI-aware on Windows:
 /// 16 at 100 %, 20 at 125 %, 24 at 150 %, 32 at 200 %.
 pub fn small_icon_px() -> Option<usize> {
@@ -178,4 +167,15 @@ pub fn fullscreen_app() -> bool {
     }
     #[cfg(not(windows))]
     false
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn modes_are_sane() {
+        for m in super::modes() {
+            assert!(m.max_hz >= m.hz, "{m:?}");
+        }
+        let _ = super::power_saver();
+    }
 }
