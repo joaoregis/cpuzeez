@@ -178,7 +178,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 | S1-G05 | **Memory**: full timings (primary/secondary/tertiary), topology, active profile vs JEDEC/XMP/EXPO, ECC + EDAC, DIMM temp/PMIC, OS composition, theoretical vs measured bandwidth | ✨ | core-pages §5 | Same |
 | S1-G06 | **Storage**: complete NVMe Identify / ATA IDENTIFY, full SMART with thresholds and throttle counts, link current/max, partitions/volumes with alignment and encryption, OS TRIM status, live I/O | ✨ | core-pages §6.1 | Same |
 | S1-G07 | **Devices**: USB tree with negotiated vs supported speed, Thunderbolt/USB4, Bluetooth peripheral battery, monitor current mode/HDR/VRR, audio formats, live network | ✨ | core-pages §6.2 | Same |
-| S1-G08 | **Sensors** on the virtualized table (search syntax, presets, export) | ✨ | engineering §4.3 | Same features as today, plus table features |
+| S1-G08 | **Sensors** on the virtualized table (search syntax, presets, export) | ✨ | engineering §4.3 | Same features as today, plus table features. ✅ Grouped table (sort, filter syntax incl. `cur>80`/`unit:°`/`id:disk`, multi-select, Ctrl+C), hot values tinted, presets, *Export view* (CSV of the filtered rows), plot/pin from the selection. The release build has 0 warnings again |
 
 ### S1.4 Benchmarks and tools
 

@@ -4,13 +4,15 @@
 //! telemetry sampler: the stress monitor, the tray icon and the mini monitor.
 
 use super::i18n::tr;
+use super::table::{Cell, Column, Table};
 use super::theme::{self, icon};
+use super::units;
 use super::widgets::{self, Tone};
 use super::{plot, stress, tray};
 use crate::Ctx;
 use crate::settings::Settings;
 use crate::telemetry::{Series, Telemetry, Unit};
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -29,6 +31,20 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Max", "Máx."),
     ("Avg", "Méd."),
     ("Search…", "Pesquisar…"),
+    ("Plot", "Plotar"),
+    ("Stop plotting", "Parar de plotar"),
+    ("Unit", "Unidade"),
+    ("All", "Todos"),
+    ("Temperatures", "Temperaturas"),
+    ("Clocks", "Clocks"),
+    ("Power", "Potência"),
+    ("Voltages", "Tensões"),
+    ("Fans", "Ventoinhas"),
+    ("Loads", "Cargas"),
+    ("Disks", "Discos"),
+    ("Network", "Rede"),
+    ("Export view", "Exportar visão"),
+    ("Saved {}", "Salvo {}"),
     ("Reset min/max", "Zerar mín./máx."),
     ("Start CSV log", "Iniciar log CSV"),
     ("Stop CSV log", "Parar log CSV"),
@@ -56,6 +72,20 @@ pub const ES: &[(&str, &str)] = &[
     ("Max", "Máx."),
     ("Avg", "Prom."),
     ("Search…", "Buscar…"),
+    ("Plot", "Graficar"),
+    ("Stop plotting", "Dejar de graficar"),
+    ("Unit", "Unidad"),
+    ("All", "Todos"),
+    ("Temperatures", "Temperaturas"),
+    ("Clocks", "Relojes"),
+    ("Power", "Potencia"),
+    ("Voltages", "Voltajes"),
+    ("Fans", "Ventiladores"),
+    ("Loads", "Cargas"),
+    ("Disks", "Discos"),
+    ("Network", "Red"),
+    ("Export view", "Exportar vista"),
+    ("Saved {}", "Guardado {}"),
     ("Reset min/max", "Reiniciar mín./máx."),
     ("Start CSV log", "Iniciar registro CSV"),
     ("Stop CSV log", "Detener registro CSV"),
@@ -78,7 +108,6 @@ const WARN_BAND: f64 = 10.0;
 pub const GPU_LIMIT: f64 = 90.0;
 const STORAGE_LIMIT: f64 = 70.0;
 const PERIODS_MS: [u64; 4] = [500, 1000, 2000, 5000];
-const COL_W: f32 = 72.0;
 const CHART_MIN_H: f32 = 120.0;
 const MIN_SPAN: f64 = 60.0;
 const CHART_MAX_H: f32 = 220.0;
@@ -87,10 +116,13 @@ const MINI_SIZE: [f32; 2] = [230.0, 96.0];
 
 #[derive(Default)]
 struct View {
-    filter: String,
+    /// Filter, sort, hidden columns and collapsed groups of the table.
+    table: super::table::State,
     plotted: BTreeSet<String>,
     /// The summary temperatures are plotted once data first arrives.
     defaulted: bool,
+    /// Unit and Id start hidden (they're there for filters like `unit:°C`).
+    defaulted_cols: bool,
     status: String,
 }
 
@@ -416,18 +448,6 @@ pub fn temp_tone(v: f64, limit: f64) -> Tone {
     }
 }
 
-/// Text color for a tone (None = default text color).
-pub fn tone_color(ui: &egui::Ui, t: Tone) -> Option<Color32> {
-    let p = theme::palette(ui);
-    match t {
-        Tone::Danger => Some(p.danger),
-        Tone::Warning => Some(p.warning),
-        Tone::Success => Some(p.success),
-        Tone::Accent => Some(p.accent),
-        Tone::Neutral => None,
-    }
-}
-
 /// "CPU 71 °C · GPU 58 °C · Chipset 46 °C" as pills (only the ones present).
 pub fn summary_row(ui: &mut egui::Ui, series: &[Series], tjmax: f64) {
     let limits = [tjmax, GPU_LIMIT, f64::MAX];
@@ -490,103 +510,166 @@ pub fn page(ui: &mut egui::Ui, mon: &mut Monitor) {
         v.plotted.extend(first.iter().flatten().map(|s| s.id.clone()));
     }
 
-    let needle = v.filter.to_lowercase();
-    let mut groups: Vec<&str> = Vec::new();
-    for s in &series {
-        if !groups.contains(&s.group.as_str()) {
-            groups.push(&s.group);
+    presets(ui, &mut v.table);
+    let table_h = if v.plotted.is_empty() { ui.available_height() } else { ui.available_height() * 0.5 };
+    let p = theme::palette(ui);
+    let hot = move |s: &Series, x: f64| {
+        let lim = (s.unit == Unit::Celsius).then(|| limit_for(&s.group, tjmax)).flatten()?;
+        match temp_tone(x, lim) {
+            Tone::Danger => Some(p.danger),
+            Tone::Warning => Some(p.warning),
+            _ => None,
+        }
+    };
+    let plotted = v.plotted.clone();
+    let num = |f: fn(&Series) -> f64| move |s: &Series| Cell::num(f(s), fmt(f(s), s.unit));
+    let table = Table::new("sensors", |s: &Series| hash(&s.id))
+        .col(Column::new("plot", "●", 26.0, move |s: &Series| {
+            Cell::Text(if plotted.contains(&s.id) { "●" } else { "" }.into())
+        }))
+        .col(Column::new("sensor", tr("Sensor"), 260.0, |s: &Series| Cell::Text(s.label.clone())))
+        .col(Column::new("cur", tr("Current"), 110.0, num(|s| s.current)).right().colored(move |s| hot(s, s.current)))
+        .col(Column::new("min", tr("Min"), 110.0, num(|s| s.min)).right())
+        .col(Column::new("max", tr("Max"), 110.0, num(|s| s.max)).right().colored(move |s| hot(s, s.max)))
+        .col(Column::new("avg", tr("Avg"), 110.0, num(|s| s.avg)).right())
+        .col(Column::new("unit", tr("Unit"), 60.0, |s: &Series| Cell::Text(units::get().suffix(s.unit).into())))
+        .col(Column::new("id", "Id", 220.0, |s: &Series| Cell::Text(s.id.clone())))
+        .grouped(|s: &Series| format!("{}  {}", group_icon(&s.group), s.group));
+    for hidden in ["unit", "id"] {
+        if !v.defaulted_cols {
+            v.table.hidden.insert(hidden.into());
         }
     }
-    let table_h = if v.plotted.is_empty() { ui.available_height() } else { ui.available_height() * 0.5 };
-    let secondary = theme::palette(ui).text_secondary;
+    v.defaulted_cols = true;
+    let mut plot: Option<(Vec<String>, bool)> = None;
+    let mut pin: Vec<crate::settings::Pin> = Vec::new();
     widgets::card(ui, "", "", |ui| {
-        egui::ScrollArea::vertical().id_salt("sensor-table").max_height(table_h).auto_shrink([false, true]).show(
-            ui,
-            |ui| {
-                for g in groups {
-                    let rows: Vec<&Series> = series
+        ui.allocate_ui(egui::vec2(ui.available_width(), table_h), |ui| {
+            table.show(ui, &series, &mut v.table, |ui, sel| {
+                let ids: Vec<String> = sel.iter().map(|s| s.id.clone()).collect();
+                if ui.button(format!("{}  {}", icon::CHART_LINE, tr("Plot"))).clicked() {
+                    plot = Some((ids.clone(), true));
+                    ui.close();
+                }
+                if ui.button(tr("Stop plotting")).clicked() {
+                    plot = Some((ids, false));
+                    ui.close();
+                }
+                if ui.button(tr("Pin to Overview")).clicked() {
+                    pin = sel
                         .iter()
-                        .filter(|s| s.group == g)
-                        .filter(|s| {
-                            needle.is_empty()
-                                || s.label.to_lowercase().contains(&needle)
-                                || g.to_lowercase().contains(&needle)
+                        .map(|s| crate::settings::Pin {
+                            card: s.group.clone(),
+                            label: s.label.clone(),
+                            value: fmt(s.current, s.unit),
+                            metric: Some(s.id.clone()),
                         })
                         .collect();
-                    if rows.is_empty() {
-                        continue;
-                    }
-                    let head = RichText::new(format!("{}  {g}", group_icon(g))).strong();
-                    egui::CollapsingHeader::new(head).id_salt(g).default_open(true).show(ui, |ui| {
-                        egui::Grid::new(("sensor-grid", g)).num_columns(5).striped(true).min_col_width(COL_W).show(
-                            ui,
-                            |ui| {
-                                for h in [tr("Sensor"), tr("Current"), tr("Min"), tr("Max"), tr("Avg")] {
-                                    ui.label(RichText::new(h).small().color(secondary));
-                                }
-                                ui.end_row();
-                                for s in rows {
-                                    sensor_row(ui, s, &mut v.plotted, tjmax);
-                                }
-                            },
-                        );
-                    });
+                    ui.close();
                 }
-            },
-        );
+                if let [s] = sel
+                    && ui.button(tr("Copy value")).clicked()
+                {
+                    ui.ctx().copy_text(fmt(s.current, s.unit));
+                    ui.close();
+                }
+            });
+        });
     });
+    if let Some((ids, on)) = plot {
+        for id in ids {
+            if on {
+                v.plotted.insert(id);
+            } else {
+                v.plotted.remove(&id);
+            }
+        }
+    }
+    for p in pin {
+        super::pins::request(ui.ctx(), p);
+    }
     ui.add_space(theme::GAP);
     widgets::card(ui, icon::CHART_LINE, tr("History"), |ui| {
         charts(ui, &series, &v.plotted, mon.settings.graph_seconds as f64);
     });
 }
 
-fn sensor_row(ui: &mut egui::Ui, s: &Series, plotted: &mut BTreeSet<String>, tjmax: f64) {
-    let mut on = plotted.contains(&s.id);
-    ui.horizontal(|ui| {
-        ui.checkbox(&mut on, "");
-        let r = ui.selectable_label(on, &s.label);
-        if r.clicked() {
-            on = !on;
+/// One-click filters over the table's own syntax (S1-G08); the filter box
+/// shows what each one typed, so it doubles as an example.
+fn presets(ui: &mut egui::Ui, st: &mut super::table::State) {
+    ui.horizontal_wrapped(|ui| {
+        for (label, q) in [
+            ("All", ""),
+            ("Temperatures", "unit:°"),
+            ("Clocks", "unit:mhz"),
+            ("Power", "unit:w"),
+            ("Voltages", "unit:v"),
+            ("Fans", "unit:rpm"),
+            ("Loads", "unit:%"),
+            ("Disks", "id:disk"),
+            ("Network", "id:net"),
+        ] {
+            if ui.selectable_label(st.filter == q, tr(label)).clicked() {
+                st.filter = q.to_string();
+            }
         }
-        // Pinned as a metric, so the Overview shows it live (S1-U03).
-        r.context_menu(|ui| {
-            if ui.button(tr("Copy value")).clicked() {
-                ui.ctx().copy_text(fmt(s.current, s.unit));
-                ui.close();
-            }
-            if ui.button(tr("Pin to Overview")).clicked() {
-                super::pins::request(
-                    ui.ctx(),
-                    crate::settings::Pin {
-                        card: s.group.clone(),
-                        label: s.label.clone(),
-                        value: fmt(s.current, s.unit),
-                        metric: Some(s.id.clone()),
-                    },
-                );
-                ui.close();
-            }
-        });
     });
-    if on {
-        plotted.insert(s.id.clone());
-    } else {
-        plotted.remove(&s.id);
-    }
-    let lim = (s.unit == Unit::Celsius).then(|| limit_for(&s.group, tjmax)).flatten();
-    for x in [s.current, s.min, s.max, s.avg] {
-        let mut t = RichText::new(fmt(x, s.unit)).monospace();
-        if let Some(c) = lim.and_then(|l| tone_color(ui, temp_tone(x, l))) {
-            t = t.color(c);
+    ui.add_space(4.0);
+}
+
+fn hash(s: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    s.hash(&mut h);
+    h.finish()
+}
+
+/// The rows the table shows right now (filter applied) as CSV, base units.
+fn export_view(mon: &Monitor, tel: &Telemetry) -> Result<PathBuf, String> {
+    let series = tel.series_with(|_| false);
+    let cols: Vec<Column<Series>> = vec![
+        Column::new("sensor", "", 0.0, |s: &Series| Cell::Text(s.label.clone())),
+        Column::new("unit", "", 0.0, |s: &Series| Cell::Text(units::get().suffix(s.unit).into())),
+        Column::new("id", "", 0.0, |s: &Series| Cell::Text(s.id.clone())),
+    ];
+    let shown = super::table::view(&series, &cols, &mon.view.table, None);
+    let q =
+        |s: &str| if s.contains([',', '"', '\n']) { format!("\"{}\"", s.replace('"', "\"\"")) } else { s.to_string() };
+    let mut out = String::from("group,sensor,id,unit,current,min,max,avg\n");
+    for it in shown {
+        if let super::table::Item::Row(i) = it {
+            let s = &series[i];
+            out += &format!(
+                "{},{},{},{},{},{},{},{}\n",
+                q(&s.group),
+                q(&s.label),
+                q(&s.id),
+                s.unit.suffix(),
+                s.current,
+                s.min,
+                s.max,
+                s.avg
+            );
         }
-        ui.label(t);
     }
-    ui.end_row();
+    let dir = log_path()
+        .and_then(|p| p.parent().map(Path::to_path_buf))
+        .ok_or_else(|| tr("No settings folder").to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let stamp = cpuzeez_core::metrics::iso8601(std::time::SystemTime::now()).replace([':', '.'], "-");
+    let path = dir.join(format!("sensors-view-{stamp}.csv"));
+    std::fs::write(&path, out).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(path)
 }
 
 /// Header actions (right-aligned, so added right to left).
 fn toolbar_actions(ui: &mut egui::Ui, mon: &mut Monitor, tel: &Telemetry) {
+    if ui.button(format!("{}  {}", icon::EXPORT, tr("Export view"))).clicked() {
+        mon.view.status = match export_view(mon, tel) {
+            Ok(p) => super::i18n::trf("Saved {}", &[&p.display()]),
+            Err(e) => e,
+        };
+    }
     if tel.csv_path().is_some() {
         if ui.button(format!("{}  {}", icon::STOP, tr("Stop CSV log"))).clicked() {
             tel.stop_csv();
@@ -607,11 +690,6 @@ fn toolbar_actions(ui: &mut egui::Ui, mon: &mut Monitor, tel: &Telemetry) {
 
 fn toolbar(ui: &mut egui::Ui, mon: &mut Monitor, tel: &Telemetry) {
     ui.horizontal_wrapped(|ui| {
-        ui.add(
-            egui::TextEdit::singleline(&mut mon.view.filter)
-                .hint_text(format!("{}  {}", icon::MAGNIFYING_GLASS, tr("Search…")))
-                .desired_width(180.0),
-        );
         ui.label(tr("Sampling"));
         let cur = mon.settings.sample_ms;
         egui::ComboBox::from_id_salt("sample-period").selected_text(format!("{} s", cur as f64 / 1000.0)).show_ui(

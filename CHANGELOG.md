@@ -27,6 +27,7 @@ generated from its section below.
 - **Per-disk activity** in the Sensors list and CSV logs: read/write speed, IOPS, latency, active time and queue for every physical disk, on Windows, Linux and macOS, without administrator rights.
 - **Per-adapter network traffic** the same way: download/upload in Mbps, packets per second, errors and drops.
 - **GPU engine load**: 3D, copy, video encode and decode, compute and the rest per GPU on Windows (as the Task Manager counts them); the busy figure on Linux (AMD) and Device/Renderer/Tiler on macOS.
+- **Sensors page on a real table**: sort any column, filter with the search syntax (`cur>80`, `unit:°`, `id:disk`), one-click presets (temperatures, clocks, power…), select several rows to plot, pin or copy them, and *Export view* to CSV.
 - **Command palette** (`Ctrl+K`): search any value CpuZeeZ reads ("tRFC", "PCIe", "BIOS"), any page or an action such as saving the report, then press Enter to go there.
 - **Copy and pin**: right-click any row to copy its value, the row or the whole card as text, or pin it to the Overview. Sensors pinned there stay live.
 - **Detail levels** on the Processor, Mainboard, Memory and Graphics pages: *Basic* (the essentials), *Advanced* (everything, as before) and *Expert* (plus raw CPUID leaves and MSRs). Each page remembers its choice.

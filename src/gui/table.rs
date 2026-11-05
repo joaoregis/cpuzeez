@@ -73,15 +73,22 @@ pub struct Column<'a, R> {
     /// Right-aligned (numbers).
     pub right: bool,
     pub cell: Box<dyn Fn(&R) -> Cell + 'a>,
+    /// Text color per row (None: the default); e.g. a hot temperature.
+    pub color: Option<Box<dyn Fn(&R) -> Option<egui::Color32> + 'a>>,
 }
 
 impl<'a, R> Column<'a, R> {
     pub fn new(id: &'static str, title: impl Into<String>, width: f32, cell: impl Fn(&R) -> Cell + 'a) -> Self {
-        Column { id, title: title.into(), width, right: false, cell: Box::new(cell) }
+        Column { id, title: title.into(), width, right: false, cell: Box::new(cell), color: None }
     }
 
     pub fn right(mut self) -> Self {
         self.right = true;
+        self
+    }
+
+    pub fn colored(mut self, f: impl Fn(&R) -> Option<egui::Color32> + 'a) -> Self {
+        self.color = Some(Box::new(f));
         self
     }
 }
@@ -212,10 +219,11 @@ impl<'a, R> Table<'a, R> {
         let mut x = hdr.left() + 8.0;
         for c in &shown {
             let r = Rect::from_min_size(egui::pos2(x, hdr.top()), vec2(c.width, row_h));
+            // Phosphor carets: the UI fonts have no ▲▼▸▾ on every OS.
             let arrow = match &st.sort {
-                Some((id, true)) if id == c.id => " ▲",
-                Some((id, false)) if id == c.id => " ▼",
-                _ => "",
+                Some((id, true)) if id == c.id => format!(" {}", theme::icon::CARET_UP),
+                Some((id, false)) if id == c.id => format!(" {}", theme::icon::CARET_DOWN),
+                _ => String::new(),
             };
             let (anchor, tx) =
                 if c.right { (Align2::RIGHT_CENTER, r.right() - 6.0) } else { (Align2::LEFT_CENTER, r.left()) };
@@ -266,7 +274,8 @@ impl<'a, R> Table<'a, R> {
                     let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), row_h), Sense::click());
                     match &items[i] {
                         Item::Group { name, count, collapsed } => {
-                            let t = format!("{} {name}  ({count})", if *collapsed { "▸" } else { "▾" });
+                            let caret = if *collapsed { theme::icon::CARET_RIGHT } else { theme::icon::CARET_DOWN };
+                            let t = format!("{caret} {name}  ({count})");
                             ui.painter().text(
                                 egui::pos2(r.left() + 6.0, r.center().y),
                                 Align2::LEFT_CENTER,
@@ -308,12 +317,13 @@ impl<'a, R> Table<'a, R> {
                                 } else {
                                     (Align2::LEFT_CENTER, cr.left())
                                 };
+                                let color = c.color.as_ref().and_then(|f| f(row)).unwrap_or(p.text);
                                 ui.painter().with_clip_rect(cr).text(
                                     egui::pos2(tx, cr.center().y),
                                     anchor,
                                     (c.cell)(row).shown(),
                                     font.clone(),
-                                    p.text,
+                                    color,
                                 );
                                 x += c.width;
                             }
