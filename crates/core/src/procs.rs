@@ -103,6 +103,36 @@ pub fn critical(name: &str, pid: u32) -> bool {
     pid <= 4 || WINDOWS.iter().any(|n| n.eq_ignore_ascii_case(name)) || (pid == 1) || UNIX.contains(&name)
 }
 
+/// Anti-cheat services and the games they protect. CpuZeeZ never opens these
+/// with more than the limited query right (P4): no memory dumps, no reads.
+pub fn anti_cheat(name: &str) -> bool {
+    const NAMES: [&str; 22] = [
+        "vgc.exe",
+        "vgtray.exe",
+        "valorant-win64-shipping.exe",
+        "riotclientservices.exe",
+        "easyanticheat.exe",
+        "easyanticheat_eos.exe",
+        "beservice.exe",
+        "beservice_x64.exe",
+        "faceit.exe",
+        "faceitservice.exe",
+        "faceitclient.exe",
+        "vanguard.exe",
+        "eac_launcher.exe",
+        "gameguard.erl",
+        "nprotect.exe",
+        "xigncode.exe",
+        "ricochet.exe",
+        "cs2.exe",
+        "fortniteclient-win64-shipping.exe",
+        "r5apex.exe",
+        "leagueclient.exe",
+        "league of legends.exe",
+    ];
+    NAMES.iter().any(|n| n.eq_ignore_ascii_case(name))
+}
+
 /// Rows in tree order: each process after its parent (when the parent is
 /// alive and started first, so a reused PID isn't taken for a parent), with
 /// `depth` set. Roots keep their incoming order.
@@ -300,5 +330,6 @@ mod tests {
         assert_eq!(classify(9000, r"C:\Windows\explorer.exe", true, w), Kind::System);
         assert!(critical("csrss.exe", 700) && critical("System", 4) && critical("launchd", 1));
         assert!(!critical("chrome.exe", 1234));
+        assert!(anti_cheat("VALORANT-Win64-Shipping.exe") && anti_cheat("vgc.exe") && !anti_cheat("notepad.exe"));
     }
 }

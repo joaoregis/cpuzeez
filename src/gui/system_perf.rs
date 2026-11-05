@@ -262,7 +262,7 @@ impl State {
                     ui,
                     |ui| match self.dev {
                         PerfDev::Cpu => self.render_cpu(ui, ctx, series, now, procs),
-                        PerfDev::Memory => self.render_memory(ui, series, now),
+                        PerfDev::Memory => self.render_memory(ui, ctx, series, now),
                         PerfDev::Disk(i) => {
                             let name = disk_groups.get(i).cloned().unwrap_or_else(|| format!("Disk {i}"));
                             self.render_disk(ui, ctx, series, now, i, &name);
@@ -428,9 +428,9 @@ impl State {
         });
     }
 
-    fn render_memory(&mut self, ui: &mut Ui, series: &[Series], now: f64) {
+    fn render_memory(&mut self, ui: &mut Ui, ctx: &Arc<Ctx>, series: &[Series], now: f64) {
         let p = theme::palette(ui);
-        let comp = cpuzeez_platform::memory::composition();
+        let comp = cache::memory(ctx);
         let total_gb = comp.total.unwrap_or(0.0) / 1024.0;
         let title =
             if total_gb > 0.0 { format!("{} ({total_gb:.1} GB)", tr("Memory")) } else { tr("Memory").to_string() };

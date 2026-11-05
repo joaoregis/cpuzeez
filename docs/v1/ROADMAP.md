@@ -230,6 +230,17 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 
 **S2a gate status (2026-11-05): closed → `1.0.0-beta.3`.**
 - All 11 S2a items (`S2a-01`..`S2a-11`) are implemented, unit/GUI tested (`egui_kittest`), i18n-verified (`pt-BR` and `es`), and clean under multi-target Clippy (`windows`, `linux`, `macos`) and the `pages_never_probe_in_a_frame` guard.
+- **Review after the release (2026-11-05).** Fixed on the branch for the next beta:
+  - process actions carry each target's start time and the executor refuses a reused PID; service names and startup ids are validated in the app and in the elevated helper (`Action::validate`, tested), `systemctl`/`launchctl` get `--` before the name;
+  - memory dumps are refused for anti-cheat-protected processes (`core::procs::anti_cheat`), as P4 requires;
+  - the details panel's thread/connection refresh and the Performance memory counters moved off the UI thread;
+  - contract tests for `platform::services`, `startup` and `users` (they had none);
+  - Linux/macOS "pause" no longer stops a service; Windows *RunOnce* entries can't be "disabled" silently; the unused *Show kernel times* option was removed.
+- **Still open, not claimed by the ✅ above:**
+  - S2a-02: Task Manager columns not yet present or marked per OS: **per-process network** (ETW / `sock_diag` / `nettop`, task-manager §3.1), power usage and trend, command line, architecture, elevated, integrity level, UAC virtualization state, CPU time, I/O operation counts, GDI/USER objects.
+  - S2a-03: *Restart* (Explorer/shell) and *Close window* aren't there; `Action::risk()` only sees PIDs, so it can't name critical processes (the GUI's own warning does).
+  - S2a-07: log-on account, recovery actions and start parameters are read-only; triggers, service SID and required privileges aren't shown; macOS `launchctl` verbs are untested on a Mac.
+  - S2a-10: the recorder writes JSON per day, not SQLite as planned (enough for the data it keeps; revisit if queries need it).
 
 ## S2b. ZeeZ Live
 

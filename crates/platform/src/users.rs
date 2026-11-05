@@ -312,3 +312,19 @@ mod imp {
         Err("Not supported".into())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    /// Contract: sessions answer without privileges; on Windows there is at
+    /// least the session this test runs in (or the services session on CI).
+    #[test]
+    fn sessions_answer() {
+        let s = super::sessions();
+        if cfg!(windows) {
+            assert!(!s.is_empty());
+        }
+        for x in &s {
+            assert!(x.session_id < 1 << 20, "{x:?}");
+        }
+    }
+}

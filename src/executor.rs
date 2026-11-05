@@ -17,6 +17,10 @@ pub enum Done {
 /// Run `a`, elevating for this one action if needed. Blocks while the OS
 /// prompt is open, so call it off the UI thread.
 pub fn run(a: &Action) -> Done {
+    // The same checks the elevated entry point gets through `decode`.
+    if let Err(e) = a.validate() {
+        return Done::Failed(e);
+    }
     let elevate = a.privilege() == Privilege::Admin && !elevation::is_elevated();
     let done = if elevate {
         match elevation::run(&[format!("{}{}", actions::ELEVATED_FLAG, actions::encode(a))]) {
@@ -68,10 +72,32 @@ fn perform(a: &Action) -> Result<String, String> {
     match a {
         Action::LoadKernelModule { module } => load_kernel_module(module.name()),
         Action::InstallPawnIo => install_pawnio(),
-        Action::Process { target, .. } => perform_process(target),
+        Action::Process { target, identity, .. } => {
+            verify_identity(target, identity)?;
+            perform_process(target)
+        }
         Action::Service { target, .. } => cpuzeez_platform::services::apply(target),
         Action::Startup { target, .. } => cpuzeez_platform::startup::apply(target),
     }
+}
+
+/// Each target PID must still belong to the process the user picked: same
+/// start time. A PID freed and reused while a prompt was open is refused.
+fn verify_identity(op: &actions::ProcessOp, identity: &[(u32, u64)]) -> Result<(), String> {
+    let now = cpuzeez_platform::procs::snapshot(false);
+    for pid in op.pids() {
+        let want = identity.iter().find(|i| i.0 == pid).map(|i| i.1).ok_or("missing process identity")?;
+        match now.iter().find(|p| p.pid == pid) {
+            Some(p) if p.start_ms.abs_diff(want) <= 1 => {
+                if matches!(op, actions::ProcessOp::Dump { .. }) && cpuzeez_core::procs::anti_cheat(&p.name) {
+                    return Err(format!("{} is protected by an anti-cheat: CpuZeeZ never reads its memory", p.name));
+                }
+            }
+            Some(_) => return Err(format!("process {pid} has exited; its PID now belongs to another process")),
+            None => return Err(format!("process {pid} has exited")),
+        }
+    }
+    Ok(())
 }
 
 fn perform_process(op: &actions::ProcessOp) -> Result<String, String> {

@@ -325,13 +325,20 @@ mod imp {
     pub fn apply(op: &StartupOp) -> Result<String, String> {
         let StartupOp::SetEnabled { id, source, enabled } = op;
         let (hive, approved_subkey) = match source {
-            StartupSource::HkcuRun | StartupSource::HkcuRunOnce => {
+            // RunOnce has no StartupApproved switch: writing one would report a
+            // change that Windows ignores.
+            StartupSource::HkcuRunOnce | StartupSource::HklmRunOnce => {
+                return Err(
+                    "RunOnce entries run once at the next sign-in and can't be disabled; remove them instead".into()
+                );
+            }
+            StartupSource::HkcuRun => {
                 (HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run")
             }
             StartupSource::UserFolder => {
                 (HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder")
             }
-            StartupSource::HklmRun | StartupSource::HklmRunOnce => {
+            StartupSource::HklmRun => {
                 (HKEY_LOCAL_MACHINE, r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run")
             }
             StartupSource::HklmRun32 => {
@@ -526,5 +533,17 @@ mod imp {
     }
     pub fn apply(_op: &StartupOp) -> Result<String, String> {
         Err("Not supported on this platform".into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Contract: the query answers without privileges and every item has an id.
+    #[test]
+    fn query_lists_items_with_ids() {
+        let s = super::query();
+        for i in &s.items {
+            assert!(!i.id.is_empty(), "{i:?}");
+        }
     }
 }

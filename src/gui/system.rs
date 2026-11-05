@@ -245,6 +245,9 @@ struct InspectorCache {
     conns: Vec<proc_ops::NetConn>,
     sha256: Option<String>,
     last_refresh: Option<std::time::Instant>,
+    /// Threads and connections read on a background thread (a full snapshot
+    /// with threads plus the socket table took longer than a frame).
+    pending: Option<Arc<Mutex<Option<(u32, Vec<os_procs::Thread>, Vec<proc_ops::NetConn>)>>>>,
 }
 
 pub struct State {
@@ -310,7 +313,16 @@ impl Default for State {
 }
 
 impl State {
-    fn dispatch(&mut self, a: Action) {
+    fn dispatch(&mut self, mut a: Action) {
+        // Pin each target to the process the user saw (PID + start time).
+        if let Action::Process { target, identity, .. } = &mut a {
+            let snap = self.sampler.snapshot();
+            *identity = target
+                .pids()
+                .into_iter()
+                .filter_map(|pid| snap.rows.iter().find(|r| r.pid == pid).map(|r| (pid, r.start_ms)))
+                .collect();
+        }
         let slot = Arc::new(Mutex::new(None));
         let s = slot.clone();
         std::thread::spawn(move || {
@@ -822,7 +834,13 @@ impl State {
                     ctx_action = Some(CtxCmd::WaitChain(first.pid, first.name.clone()));
                     ui.close();
                 }
-                if ui.button(tr("Create dump file")).clicked() {
+                // P4: never read an anti-cheat-protected process's memory.
+                let protected = procs::anti_cheat(&first.name);
+                if ui
+                    .add_enabled(!protected, egui::Button::new(tr("Create dump file")))
+                    .on_disabled_hover_text(tr("Protected by an anti-cheat: CpuZeeZ never reads its memory."))
+                    .clicked()
+                {
                     ctx_action = Some(CtxCmd::Dump(first.pid));
                     ui.close();
                 }
@@ -869,13 +887,25 @@ impl State {
             match cmd {
                 CtxCmd::End { tree, force } => self.request_end(&sel, &snap.rows, tree, force),
                 CtxCmd::Suspend(pid, on) => {
-                    self.dispatch(Action::Process { target: ProcessOp::Suspend { pid, on }, elevate: false });
+                    self.dispatch(Action::Process {
+                        target: ProcessOp::Suspend { pid, on },
+                        elevate: false,
+                        identity: Vec::new(),
+                    });
                 }
                 CtxCmd::Eco(pid, on) => {
-                    self.dispatch(Action::Process { target: ProcessOp::Eco { pid, on }, elevate: false });
+                    self.dispatch(Action::Process {
+                        target: ProcessOp::Eco { pid, on },
+                        elevate: false,
+                        identity: Vec::new(),
+                    });
                 }
                 CtxCmd::Priority(pid, priority) => {
-                    self.dispatch(Action::Process { target: ProcessOp::Priority { pid, priority }, elevate: false });
+                    self.dispatch(Action::Process {
+                        target: ProcessOp::Priority { pid, priority },
+                        elevate: false,
+                        identity: Vec::new(),
+                    });
                 }
                 CtxCmd::Affinity(pid, name) => {
                     let n_cpus = std::thread::available_parallelism().map_or(1, usize::from).min(64);
@@ -892,12 +922,17 @@ impl State {
                     self.wait_chain = Some(WaitChainModal { pid, name, lines });
                 }
                 CtxCmd::Dump(pid) => {
-                    self.dispatch(Action::Process { target: ProcessOp::Dump { pid }, elevate: false });
+                    self.dispatch(Action::Process {
+                        target: ProcessOp::Dump { pid },
+                        elevate: false,
+                        identity: Vec::new(),
+                    });
                 }
                 CtxCmd::Virtualization(pid) => {
                     self.dispatch(Action::Process {
                         target: ProcessOp::Virtualization { pid, on: true },
                         elevate: false,
+                        identity: Vec::new(),
                     });
                 }
                 CtxCmd::TogglePin(name) => {
@@ -969,12 +1004,32 @@ impl State {
                     self.inspector.cmdline = os_procs::command_line(r.pid).unwrap_or_default();
                     self.inspector.sha256 = None;
                 }
-                self.inspector.threads = os_procs::snapshot(true)
-                    .into_iter()
-                    .find(|p| p.pid == r.pid)
-                    .map(|p| p.thread_list)
-                    .unwrap_or_default();
-                self.inspector.conns = proc_ops::connections(r.pid);
+                if self.inspector.pending.is_none() {
+                    let slot = Arc::new(Mutex::new(None));
+                    let (out, pid) = (slot.clone(), r.pid);
+                    std::thread::spawn(move || {
+                        let threads = os_procs::snapshot(true)
+                            .into_iter()
+                            .find(|p| p.pid == pid)
+                            .map(|p| p.thread_list)
+                            .unwrap_or_default();
+                        *out.lock().unwrap_or_else(|e| e.into_inner()) =
+                            Some((pid, threads, proc_ops::connections(pid)));
+                    });
+                    self.inspector.pending = Some(slot);
+                }
+            }
+            if let Some(slot) = self.inspector.pending.clone() {
+                let done = slot.lock().unwrap_or_else(|e| e.into_inner()).take();
+                match done {
+                    Some((pid, threads, conns)) => {
+                        if pid == self.inspector.pid {
+                            (self.inspector.threads, self.inspector.conns) = (threads, conns);
+                        }
+                        self.inspector.pending = None;
+                    }
+                    None => ui.ctx().request_repaint_after(std::time::Duration::from_millis(100)),
+                }
             }
 
             ui.horizontal(|ui| {
@@ -1129,6 +1184,7 @@ impl State {
                         self.dispatch(Action::Process {
                             target: ProcessOp::End { pids: c.pids.clone(), force: c.force },
                             elevate: c.elevate,
+                            identity: Vec::new(),
                         });
                         keep = false;
                     }
@@ -1171,6 +1227,7 @@ impl State {
                         self.dispatch(Action::Process {
                             target: ProcessOp::Affinity { pid: a.pid, mask: a.mask },
                             elevate: a.elevate,
+                            identity: Vec::new(),
                         });
                         keep = false;
                     }
@@ -1261,6 +1318,10 @@ enum CtxCmd {
 }
 
 pub const PT_BR: &[(&str, &str)] = &[
+    (
+        "Protected by an anti-cheat: CpuZeeZ never reads its memory.",
+        "Protegido por um anti-cheat: o CpuZeeZ nunca lê a memória dele.",
+    ),
     ("System", "Sistema"),
     ("{} processes · {} threads · {} handles", "{} processos · {} threads · {} handles"),
     ("Resume", "Retomar"),
@@ -1422,6 +1483,10 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    (
+        "Protected by an anti-cheat: CpuZeeZ never reads its memory.",
+        "Protegido por un anti-cheat: CpuZeeZ nunca lee su memoria.",
+    ),
     ("System", "Sistema"),
     ("{} processes · {} threads · {} handles", "{} procesos · {} hilos · {} identificadores"),
     ("Resume", "Reanudar"),

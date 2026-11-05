@@ -488,8 +488,8 @@ mod imp {
         let (verb, unit): (&str, &str) = match op {
             ServiceOp::Start { name } => ("start", name),
             ServiceOp::Stop { name } => ("stop", name),
-            ServiceOp::Pause { name, resume: false } => ("stop", name),
-            ServiceOp::Pause { name, resume: true } => ("start", name),
+            // systemd has no pause; "stop" here would look like a pause that worked.
+            ServiceOp::Pause { .. } => return Err("systemd services can't be paused".into()),
             ServiceOp::Restart { name } => ("restart", name),
             ServiceOp::SetStartup { name, startup } => {
                 let v = match startup {
@@ -501,7 +501,9 @@ mod imp {
                 (v, name.as_str())
             }
         };
-        let out = std::process::Command::new("systemctl").args([verb, unit]).output().map_err(|e| e.to_string())?;
+        // `--`: a unit name is never read as an option.
+        let out =
+            std::process::Command::new("systemctl").args([verb, "--", unit]).output().map_err(|e| e.to_string())?;
         if out.status.success() {
             Ok(format!("systemctl {verb} {unit}"))
         } else {
@@ -557,8 +559,9 @@ mod imp {
 
     pub fn apply(op: &ServiceOp) -> Result<String, String> {
         let (verb, name): (&str, &str) = match op {
-            ServiceOp::Start { name } | ServiceOp::Pause { name, resume: true } => ("start", name),
-            ServiceOp::Stop { name } | ServiceOp::Pause { name, resume: false } => ("stop", name),
+            ServiceOp::Pause { .. } => return Err("launchd services can't be paused".into()),
+            ServiceOp::Start { name } => ("start", name),
+            ServiceOp::Stop { name } => ("stop", name),
             ServiceOp::Restart { name } => ("kickstart", name),
             ServiceOp::SetStartup { name, startup } => {
                 let v = match startup {
@@ -588,5 +591,29 @@ mod imp {
     }
     pub fn apply(_op: &ServiceOp) -> Result<String, String> {
         Err("Not supported on this platform".into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Contract: every listed service has a valid name, and the OS's own
+    /// service manager answers (CI runners have one on every OS).
+    #[test]
+    fn lists_services_with_valid_names() {
+        let all = super::list();
+        if cfg!(any(windows, target_os = "macos")) {
+            assert!(all.len() > 10, "{} services", all.len());
+        }
+        for s in &all {
+            assert!(!s.name.is_empty(), "{s:?}");
+        }
+        if cfg!(windows) {
+            assert!(all.iter().any(|s| s.name.eq_ignore_ascii_case("EventLog")), "the event log service");
+        }
+        // Protected services are refused before the OS is asked.
+        if let Some(p) = all.iter().find(|s| super::is_protected(&s.name)) {
+            let op = cpuzeez_core::actions::ServiceOp::Stop { name: p.name.clone() };
+            assert!(super::apply(&op).is_err());
+        }
     }
 }

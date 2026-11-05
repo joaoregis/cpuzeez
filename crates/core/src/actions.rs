@@ -109,6 +109,74 @@ pub enum ProcessOp {
     Dump { pid: u32 },
 }
 
+impl ProcessOp {
+    /// Every PID the operation touches.
+    pub fn pids(&self) -> Vec<u32> {
+        match self {
+            ProcessOp::End { pids, .. } => pids.clone(),
+            ProcessOp::Suspend { pid, .. }
+            | ProcessOp::Priority { pid, .. }
+            | ProcessOp::Affinity { pid, .. }
+            | ProcessOp::Eco { pid, .. }
+            | ProcessOp::Virtualization { pid, .. }
+            | ProcessOp::Dump { pid } => vec![*pid],
+        }
+    }
+}
+
+/// A service or unit name: what SCM, systemd and launchd accept, and never
+/// something a command line could read as an option (no leading `-`).
+pub fn valid_service_name(n: &str) -> bool {
+    !n.is_empty()
+        && n.len() <= 256
+        && !n.starts_with('-')
+        && n.chars().all(|c| c.is_ascii_alphanumeric() || "@._-:\\ $".contains(c))
+}
+
+/// A startup entry id: a registry value name or a file name in an autostart
+/// folder, never a path.
+pub fn valid_startup_id(n: &str) -> bool {
+    !n.is_empty() && n.len() <= 260 && !n.contains(['/', '\\', '\0']) && n != "." && n != ".." && !n.starts_with('-')
+}
+
+impl Action {
+    /// Strings inside an action are checked before anything runs (the
+    /// elevated entry point calls this through [`decode`]).
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            Action::Service { target, .. } => {
+                let name = match target {
+                    ServiceOp::Start { name }
+                    | ServiceOp::Stop { name }
+                    | ServiceOp::Pause { name, .. }
+                    | ServiceOp::Restart { name }
+                    | ServiceOp::SetStartup { name, .. } => name,
+                };
+                if valid_service_name(name) { Ok(()) } else { Err(format!("not a service name: {name:?}")) }
+            }
+            Action::Startup { target: StartupOp::SetEnabled { id, .. }, .. } => {
+                if valid_startup_id(id) {
+                    Ok(())
+                } else {
+                    Err(format!("not a startup entry: {id:?}"))
+                }
+            }
+            Action::Process { target, identity, .. } => {
+                let pids = target.pids();
+                if pids.is_empty() || pids.len() > 1024 {
+                    return Err("no process, or too many".into());
+                }
+                if pids.iter().all(|p| identity.iter().any(|i| i.0 == *p)) {
+                    Ok(())
+                } else {
+                    Err("every target process needs its start time".into())
+                }
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
 /// Service operations (S2a-07): closed enum of typed operations, never a free-form command.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
@@ -138,7 +206,15 @@ pub enum Action {
     InstallPawnIo,
     /// Act on one or more processes (S2a-03). `elevate` is set when the
     /// target belongs to another user or an in-process attempt returned access denied.
-    Process { target: ProcessOp, elevate: bool },
+    /// `identity` holds each target's (PID, start time in Unix ms): the executor
+    /// refuses to act when a PID now belongs to a different process (PIDs are
+    /// reused, and an elevation prompt can stay open for a while).
+    Process {
+        target: ProcessOp,
+        elevate: bool,
+        #[serde(default)]
+        identity: Vec<(u32, u64)>,
+    },
     /// Act on a system service (S2a-07).
     Service { target: ServiceOp, elevate: bool },
     /// Enable or disable a startup entry (S2a-08).
@@ -263,7 +339,9 @@ pub fn decode(s: &str) -> Result<Action, String> {
         return Err("argument is not hex".into());
     }
     let bytes: Vec<u8> = (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap_or(0)).collect();
-    serde_json::from_slice(&bytes).map_err(|e| format!("not a known action: {e}"))
+    let a: Action = serde_json::from_slice(&bytes).map_err(|e| format!("not a known action: {e}"))?;
+    a.validate()?;
+    Ok(a)
 }
 
 /// One line of the local audit log (JSON Lines).
@@ -301,7 +379,11 @@ mod tests {
         assert_eq!(a.privilege(), Privilege::Admin);
         assert_eq!(a.describe(), "Load the msr kernel module");
         assert_eq!(decode(&encode(&Action::InstallPawnIo)), Ok(Action::InstallPawnIo));
-        let p = Action::Process { target: ProcessOp::End { pids: vec![1234, 5678], force: false }, elevate: true };
+        let p = Action::Process {
+            target: ProcessOp::End { pids: vec![1234, 5678], force: false },
+            elevate: true,
+            identity: vec![(1234, 1), (5678, 2)],
+        };
         assert_eq!(decode(&encode(&p)), Ok(p.clone()));
         assert_eq!(p.privilege(), Privilege::Admin);
         assert_eq!(p.risk(), Risk::Irreversible);
@@ -344,5 +426,32 @@ mod tests {
         assert!(l.ends_with('\n') && !l[..l.len() - 1].contains('\n'));
         let back: AuditEntry = serde_json::from_str(&l).unwrap();
         assert_eq!(back.action, e.action);
+    }
+
+    #[test]
+    fn strings_in_actions_are_validated() {
+        use crate::services::StartupType;
+        let svc = |name: &str| Action::Service { target: ServiceOp::Stop { name: name.into() }, elevate: true };
+        assert_eq!(decode(&encode(&svc("wuauserv"))), Ok(svc("wuauserv")));
+        assert!(decode(&encode(&svc("dbus.service"))).is_ok());
+        for bad in ["--root=/tmp/x", "-H", "", "a;b", "x\nreboot"] {
+            assert!(decode(&encode(&svc(bad))).is_err(), "accepted service {bad:?}");
+        }
+        let st = |id: &str| Action::Startup {
+            target: StartupOp::SetEnabled {
+                id: id.into(),
+                source: crate::startup::StartupSource::XdgUser,
+                enabled: false,
+            },
+            elevate: false,
+        };
+        assert!(decode(&encode(&st("app.desktop"))).is_ok());
+        for bad in ["../../.bashrc", "/etc/passwd", "a\\b", ".."] {
+            assert!(decode(&encode(&st(bad))).is_err(), "accepted startup id {bad:?}");
+        }
+        // A process action must carry every target's start time.
+        let p = Action::Process { target: ProcessOp::Dump { pid: 9 }, elevate: true, identity: vec![] };
+        assert!(decode(&encode(&p)).is_err());
+        let _ = StartupType::Manual;
     }
 }

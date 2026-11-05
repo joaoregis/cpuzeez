@@ -124,7 +124,6 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Hide when minimized", "Ocultar quando minimizado"),
     ("Show full account name", "Mostrar nome completo da conta"),
     ("Confirm before enabling Efficiency mode", "Confirmar antes de ativar o Modo de eficiência"),
-    ("Show kernel times in CPU graphs", "Mostrar tempos de kernel nos gráficos de CPU"),
     ("App history retention", "Retenção do histórico de apps"),
 ];
 
@@ -244,7 +243,6 @@ pub const ES: &[(&str, &str)] = &[
     ("Hide when minimized", "Ocultar al minimizar"),
     ("Show full account name", "Mostrar nombre completo de la cuenta"),
     ("Confirm before enabling Efficiency mode", "Confirmar antes de habilitar el Modo de eficiencia"),
-    ("Show kernel times in CPU graphs", "Mostrar tiempos del kernel en gráficos de CPU"),
     ("App history retention", "Retención del historial de aplicaciones"),
 ];
 
@@ -532,9 +530,6 @@ pub(super) fn system_settings(ui: &mut egui::Ui, s: &mut Settings) {
     row(ui, tr("Confirm before enabling Efficiency mode"), |ui| {
         ui.checkbox(&mut s.confirm_eco_mode, "");
     });
-    row(ui, tr("Show kernel times in CPU graphs"), |ui| {
-        ui.checkbox(&mut s.show_kernel_times, "");
-    });
     row(ui, tr("Record app resource history"), |ui| {
         ui.checkbox(&mut s.app_history_enabled, "");
     });
@@ -704,6 +699,5 @@ mod tests {
         h.run();
         h.get_by_label("Default start page");
         h.get_by_label("Always on top");
-        h.get_by_label("Show kernel times in CPU graphs");
     }
 }
