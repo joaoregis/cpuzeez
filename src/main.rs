@@ -19,6 +19,8 @@ mod diskbench;
 mod executor;
 mod gpu;
 #[cfg(feature = "gui")]
+mod gpubench;
+#[cfg(feature = "gui")]
 mod gui;
 mod health;
 mod history;

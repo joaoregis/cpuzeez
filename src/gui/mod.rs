@@ -21,6 +21,7 @@ mod update_ui;
 mod benchkit_view;
 mod cpusuite_view;
 mod diskbench_view;
+mod gpubench_view;
 mod latency_view;
 pub mod layout_view;
 mod memplus_view;
@@ -85,6 +86,7 @@ enum BenchView {
     Cpu,
     Memory,
     Latency,
+    Gpu,
     Storage,
     Stress,
     History,
@@ -189,6 +191,7 @@ struct App {
     latency: latency_view::State,
     cpusuite: cpusuite_view::State,
     memplus: memplus_view::State,
+    gpubench: gpubench_view::State,
     diskbench: diskbench_view::State,
 }
 
@@ -259,6 +262,7 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         latency: Default::default(),
         cpusuite: Default::default(),
         memplus: Default::default(),
+        gpubench: Default::default(),
         diskbench: Default::default(),
     };
     if app.auto.is_none() {
@@ -615,6 +619,7 @@ impl App {
                         (BenchView::Cpu, icon::CPU, tr("Processor")),
                         (BenchView::Memory, icon::MEMORY, tr("Memory")),
                         (BenchView::Latency, icon::GRID_FOUR, tr("Latency")),
+                        (BenchView::Gpu, icon::GRAPHICS_CARD, tr("Graphics")),
                         (BenchView::Storage, icon::HARD_DRIVES, tr("Storage")),
                         (BenchView::Stress, icon::FLAME, tr("Stress test")),
                         (BenchView::History, icon::CLOCK_COUNTER_CLOCKWISE, tr("History")),
@@ -636,6 +641,10 @@ impl App {
                     BenchView::Latency => {
                         let t0 = benchkit_view::cpu_temp(&mut self.mon);
                         self.latency.page(ui, &self.ctx, t0)
+                    }
+                    BenchView::Gpu => {
+                        let t0 = benchkit_view::cpu_temp(&mut self.mon);
+                        self.gpubench.page(ui, &self.ctx, t0)
                     }
                     BenchView::Storage => {
                         let t0 = benchkit_view::cpu_temp(&mut self.mon);

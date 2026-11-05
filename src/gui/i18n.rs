@@ -70,6 +70,7 @@ fn tables() -> &'static [(Table, Table)] {
         (super::benchkit_view::PT_BR, super::benchkit_view::ES),
         (super::cpusuite_view::PT_BR, super::cpusuite_view::ES),
         (super::memplus_view::PT_BR, super::memplus_view::ES),
+        (super::gpubench_view::PT_BR, super::gpubench_view::ES),
     ]
 }
 
