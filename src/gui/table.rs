@@ -26,6 +26,8 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Columns", "Colunas"),
     ("{} of {} rows", "{} de {} linhas"),
     ("Reset column widths", "Restaurar larguras das colunas"),
+    ("Reset column order", "Restaurar ordem das colunas"),
+    ("Drag a header to move its column", "Arraste um cabeçalho para mover a coluna"),
     ("Drag to resize, double-click to fit", "Arraste para redimensionar, clique duplo para ajustar"),
 ];
 pub const ES: &[(&str, &str)] = &[
@@ -33,6 +35,8 @@ pub const ES: &[(&str, &str)] = &[
     ("Columns", "Columnas"),
     ("{} of {} rows", "{} de {} filas"),
     ("Reset column widths", "Restablecer anchos de columna"),
+    ("Reset column order", "Restablecer orden de columnas"),
+    ("Drag a header to move its column", "Arrastra un encabezado para mover su columna"),
     ("Drag to resize, double-click to fit", "Arrastra para redimensionar, doble clic para ajustar"),
 ];
 
@@ -123,6 +127,11 @@ pub struct State {
     pub collapsed: BTreeSet<String>,
     /// Column widths the user dragged (column id -> points).
     pub widths: BTreeMap<String, f32>,
+    /// Column ids in the order the user dragged them to (empty: as defined).
+    pub order: Vec<String>,
+    /// The column whose header is being dragged.
+    #[serde(skip)]
+    dragging: Option<String>,
     #[serde(skip)]
     pub selected: BTreeSet<u64>,
     /// The row the user double-clicked (or pressed Enter on) this frame.
@@ -182,9 +191,32 @@ pub fn view<R>(rows: &[R], cols: &[Column<R>], st: &State, group: Option<&dyn Fn
     out
 }
 
+/// The visible columns in the user's order.
+pub fn shown<'c, 'a, R>(cols: &'c [Column<'a, R>], st: &State) -> Vec<&'c Column<'a, R>> {
+    let mut v: Vec<(usize, &Column<R>)> = cols.iter().enumerate().filter(|(_, c)| !st.hidden.contains(c.id)).collect();
+    v.sort_by_key(|(i, c)| st.order.iter().position(|o| o == c.id).map_or((1, *i), |p| (0, p)));
+    v.into_iter().map(|(_, c)| c).collect()
+}
+
+/// Move visible column `from` to insertion point `to` (0..=visible.len()),
+/// returning the full order (hidden columns keep their slots).
+pub fn move_column(full: &[String], visible: &[&str], from: usize, to: usize) -> Vec<String> {
+    let mut vis: Vec<&str> = visible.to_vec();
+    if from >= vis.len() {
+        return full.to_vec();
+    }
+    let c = vis.remove(from);
+    let to = if to > from { to - 1 } else { to }.min(vis.len());
+    vis.insert(to, c);
+    let mut next = vis.into_iter();
+    full.iter()
+        .map(|id| if visible.contains(&id.as_str()) { next.next().unwrap_or(id).to_string() } else { id.clone() })
+        .collect()
+}
+
 /// Tab-separated text of `items`' rows (visible columns), with a header.
 pub fn to_tsv<R>(rows: &[R], cols: &[Column<R>], items: &[Item], st: &State) -> String {
-    let shown: Vec<&Column<R>> = cols.iter().filter(|c| !st.hidden.contains(c.id)).collect();
+    let shown: Vec<&Column<R>> = shown(cols, st);
     let clean = |s: &str| s.replace(['\t', '\n'], " ");
     let mut s = shown.iter().map(|c| clean(&c.title)).collect::<Vec<_>>().join("\t") + "\n";
     for it in items {
@@ -234,7 +266,7 @@ impl<'a, R> Table<'a, R> {
                 egui::RichText::new(super::i18n::trf("{} of {} rows", &[&n, &rows.len()])).small().color(p.text_muted),
             );
         });
-        let shown: Vec<&Column<R>> = self.cols.iter().filter(|c| !st.hidden.contains(c.id)).collect();
+        let shown: Vec<&Column<R>> = shown(&self.cols, st);
         let row_h = ui.text_style_height(&egui::TextStyle::Body) + 8.0;
         let font = FontId::proportional(ui.text_style_height(&egui::TextStyle::Body) - 2.0);
 
@@ -242,7 +274,7 @@ impl<'a, R> Table<'a, R> {
         let total_w = 16.0 + widths.iter().sum::<f32>();
         // Header: click sorts, right-click picks columns, the edges resize. It is
         // painted after the body so it follows the body's horizontal scroll.
-        let (hdr, resp) = ui.allocate_exact_size(vec2(ui.available_width(), row_h), Sense::click());
+        let (hdr, resp) = ui.allocate_exact_size(vec2(ui.available_width(), row_h), Sense::click_and_drag());
 
         st.activated = None;
         self.keys(ui, rows, &items, st);
@@ -391,7 +423,10 @@ impl<'a, R> Table<'a, R> {
         let painter = ui.painter().with_clip_rect(hdr);
         let mut x = hdr.left() + 8.0 - h.offset_x;
         let mut on_edge = false;
+        // Column left edges, for dragging a header to a new place.
+        let mut edges: Vec<f32> = Vec::with_capacity(h.shown.len() + 1);
         for (c, &w) in h.shown.iter().zip(h.widths) {
+            edges.push(x);
             let r = Rect::from_min_size(egui::pos2(x, hdr.top()), vec2(w, row_h));
             // Phosphor carets: the UI fonts have no arrow glyphs on every OS.
             let arrow = match &st.sort {
@@ -429,6 +464,11 @@ impl<'a, R> Table<'a, R> {
                 }
             }
 
+            // Where the press began: a fast drag is already over the next column when it starts.
+            let origin = ui.input(|i| i.pointer.press_origin());
+            if !on_edge && h.resp.drag_started() && origin.is_some_and(|pos| r.contains(pos)) {
+                st.dragging = Some(c.id.into());
+            }
             if !on_edge && h.resp.clicked() && h.resp.interact_pointer_pos().is_some_and(|pos| r.contains(pos)) {
                 st.sort = match &st.sort {
                     Some((id, true)) if id == c.id => Some((c.id.into(), false)),
@@ -437,6 +477,37 @@ impl<'a, R> Table<'a, R> {
                 };
             }
             x += w;
+        }
+        edges.push(x);
+        if let Some(id) = st.dragging.clone() {
+            let from = h.shown.iter().position(|c| c.id == id);
+            let px = ui.ctx().pointer_latest_pos().map_or(0.0, |p| p.x);
+            // The insertion point nearest the pointer.
+            let to = edges
+                .iter()
+                .enumerate()
+                .min_by(|a, b| (a.1 - px).abs().total_cmp(&(b.1 - px).abs()))
+                .map_or(0, |e| e.0);
+            if h.resp.dragged() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+                painter.vline(edges[to] - 4.0, hdr.y_range(), Stroke::new(2.0, p.accent));
+            } else {
+                st.dragging = None;
+                if let Some(from) = from
+                    && to != from
+                    && to != from + 1
+                {
+                    let full: Vec<String> = if st.order.is_empty() {
+                        self.cols.iter().map(|c| c.id.to_string()).collect()
+                    } else {
+                        let mut f = st.order.clone();
+                        f.extend(self.cols.iter().filter(|c| !st.order.iter().any(|o| o == c.id)).map(|c| c.id.into()));
+                        f
+                    };
+                    let vis: Vec<&str> = h.shown.iter().map(|c| c.id).collect();
+                    st.order = move_column(&full, &vis, from, to);
+                }
+            }
         }
         // Painted text is invisible to screen readers: describe the header.
         let header: Vec<&str> = h.shown.iter().map(|c| c.title.as_str()).collect();
@@ -459,6 +530,11 @@ impl<'a, R> Table<'a, R> {
                 st.widths.clear();
                 ui.close();
             }
+            if ui.add_enabled(!st.order.is_empty(), egui::Button::new(tr("Reset column order"))).clicked() {
+                st.order.clear();
+                ui.close();
+            }
+            ui.label(egui::RichText::new(tr("Drag a header to move its column")).small().weak());
         });
         ui.painter().hline(hdr.x_range(), hdr.bottom(), Stroke::new(1.0, p.border));
     }
@@ -641,6 +717,20 @@ mod tests {
     }
 
     #[test]
+    fn columns_move_and_keep_their_order() {
+        let full: Vec<String> = ["name", "pid", "cpu", "mem"].map(String::from).to_vec();
+        // pid is hidden: moving cpu before name leaves pid's slot alone.
+        let vis = ["name", "cpu", "mem"];
+        assert_eq!(move_column(&full, &vis, 1, 0), ["cpu", "pid", "name", "mem"]);
+        assert_eq!(move_column(&full, &vis, 0, 3), ["cpu", "pid", "mem", "name"], "to the end");
+        assert_eq!(move_column(&full, &vis, 0, 1), full, "dropped where it was");
+        let c = cols();
+        let st = State { order: vec!["cpu".into(), "name".into()], ..Default::default() };
+        let ids: Vec<&str> = shown(&c, &st).iter().map(|c| c.id).collect();
+        assert_eq!(ids, ["cpu", "name", "pid"], "listed first, the rest as defined");
+    }
+
+    #[test]
     fn tsv_export_has_visible_columns_only() {
         let (r, c) = (rows(), cols());
         let st = State { hidden: ["pid".to_string()].into(), filter: "game".into(), ..Default::default() };
@@ -700,6 +790,56 @@ mod tests {
             "every menu frame acts on the right-clicked row: {:?}",
             h.state()
         );
+    }
+
+    /// The header with a real mouse: drag a column edge to resize it, drag a
+    /// title to move the column, click a title to sort.
+    #[test]
+    fn header_resizes_moves_and_sorts_with_the_mouse() {
+        use egui_kittest::{Harness, kittest::Queryable};
+        let r = rows();
+        let mut h = Harness::builder().with_size(egui::vec2(800.0, 400.0)).build_ui_state(
+            |ui, st: &mut State| {
+                let t = Table { id: "procs", cols: cols(), key: Box::new(|p: &P| p.pid), group: None };
+                t.show(ui, &r, st, |_, _| {});
+            },
+            State::default(),
+        );
+        h.run();
+        let hdr = h.get_by_label("Name, PID, CPU").rect();
+        let y = hdr.center().y;
+        let drag = |h: &mut Harness<State>, from: egui::Pos2, to: egui::Pos2| {
+            h.hover_at(from);
+            h.run();
+            h.drag_at(from);
+            h.run();
+            for i in 1..=5 {
+                h.hover_at(from + (to - from) * (i as f32 / 5.0));
+                h.run();
+            }
+            h.drop_at(to);
+            h.run();
+        };
+        // Name is 200 wide from x+8: its edge handle sits at x+205.
+        let edge = egui::pos2(hdr.left() + 8.0 + 200.0 - 3.0, y);
+        drag(&mut h, edge, edge + egui::vec2(60.0, 0.0));
+        let w = h.state().widths.get("name").copied().unwrap_or_default();
+        assert!((w - 260.0).abs() < 2.0, "dragged 60 px wider: {w}");
+        // Drag the CPU title (x+8+260+60 .. ) to the far left.
+        let cpu = egui::pos2(hdr.left() + 8.0 + 260.0 + 60.0 + 30.0, y);
+        drag(&mut h, cpu, egui::pos2(hdr.left() + 4.0, y));
+        assert_eq!(h.state().order.first().map(String::as_str), Some("cpu"), "{:?}", h.state().order);
+        assert!(h.query_by_label("CPU, Name, PID").is_some(), "the header reads in the new order");
+        assert_eq!(h.state().sort, None, "a drag isn't a click");
+        // A click on the (now first) CPU title sorts by it.
+        let at = egui::pos2(hdr.left() + 30.0, y);
+        h.hover_at(at);
+        h.run();
+        h.drag_at(at);
+        h.run();
+        h.drop_at(at);
+        h.run();
+        assert_eq!(h.state().sort, Some(("cpu".into(), true)));
     }
 
     #[test]
