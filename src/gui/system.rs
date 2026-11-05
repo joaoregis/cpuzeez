@@ -251,6 +251,7 @@ pub struct State {
     pub tab: SysTab,
     pub sampler: Sampler,
     pub perf: super::system_perf::State,
+    pub services: super::system_services::State,
     pub mode: ProcMode,
     pub tree: bool,
     pub preset: Preset,
@@ -280,6 +281,7 @@ impl Default for State {
             tab: SysTab::Processes,
             sampler: Sampler::new(1000),
             perf: Default::default(),
+            services: Default::default(),
             mode: ProcMode::Grouped,
             tree: false,
             preset,
@@ -441,9 +443,7 @@ impl State {
                     tr("Signed-in user sessions and resource usage (S2a-09)."),
                 );
             }
-            SysTab::Services => {
-                widgets::empty_state(ui, icon::GEAR_SIX, tr("Services"), tr("System services and daemons (S2a-07)."));
-            }
+            SysTab::Services => self.services.show(ui),
         }
 
         self.modals(ui, snap);

@@ -24,6 +24,7 @@ pub mod partitions;
 pub mod pdh;
 pub mod proc_ops;
 pub mod procs;
+pub mod services;
 
 pub mod cpu {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]

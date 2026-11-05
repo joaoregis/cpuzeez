@@ -29,6 +29,7 @@ pub mod query;
 pub mod report;
 #[cfg(test)]
 mod robustness;
+pub mod services;
 pub mod smbios;
 pub mod units;
 

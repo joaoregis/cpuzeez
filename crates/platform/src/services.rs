@@ -1,0 +1,592 @@
+//! OS service enumeration, logs, and control (S2a-07, docs/v1/task-manager.md §8).
+//!
+//! - **Windows:** Service Control Manager (`OpenSCManagerW`, `EnumServicesStatusExW`,
+//!   `QueryServiceConfigW`, `QueryServiceConfig2W`, `StartServiceW`, `ControlService`,
+//!   `ChangeServiceConfigW`, `ChangeServiceConfig2W`).
+//! - **Linux:** `systemd` (`systemctl list-units`, `systemctl show`, `journalctl -u`).
+//! - **macOS:** `launchd` (`launchctl list`, LaunchDaemons / LaunchAgents plists).
+
+use cpuzeez_core::actions::ServiceOp;
+use cpuzeez_core::services::{
+    ServiceRow, ServiceState, StartupType, is_protected, is_third_party, populate_dependents,
+};
+
+pub fn list() -> Vec<ServiceRow> {
+    let mut rows = imp::list();
+    for r in &mut rows {
+        r.protected = is_protected(&r.name);
+        r.third_party = is_third_party(&r.name, &r.binary_path);
+    }
+    populate_dependents(&mut rows);
+    rows.sort_by_key(|a| a.name.to_ascii_lowercase());
+    rows
+}
+
+pub fn logs(name: &str, max_lines: usize) -> Vec<String> {
+    imp::logs(name, max_lines)
+}
+
+pub fn apply(op: &ServiceOp) -> Result<String, String> {
+    let name = match op {
+        ServiceOp::Start { name }
+        | ServiceOp::Stop { name }
+        | ServiceOp::Pause { name, .. }
+        | ServiceOp::Restart { name }
+        | ServiceOp::SetStartup { name, .. } => name.as_str(),
+    };
+    if is_protected(name) {
+        return Err(format!("Service '{name}' is protected by the operating system and cannot be modified"));
+    }
+    imp::apply(op)
+}
+
+// ---------------------------------------------------------------------------
+// Windows (SCM)
+// ---------------------------------------------------------------------------
+
+#[cfg(windows)]
+mod imp {
+    use super::*;
+    use std::ptr::{null, null_mut};
+    use windows_sys::Win32::Foundation::{ERROR_MORE_DATA, GetLastError};
+    use windows_sys::Win32::System::Services::{
+        ChangeServiceConfig2W, ChangeServiceConfigW, CloseServiceHandle, ControlService, ENUM_SERVICE_STATUS_PROCESSW,
+        EnumServicesStatusExW, OpenSCManagerW, OpenServiceW, QUERY_SERVICE_CONFIGW, QueryServiceConfig2W,
+        QueryServiceConfigW, SC_ACTION, SC_ACTION_REBOOT, SC_ACTION_RESTART, SC_ACTION_RUN_COMMAND,
+        SC_ENUM_PROCESS_INFO, SC_HANDLE, SC_MANAGER_CONNECT, SC_MANAGER_ENUMERATE_SERVICE, SERVICE_AUTO_START,
+        SERVICE_CHANGE_CONFIG, SERVICE_CONFIG_DELAYED_AUTO_START_INFO, SERVICE_CONFIG_DESCRIPTION,
+        SERVICE_CONFIG_FAILURE_ACTIONS, SERVICE_CONTINUE_PENDING, SERVICE_CONTROL_CONTINUE, SERVICE_CONTROL_PAUSE,
+        SERVICE_CONTROL_STOP, SERVICE_DELAYED_AUTO_START_INFO, SERVICE_DEMAND_START, SERVICE_DESCRIPTIONW,
+        SERVICE_DISABLED, SERVICE_FAILURE_ACTIONSW, SERVICE_NO_CHANGE, SERVICE_PAUSE_CONTINUE, SERVICE_PAUSE_PENDING,
+        SERVICE_PAUSED, SERVICE_QUERY_CONFIG, SERVICE_QUERY_STATUS, SERVICE_RUNNING, SERVICE_START,
+        SERVICE_START_PENDING, SERVICE_STATE_ALL, SERVICE_STATUS, SERVICE_STOP, SERVICE_STOP_PENDING, SERVICE_STOPPED,
+        SERVICE_WIN32, StartServiceW,
+    };
+
+    struct ScHandle(SC_HANDLE);
+    impl Drop for ScHandle {
+        fn drop(&mut self) {
+            if !self.0.is_null() {
+                unsafe {
+                    CloseServiceHandle(self.0);
+                }
+            }
+        }
+    }
+
+    fn to_wide(s: &str) -> Vec<u16> {
+        s.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    unsafe fn pwstr_to_string(p: *const u16) -> String {
+        if p.is_null() {
+            return String::new();
+        }
+        let mut len = 0usize;
+        unsafe {
+            while *p.add(len) != 0 && len < 8192 {
+                len += 1;
+            }
+            String::from_utf16_lossy(std::slice::from_raw_parts(p, len))
+        }
+    }
+
+    unsafe fn multi_sz_to_vec(p: *const u16) -> Vec<String> {
+        if p.is_null() {
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        let mut cur = p;
+        unsafe {
+            while *cur != 0 {
+                let s = pwstr_to_string(cur);
+                let adv = s.encode_utf16().count() + 1;
+                if !s.is_empty() && !s.starts_with('+') {
+                    out.push(s);
+                }
+                cur = cur.add(adv);
+            }
+        }
+        out
+    }
+
+    pub fn list() -> Vec<ServiceRow> {
+        unsafe {
+            let scm = ScHandle(OpenSCManagerW(null(), null(), SC_MANAGER_ENUMERATE_SERVICE));
+            if scm.0.is_null() {
+                return Vec::new();
+            }
+            let mut needed = 0u32;
+            let mut count = 0u32;
+            let mut resume = 0u32;
+            let _ = EnumServicesStatusExW(
+                scm.0,
+                SC_ENUM_PROCESS_INFO,
+                SERVICE_WIN32,
+                SERVICE_STATE_ALL,
+                null_mut(),
+                0,
+                &mut needed,
+                &mut count,
+                &mut resume,
+                null(),
+            );
+            if needed == 0 {
+                return Vec::new();
+            }
+            let mut buf = vec![0u8; needed as usize + 1024];
+            resume = 0;
+            let ok = EnumServicesStatusExW(
+                scm.0,
+                SC_ENUM_PROCESS_INFO,
+                SERVICE_WIN32,
+                SERVICE_STATE_ALL,
+                buf.as_mut_ptr(),
+                buf.len() as u32,
+                &mut needed,
+                &mut count,
+                &mut resume,
+                null(),
+            );
+            if ok == 0 && GetLastError() != ERROR_MORE_DATA {
+                return Vec::new();
+            }
+            let entries =
+                std::slice::from_raw_parts(buf.as_ptr() as *const ENUM_SERVICE_STATUS_PROCESSW, count as usize);
+            let mut out = Vec::with_capacity(entries.len());
+            for e in entries {
+                let name = pwstr_to_string(e.lpServiceName);
+                if name.is_empty() {
+                    continue;
+                }
+                let display_name = pwstr_to_string(e.lpDisplayName);
+                let st = e.ServiceStatusProcess;
+                let state = match st.dwCurrentState {
+                    SERVICE_RUNNING => ServiceState::Running,
+                    SERVICE_STOPPED => ServiceState::Stopped,
+                    SERVICE_START_PENDING | SERVICE_CONTINUE_PENDING => ServiceState::StartPending,
+                    SERVICE_STOP_PENDING | SERVICE_PAUSE_PENDING => ServiceState::StopPending,
+                    SERVICE_PAUSED => ServiceState::Paused,
+                    _ => ServiceState::Unknown,
+                };
+                let pid = (st.dwProcessId > 0 && state == ServiceState::Running).then_some(st.dwProcessId);
+                let failed_recently = st.dwWin32ExitCode != 0 && st.dwWin32ExitCode != 1077;
+                let last_error = failed_recently.then(|| format!("Win32 exit code {}", st.dwWin32ExitCode));
+
+                let mut row = ServiceRow {
+                    name: name.clone(),
+                    display_name,
+                    state,
+                    pid,
+                    failed_recently,
+                    last_error,
+                    ..Default::default()
+                };
+                enrich_config(scm.0, &name, &mut row);
+                out.push(row);
+            }
+            out
+        }
+    }
+
+    unsafe fn enrich_config(scm: SC_HANDLE, name: &str, row: &mut ServiceRow) {
+        let wide = to_wide(name);
+        let svc = unsafe { ScHandle(OpenServiceW(scm, wide.as_ptr(), SERVICE_QUERY_CONFIG)) };
+        if svc.0.is_null() {
+            return;
+        }
+        let mut needed = 0u32;
+        unsafe {
+            let _ = QueryServiceConfigW(svc.0, null_mut(), 0, &mut needed);
+            if needed > 0 && needed <= 65536 {
+                let mut buf = vec![0u8; needed as usize];
+                if QueryServiceConfigW(
+                    svc.0,
+                    buf.as_mut_ptr() as *mut QUERY_SERVICE_CONFIGW,
+                    buf.len() as u32,
+                    &mut needed,
+                ) != 0
+                {
+                    let cfg = &*(buf.as_ptr() as *const QUERY_SERVICE_CONFIGW);
+                    row.binary_path = pwstr_to_string(cfg.lpBinaryPathName);
+                    row.account = pwstr_to_string(cfg.lpServiceStartName);
+                    row.group = pwstr_to_string(cfg.lpLoadOrderGroup);
+                    row.dependencies = multi_sz_to_vec(cfg.lpDependencies);
+                    row.startup = match cfg.dwStartType {
+                        SERVICE_AUTO_START => StartupType::Automatic,
+                        SERVICE_DEMAND_START => StartupType::Manual,
+                        SERVICE_DISABLED => StartupType::Disabled,
+                        _ => StartupType::Unknown,
+                    };
+                }
+            }
+            if row.startup == StartupType::Automatic {
+                let mut delayed = SERVICE_DELAYED_AUTO_START_INFO { fDelayedAutostart: 0 };
+                let mut req = 0u32;
+                if QueryServiceConfig2W(
+                    svc.0,
+                    SERVICE_CONFIG_DELAYED_AUTO_START_INFO,
+                    &mut delayed as *mut _ as *mut u8,
+                    std::mem::size_of::<SERVICE_DELAYED_AUTO_START_INFO>() as u32,
+                    &mut req,
+                ) != 0
+                    && delayed.fDelayedAutostart != 0
+                {
+                    row.startup = StartupType::AutomaticDelayed;
+                }
+            }
+            let mut req = 0u32;
+            let _ = QueryServiceConfig2W(svc.0, SERVICE_CONFIG_DESCRIPTION, null_mut(), 0, &mut req);
+            if req > 0 && req <= 65536 {
+                let mut buf = vec![0u8; req as usize];
+                if QueryServiceConfig2W(svc.0, SERVICE_CONFIG_DESCRIPTION, buf.as_mut_ptr(), buf.len() as u32, &mut req)
+                    != 0
+                {
+                    let desc = &*(buf.as_ptr() as *const SERVICE_DESCRIPTIONW);
+                    row.description = pwstr_to_string(desc.lpDescription);
+                }
+            }
+            let mut req_fa = 0u32;
+            let _ = QueryServiceConfig2W(svc.0, SERVICE_CONFIG_FAILURE_ACTIONS, null_mut(), 0, &mut req_fa);
+            if req_fa > 0 && req_fa <= 65536 {
+                let mut buf = vec![0u8; req_fa as usize];
+                if QueryServiceConfig2W(
+                    svc.0,
+                    SERVICE_CONFIG_FAILURE_ACTIONS,
+                    buf.as_mut_ptr(),
+                    buf.len() as u32,
+                    &mut req_fa,
+                ) != 0
+                {
+                    let fa = &*(buf.as_ptr() as *const SERVICE_FAILURE_ACTIONSW);
+                    if fa.cActions > 0 && !fa.lpsaActions.is_null() {
+                        let acts = std::slice::from_raw_parts(
+                            fa.lpsaActions as *const SC_ACTION,
+                            (fa.cActions as usize).min(3),
+                        );
+                        let labels: Vec<&str> = acts
+                            .iter()
+                            .map(|a| match a.Type {
+                                SC_ACTION_RESTART => "Restart service",
+                                SC_ACTION_REBOOT => "Restart computer",
+                                SC_ACTION_RUN_COMMAND => "Run program",
+                                _ => "Take no action",
+                            })
+                            .collect();
+                        row.failure_recovery = labels.join(" / ");
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn logs(name: &str, max_lines: usize) -> Vec<String> {
+        let count_arg = format!("/c:{}", max_lines.clamp(1, 30));
+        let Some(text) = crate::os::cmd(
+            "wevtutil",
+            &[
+                "qe",
+                "System",
+                &count_arg,
+                "/rd:true",
+                "/f:text",
+                "/q:*[System[Provider[@Name='Service Control Manager']]]",
+            ],
+        ) else {
+            return Vec::new();
+        };
+        let needle = name.to_ascii_lowercase();
+        text.lines()
+            .filter(|l| {
+                let t = l.trim();
+                !t.is_empty() && (t.to_ascii_lowercase().contains(&needle) || t.starts_with("Date:"))
+            })
+            .take(max_lines)
+            .map(|s| s.trim().to_string())
+            .collect()
+    }
+
+    pub fn apply(op: &ServiceOp) -> Result<String, String> {
+        unsafe {
+            let scm = ScHandle(OpenSCManagerW(null(), null(), SC_MANAGER_CONNECT));
+            if scm.0.is_null() {
+                return Err(format!("OpenSCManagerW failed (error {})", GetLastError()));
+            }
+            match op {
+                ServiceOp::Start { name } => {
+                    let wide = to_wide(name);
+                    let svc = ScHandle(OpenServiceW(scm.0, wide.as_ptr(), SERVICE_START));
+                    if svc.0.is_null() {
+                        return Err(format!("OpenServiceW({name}) failed (error {})", GetLastError()));
+                    }
+                    if StartServiceW(svc.0, 0, null()) == 0 {
+                        return Err(format!("StartServiceW({name}) failed (error {})", GetLastError()));
+                    }
+                    Ok(format!("Started service {name}"))
+                }
+                ServiceOp::Stop { name } => {
+                    let wide = to_wide(name);
+                    let svc = ScHandle(OpenServiceW(scm.0, wide.as_ptr(), SERVICE_STOP));
+                    if svc.0.is_null() {
+                        return Err(format!("OpenServiceW({name}) failed (error {})", GetLastError()));
+                    }
+                    let mut st: SERVICE_STATUS = std::mem::zeroed();
+                    if ControlService(svc.0, SERVICE_CONTROL_STOP, &mut st) == 0 {
+                        return Err(format!("ControlService(STOP, {name}) failed (error {})", GetLastError()));
+                    }
+                    Ok(format!("Stopped service {name}"))
+                }
+                ServiceOp::Pause { name, resume } => {
+                    let wide = to_wide(name);
+                    let svc = ScHandle(OpenServiceW(scm.0, wide.as_ptr(), SERVICE_PAUSE_CONTINUE));
+                    if svc.0.is_null() {
+                        return Err(format!("OpenServiceW({name}) failed (error {})", GetLastError()));
+                    }
+                    let mut st: SERVICE_STATUS = std::mem::zeroed();
+                    let ctrl = if *resume { SERVICE_CONTROL_CONTINUE } else { SERVICE_CONTROL_PAUSE };
+                    if ControlService(svc.0, ctrl, &mut st) == 0 {
+                        return Err(format!("ControlService({name}) failed (error {})", GetLastError()));
+                    }
+                    Ok(format!("{} service {name}", if *resume { "Resumed" } else { "Paused" }))
+                }
+                ServiceOp::Restart { name } => {
+                    let wide = to_wide(name);
+                    let svc = ScHandle(OpenServiceW(
+                        scm.0,
+                        wide.as_ptr(),
+                        SERVICE_STOP | SERVICE_START | SERVICE_QUERY_STATUS,
+                    ));
+                    if svc.0.is_null() {
+                        return Err(format!("OpenServiceW({name}) failed (error {})", GetLastError()));
+                    }
+                    let mut st: SERVICE_STATUS = std::mem::zeroed();
+                    let _ = ControlService(svc.0, SERVICE_CONTROL_STOP, &mut st);
+                    std::thread::sleep(std::time::Duration::from_millis(400));
+                    if StartServiceW(svc.0, 0, null()) == 0 {
+                        return Err(format!("StartServiceW({name}) failed (error {})", GetLastError()));
+                    }
+                    Ok(format!("Restarted service {name}"))
+                }
+                ServiceOp::SetStartup { name, startup } => {
+                    let wide = to_wide(name);
+                    let svc = ScHandle(OpenServiceW(scm.0, wide.as_ptr(), SERVICE_CHANGE_CONFIG));
+                    if svc.0.is_null() {
+                        return Err(format!("OpenServiceW({name}) failed (error {})", GetLastError()));
+                    }
+                    let (dw_start, delayed) = match startup {
+                        StartupType::Automatic => (SERVICE_AUTO_START, false),
+                        StartupType::AutomaticDelayed => (SERVICE_AUTO_START, true),
+                        StartupType::Manual => (SERVICE_DEMAND_START, false),
+                        StartupType::Disabled => (SERVICE_DISABLED, false),
+                        other => return Err(format!("Unsupported startup type {:?}", other)),
+                    };
+                    if ChangeServiceConfigW(
+                        svc.0,
+                        SERVICE_NO_CHANGE,
+                        dw_start,
+                        SERVICE_NO_CHANGE,
+                        null(),
+                        null(),
+                        null_mut(),
+                        null(),
+                        null(),
+                        null(),
+                        null(),
+                    ) == 0
+                    {
+                        return Err(format!("ChangeServiceConfigW({name}) failed (error {})", GetLastError()));
+                    }
+                    if dw_start == SERVICE_AUTO_START {
+                        let mut info = SERVICE_DELAYED_AUTO_START_INFO { fDelayedAutostart: i32::from(delayed) };
+                        let _ = ChangeServiceConfig2W(
+                            svc.0,
+                            SERVICE_CONFIG_DELAYED_AUTO_START_INFO,
+                            &mut info as *mut _ as *mut _,
+                        );
+                    }
+                    Ok(format!("Set {name} startup type to {}", startup.label()))
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Linux (systemd)
+// ---------------------------------------------------------------------------
+
+#[cfg(target_os = "linux")]
+mod imp {
+    use super::*;
+    use std::collections::HashMap;
+
+    pub fn list() -> Vec<ServiceRow> {
+        let mut states: HashMap<String, StartupType> = HashMap::new();
+        if let Some(text) =
+            crate::os::cmd("systemctl", &["list-unit-files", "--type=service", "--no-pager", "--no-legend"])
+        {
+            for line in text.lines() {
+                let mut parts = line.split_whitespace();
+                if let (Some(unit), Some(st)) = (parts.next(), parts.next()) {
+                    let startup = match st {
+                        "enabled" | "enabled-runtime" => StartupType::Automatic,
+                        "disabled" => StartupType::Disabled,
+                        "static" | "indirect" => StartupType::Static,
+                        "masked" | "masked-runtime" => StartupType::Masked,
+                        _ => StartupType::Manual,
+                    };
+                    states.insert(unit.to_string(), startup);
+                }
+            }
+        }
+
+        let Some(text) = crate::os::cmd(
+            "systemctl",
+            &["list-units", "--type=service", "--all", "--no-pager", "--no-legend", "--plain"],
+        ) else {
+            return Vec::new();
+        };
+        let mut rows = Vec::new();
+        for line in text.lines() {
+            let mut parts = line.split_whitespace();
+            let Some(unit) = parts.next() else { continue };
+            let _load = parts.next();
+            let active = parts.next().unwrap_or("");
+            let sub = parts.next().unwrap_or("");
+            let desc: Vec<&str> = parts.collect();
+            let state = match (active, sub) {
+                ("active", "running") | ("active", "exited") => ServiceState::Running,
+                ("activating", _) => ServiceState::StartPending,
+                ("deactivating", _) => ServiceState::StopPending,
+                _ => ServiceState::Stopped,
+            };
+            let startup = states.get(unit).copied().unwrap_or(StartupType::Manual);
+            rows.push(ServiceRow {
+                name: unit.to_string(),
+                display_name: desc.join(" "),
+                description: desc.join(" "),
+                state,
+                startup,
+                failed_recently: active == "failed" || sub == "failed",
+                last_error: (active == "failed").then(|| "Unit in failed state".to_string()),
+                ..Default::default()
+            });
+        }
+        rows
+    }
+
+    pub fn logs(name: &str, max_lines: usize) -> Vec<String> {
+        let n_str = max_lines.to_string();
+        let Some(text) = crate::os::cmd("journalctl", &["-u", name, "-n", &n_str, "--no-pager", "-o", "short-iso"])
+        else {
+            return Vec::new();
+        };
+        text.lines().map(|l| l.to_string()).collect()
+    }
+
+    pub fn apply(op: &ServiceOp) -> Result<String, String> {
+        let (verb, unit): (&str, &str) = match op {
+            ServiceOp::Start { name } => ("start", name),
+            ServiceOp::Stop { name } => ("stop", name),
+            ServiceOp::Pause { name, resume: false } => ("stop", name),
+            ServiceOp::Pause { name, resume: true } => ("start", name),
+            ServiceOp::Restart { name } => ("restart", name),
+            ServiceOp::SetStartup { name, startup } => {
+                let v = match startup {
+                    StartupType::Automatic | StartupType::AutomaticDelayed => "enable",
+                    StartupType::Disabled => "disable",
+                    StartupType::Masked => "mask",
+                    _ => return Err(format!("Unsupported systemd startup transition {:?}", startup)),
+                };
+                (v, name.as_str())
+            }
+        };
+        let out = std::process::Command::new("systemctl").args([verb, unit]).output().map_err(|e| e.to_string())?;
+        if out.status.success() {
+            Ok(format!("systemctl {verb} {unit}"))
+        } else {
+            Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// macOS (launchd)
+// ---------------------------------------------------------------------------
+
+#[cfg(target_os = "macos")]
+mod imp {
+    use super::*;
+
+    pub fn list() -> Vec<ServiceRow> {
+        let Some(text) = crate::os::cmd("launchctl", &["list"]) else {
+            return Vec::new();
+        };
+        let mut rows = Vec::new();
+        for (idx, line) in text.lines().enumerate() {
+            if idx == 0 && line.contains("PID") {
+                continue;
+            }
+            let mut parts = line.split_whitespace();
+            let Some(pid_s) = parts.next() else { continue };
+            let Some(status_s) = parts.next() else { continue };
+            let Some(label) = parts.next() else { continue };
+            let pid = pid_s.parse::<u32>().ok();
+            let exit_code = status_s.parse::<i32>().unwrap_or(0);
+            rows.push(ServiceRow {
+                name: label.to_string(),
+                display_name: label.to_string(),
+                state: if pid.is_some() { ServiceState::Running } else { ServiceState::Stopped },
+                startup: StartupType::Automatic,
+                pid,
+                failed_recently: exit_code != 0,
+                last_error: (exit_code != 0).then(|| format!("Last exit status {exit_code}")),
+                ..Default::default()
+            });
+        }
+        rows
+    }
+
+    pub fn logs(name: &str, max_lines: usize) -> Vec<String> {
+        let target = format!("system/{name}");
+        let Some(text) = crate::os::cmd("launchctl", &["print", &target]) else {
+            return Vec::new();
+        };
+        text.lines().take(max_lines).map(|l| l.to_string()).collect()
+    }
+
+    pub fn apply(op: &ServiceOp) -> Result<String, String> {
+        let (verb, name): (&str, &str) = match op {
+            ServiceOp::Start { name } | ServiceOp::Pause { name, resume: true } => ("start", name),
+            ServiceOp::Stop { name } | ServiceOp::Pause { name, resume: false } => ("stop", name),
+            ServiceOp::Restart { name } => ("kickstart", name),
+            ServiceOp::SetStartup { name, startup } => {
+                let v = match startup {
+                    StartupType::Disabled => "disable",
+                    _ => "enable",
+                };
+                (v, name.as_str())
+            }
+        };
+        let out = std::process::Command::new("launchctl").args([verb, name]).output().map_err(|e| e.to_string())?;
+        if out.status.success() {
+            Ok(format!("launchctl {verb} {name}"))
+        } else {
+            Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+        }
+    }
+}
+
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+mod imp {
+    use super::*;
+    pub fn list() -> Vec<ServiceRow> {
+        Vec::new()
+    }
+    pub fn logs(_name: &str, _max_lines: usize) -> Vec<String> {
+        Vec::new()
+    }
+    pub fn apply(_op: &ServiceOp) -> Result<String, String> {
+        Err("Not supported on this platform".into())
+    }
+}

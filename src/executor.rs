@@ -69,6 +69,7 @@ fn perform(a: &Action) -> Result<String, String> {
         Action::LoadKernelModule { module } => load_kernel_module(module.name()),
         Action::InstallPawnIo => install_pawnio(),
         Action::Process { target, .. } => perform_process(target),
+        Action::Service { target, .. } => cpuzeez_platform::services::apply(target),
     }
 }
 

@@ -109,6 +109,17 @@ pub enum ProcessOp {
     Dump { pid: u32 },
 }
 
+/// Service operations (S2a-07): closed enum of typed operations, never a free-form command.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum ServiceOp {
+    Start { name: String },
+    Stop { name: String },
+    Pause { name: String, resume: bool },
+    Restart { name: String },
+    SetStartup { name: String, startup: crate::services::StartupType },
+}
+
 /// Everything the app can be asked to do with side effects.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "kebab-case", deny_unknown_fields)]
@@ -121,6 +132,8 @@ pub enum Action {
     /// Act on one or more processes (S2a-03). `elevate` is set when the
     /// target belongs to another user or an in-process attempt returned access denied.
     Process { target: ProcessOp, elevate: bool },
+    /// Act on a system service (S2a-07).
+    Service { target: ServiceOp, elevate: bool },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -144,8 +157,8 @@ impl Action {
     pub fn privilege(&self) -> Privilege {
         match self {
             Action::LoadKernelModule { .. } | Action::InstallPawnIo => Privilege::Admin,
-            Action::Process { elevate: true, .. } => Privilege::Admin,
-            Action::Process { elevate: false, .. } => Privilege::User,
+            Action::Process { elevate: true, .. } | Action::Service { elevate: true, .. } => Privilege::Admin,
+            Action::Process { elevate: false, .. } | Action::Service { elevate: false, .. } => Privilege::User,
         }
     }
 
@@ -159,6 +172,16 @@ impl Action {
             }
             Action::Process { target: ProcessOp::Priority { priority: Priority::Realtime, .. }, .. } => Risk::Critical,
             Action::Process { .. } => Risk::Normal,
+            Action::Service { target, .. } => {
+                let name = match target {
+                    ServiceOp::Start { name }
+                    | ServiceOp::Stop { name }
+                    | ServiceOp::Pause { name, .. }
+                    | ServiceOp::Restart { name }
+                    | ServiceOp::SetStartup { name, .. } => name.as_str(),
+                };
+                if crate::services::is_protected(name) { Risk::Critical } else { Risk::Normal }
+            }
         }
     }
 
@@ -184,6 +207,16 @@ impl Action {
                 ProcessOp::Eco { pid, on: false } => format!("Disable Efficiency mode for process {pid}"),
                 ProcessOp::Virtualization { pid, on } => format!("Set UAC virtualization for process {pid} to {on}"),
                 ProcessOp::Dump { pid } => format!("Create memory dump for process {pid}"),
+            },
+            Action::Service { target, .. } => match target {
+                ServiceOp::Start { name } => format!("Start service {name}"),
+                ServiceOp::Stop { name } => format!("Stop service {name}"),
+                ServiceOp::Pause { name, resume: false } => format!("Pause service {name}"),
+                ServiceOp::Pause { name, resume: true } => format!("Resume service {name}"),
+                ServiceOp::Restart { name } => format!("Restart service {name}"),
+                ServiceOp::SetStartup { name, startup } => {
+                    format!("Set service {name} startup type to {}", startup.label())
+                }
             },
         }
     }

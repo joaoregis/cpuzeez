@@ -76,6 +76,7 @@ fn tables() -> &'static [(Table, Table)] {
         (super::layout_editor::PT_BR, super::layout_editor::ES),
         (super::system::PT_BR, super::system::ES),
         (super::system_perf::PT_BR, super::system_perf::ES),
+        (super::system_services::PT_BR, super::system_services::ES),
     ]
 }
 

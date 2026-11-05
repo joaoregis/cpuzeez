@@ -36,6 +36,7 @@ pub mod sensors;
 pub mod stress;
 pub mod system;
 pub mod system_perf;
+pub mod system_services;
 pub mod table;
 mod tray;
 mod trayicon;
