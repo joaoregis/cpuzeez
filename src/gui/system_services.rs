@@ -149,79 +149,83 @@ impl State {
         let mut context_act: Option<(ServiceRow, &'static str)> = None;
 
         ui.horizontal_top(|ui| {
-            ui.allocate_ui(egui::vec2(table_w, ui.available_height()), |ui| {
-                if visible.is_empty() {
-                    widgets::empty_state(
-                        ui,
-                        icon::GEAR_SIX,
-                        tr("No matching services"),
-                        tr("Try clearing the search box or switching the quick filter."),
-                    );
-                } else {
-                    Table::new("sys_services_table", |r: &ServiceRow| hash_name(&r.name))
-                        .col(Column::new("name", tr("Name"), 170.0, |r: &ServiceRow| {
-                            if r.protected {
-                                Cell::Text(format!("{} {}", icon::LOCK, r.name))
-                            } else {
-                                Cell::Text(r.name.clone())
-                            }
-                        }))
-                        .col(Column::new("display", tr("Display name"), 220.0, |r: &ServiceRow| {
-                            Cell::Text(r.display_name.clone())
-                        }))
-                        .col(
-                            Column::new("status", tr("Status"), 95.0, |r: &ServiceRow| {
-                                Cell::Text(tr(r.state.label()).to_string())
-                            })
-                            .colored(move |r: &ServiceRow| match r.state {
-                                ServiceState::Running => Some(p.success),
-                                ServiceState::StartPending | ServiceState::StopPending | ServiceState::Paused => {
-                                    Some(p.warning)
+            ui.allocate_ui_with_layout(
+                egui::vec2(table_w, ui.available_height()),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    if visible.is_empty() {
+                        widgets::empty_state(
+                            ui,
+                            icon::GEAR_SIX,
+                            tr("No matching services"),
+                            tr("Try clearing the search box or switching the quick filter."),
+                        );
+                    } else {
+                        Table::new("sys_services_table", |r: &ServiceRow| hash_name(&r.name))
+                            .col(Column::new("name", tr("Name"), 170.0, |r: &ServiceRow| {
+                                if r.protected {
+                                    Cell::Text(format!("{} {}", icon::LOCK, r.name))
+                                } else {
+                                    Cell::Text(r.name.clone())
                                 }
-                                ServiceState::Stopped if r.failed_recently => Some(p.danger),
-                                _ => None,
-                            }),
-                        )
-                        .col(
-                            Column::new("pid", "PID", 68.0, |r: &ServiceRow| match r.pid {
-                                Some(pid) => Cell::num(pid as f64, pid.to_string()),
-                                None => Cell::num(0.0, "–"),
-                            })
-                            .right(),
-                        )
-                        .col(Column::new("startup", tr("Startup type"), 135.0, |r: &ServiceRow| {
-                            Cell::Text(tr(r.startup.label()).to_string())
-                        }))
-                        .col(Column::new("account", tr("Log on as"), 130.0, |r: &ServiceRow| {
-                            Cell::Text(if r.account.is_empty() { "–".into() } else { r.account.clone() })
-                        }))
-                        .col(Column::new("group", tr("Group"), 120.0, |r: &ServiceRow| {
-                            Cell::Text(if r.group.is_empty() { "–".into() } else { r.group.clone() })
-                        }))
-                        .show(ui, &visible, &mut self.table, |ui, sel| {
-                            if let Some(&first) = sel.first() {
-                                ui.label(RichText::new(&first.name).strong());
-                                ui.separator();
-                                ui.add_enabled_ui(!first.protected && first.state == ServiceState::Stopped, |ui| {
-                                    if ui.button(tr("Start")).clicked() {
-                                        context_act = Some(((*first).clone(), "start"));
-                                        ui.close();
+                            }))
+                            .col(Column::new("display", tr("Display name"), 220.0, |r: &ServiceRow| {
+                                Cell::Text(r.display_name.clone())
+                            }))
+                            .col(
+                                Column::new("status", tr("Status"), 95.0, |r: &ServiceRow| {
+                                    Cell::Text(tr(r.state.label()).to_string())
+                                })
+                                .colored(move |r: &ServiceRow| match r.state {
+                                    ServiceState::Running => Some(p.success),
+                                    ServiceState::StartPending | ServiceState::StopPending | ServiceState::Paused => {
+                                        Some(p.warning)
                                     }
-                                });
-                                ui.add_enabled_ui(!first.protected && first.state == ServiceState::Running, |ui| {
-                                    if ui.button(tr("Stop")).clicked() {
-                                        context_act = Some(((*first).clone(), "stop"));
-                                        ui.close();
-                                    }
-                                    if ui.button(tr("Restart")).clicked() {
-                                        context_act = Some(((*first).clone(), "restart"));
-                                        ui.close();
-                                    }
-                                });
-                            }
-                        });
-                }
-            });
+                                    ServiceState::Stopped if r.failed_recently => Some(p.danger),
+                                    _ => None,
+                                }),
+                            )
+                            .col(
+                                Column::new("pid", "PID", 68.0, |r: &ServiceRow| match r.pid {
+                                    Some(pid) => Cell::num(pid as f64, pid.to_string()),
+                                    None => Cell::num(0.0, "–"),
+                                })
+                                .right(),
+                            )
+                            .col(Column::new("startup", tr("Startup type"), 135.0, |r: &ServiceRow| {
+                                Cell::Text(tr(r.startup.label()).to_string())
+                            }))
+                            .col(Column::new("account", tr("Log on as"), 130.0, |r: &ServiceRow| {
+                                Cell::Text(if r.account.is_empty() { "–".into() } else { r.account.clone() })
+                            }))
+                            .col(Column::new("group", tr("Group"), 120.0, |r: &ServiceRow| {
+                                Cell::Text(if r.group.is_empty() { "–".into() } else { r.group.clone() })
+                            }))
+                            .show(ui, &visible, &mut self.table, |ui, sel| {
+                                if let Some(&first) = sel.first() {
+                                    ui.label(RichText::new(&first.name).strong());
+                                    ui.separator();
+                                    ui.add_enabled_ui(!first.protected && first.state == ServiceState::Stopped, |ui| {
+                                        if ui.button(tr("Start")).clicked() {
+                                            context_act = Some(((*first).clone(), "start"));
+                                            ui.close();
+                                        }
+                                    });
+                                    ui.add_enabled_ui(!first.protected && first.state == ServiceState::Running, |ui| {
+                                        if ui.button(tr("Stop")).clicked() {
+                                            context_act = Some(((*first).clone(), "stop"));
+                                            ui.close();
+                                        }
+                                        if ui.button(tr("Restart")).clicked() {
+                                            context_act = Some(((*first).clone(), "restart"));
+                                            ui.close();
+                                        }
+                                    });
+                                }
+                            });
+                    }
+                },
+            );
 
             if show_inspector
                 && let Some(sel_name) = self.selected_name.clone()

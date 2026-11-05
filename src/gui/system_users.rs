@@ -4,6 +4,7 @@
 //! Disconnect / Sign out / Send message / Manage user accounts actions.
 
 use super::i18n::{tr, trf};
+use super::table::{self, Cell, Column, Table};
 use super::theme::{self, icon};
 use super::widgets::{self, Tone};
 use crate::procs::Snapshot as ProcSnap;
@@ -41,6 +42,7 @@ pub struct State {
     pub expanded: BTreeSet<String>,
     pub selected_user: Option<String>,
     pub show_system_accounts: bool,
+    proc_table: table::State,
     modal: Option<Modal>,
     status_banner: Option<(String, Tone)>,
 }
@@ -54,6 +56,7 @@ impl Default for State {
             expanded: BTreeSet::new(),
             selected_user: None,
             show_system_accounts: false,
+            proc_table: table::State::default(),
             modal: None,
             status_banner: None,
         }
@@ -198,7 +201,7 @@ impl State {
                     .inner_margin(Margin::symmetric(12, 10))
                     .show(ui, |ui| {
                         ui.set_width(ui.available_width());
-                        ui.horizontal_wrapped(|ui| {
+                        ui.horizontal(|ui| {
                             let caret = if is_expanded { icon::CARET_DOWN } else { icon::CARET_RIGHT };
                             if ui.button(format!("{caret} {} ({})", u.user, u.processes.len())).clicked() {
                                 if is_expanded {
@@ -208,88 +211,100 @@ impl State {
                                 }
                                 self.selected_user = Some(u.user.clone());
                             }
-
                             let state_tone = if u.state == "Active" { Tone::Success } else { Tone::Neutral };
                             widgets::pill(ui, tr(&u.state), state_tone);
-
                             if let Some(sid) = u.session_id {
+                                let client = if u.client_name.is_empty() {
+                                    String::new()
+                                } else {
+                                    format!(" · {}", u.client_name)
+                                };
                                 ui.label(
-                                    RichText::new(format!("{}: {sid} · {}", tr("Session"), u.client_name))
+                                    RichText::new(format!("{}: {sid}{client}", tr("Session")))
                                         .small()
                                         .color(p.text_secondary),
                                 );
                             }
-
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if let Some(sid) = u.session_id {
-                                    if ui.small_button(tr("Sign out")).clicked() {
-                                        self.modal = Some(Modal::ConfirmAction {
-                                            session_id: sid,
-                                            user: u.user.clone(),
-                                            sign_out: true,
-                                        });
-                                    }
-                                    if ui.small_button(tr("Disconnect")).clicked() {
-                                        self.modal = Some(Modal::ConfirmAction {
-                                            session_id: sid,
-                                            user: u.user.clone(),
-                                            sign_out: false,
-                                        });
-                                    }
-                                    if ui.small_button(tr("Send message")).clicked() {
-                                        self.modal = Some(Modal::SendMessage {
-                                            session_id: sid,
-                                            user: u.user.clone(),
-                                            title: String::from("Message from Administrator"),
-                                            body: String::new(),
-                                        });
-                                    }
+                                let Some(sid) = u.session_id else { return };
+                                if ui.small_button(tr("Sign out")).clicked() {
+                                    self.modal = Some(Modal::ConfirmAction {
+                                        session_id: sid,
+                                        user: u.user.clone(),
+                                        sign_out: true,
+                                    });
                                 }
-                                ui.separator();
-                                ui.label(
-                                    RichText::new(format!(
-                                        "CPU: {:.1}%   {}: {:.0} MB   {}: {:.1} MB/s   GPU: {:.0}%",
-                                        u.cpu_pct,
-                                        tr("Memory"),
-                                        u.mem_bytes as f64 / 1_048_576.0,
-                                        tr("Disk"),
-                                        u.disk_bps / 1_048_576.0,
-                                        u.gpu_pct
-                                    ))
-                                    .monospace()
-                                    .small()
-                                    .color(p.text),
-                                );
+                                if ui.small_button(tr("Disconnect")).clicked() {
+                                    self.modal = Some(Modal::ConfirmAction {
+                                        session_id: sid,
+                                        user: u.user.clone(),
+                                        sign_out: false,
+                                    });
+                                }
+                                if ui.small_button(tr("Send message")).clicked() {
+                                    self.modal = Some(Modal::SendMessage {
+                                        session_id: sid,
+                                        user: u.user.clone(),
+                                        title: String::from("Message from Administrator"),
+                                        body: String::new(),
+                                    });
+                                }
                             });
+                        });
+                        ui.add_space(4.0);
+                        ui.horizontal_wrapped(|ui| {
+                            ui.spacing_mut().item_spacing.x = 18.0;
+                            let mem = format!("{:.0} MB", u.mem_bytes as f64 / 1_048_576.0);
+                            let disk = format!("{:.1} MB/s", u.disk_bps / 1_048_576.0);
+                            let stats = [
+                                ("CPU", format!("{:.1} %", u.cpu_pct)),
+                                (tr("Memory"), mem),
+                                (tr("Disk"), disk),
+                                ("GPU", format!("{:.0} %", u.gpu_pct)),
+                            ];
+                            for (k, v) in stats {
+                                ui.label(RichText::new(k).small().color(p.text_muted));
+                                ui.add_space(-12.0);
+                                ui.label(RichText::new(v).monospace().color(p.text));
+                            }
                         });
 
                         if is_expanded && !u.processes.is_empty() {
-                            ui.add_space(8.0);
-                            ui.separator();
-                            ui.add_space(4.0);
-                            for proc_row in u.processes.iter().take(40) {
-                                ui.horizontal(|ui| {
-                                    ui.label(
-                                        RichText::new(format!("{:>6}", proc_row.pid))
-                                            .monospace()
-                                            .small()
-                                            .color(p.text_muted),
-                                    );
-                                    ui.label(RichText::new(&proc_row.name).small().color(p.text));
-                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                        ui.label(
-                                            RichText::new(format!(
-                                                "{:.1}% CPU · {:.0} MB",
-                                                proc_row.cpu,
-                                                proc_row.working_set as f64 / 1_048_576.0
-                                            ))
-                                            .monospace()
-                                            .small()
-                                            .color(p.text_secondary),
-                                        );
-                                    });
-                                });
-                            }
+                            ui.add_space(6.0);
+                            let row_h = ui.text_style_height(&egui::TextStyle::Body) + 8.0;
+                            let h = (u.processes.len() as f32 * row_h + 3.0 * row_h).min(360.0);
+                            ui.allocate_ui_with_layout(
+                                egui::vec2(ui.available_width(), h),
+                                egui::Layout::top_down(egui::Align::Min),
+                                |ui| {
+                                    Table::new("sys_user_procs", |r: &Row| r.pid as u64)
+                                        .col(Column::new("name", tr("Name"), 240.0, |r: &Row| {
+                                            Cell::Text(r.name.clone())
+                                        }))
+                                        .col(
+                                            Column::new("pid", "PID", 70.0, |r: &Row| {
+                                                Cell::num(r.pid as f64, r.pid.to_string())
+                                            })
+                                            .right(),
+                                        )
+                                        .col(
+                                            Column::new("cpu", "CPU", 80.0, |r: &Row| {
+                                                Cell::num(r.cpu, format!("{:.1} %", r.cpu))
+                                            })
+                                            .right(),
+                                        )
+                                        .col(
+                                            Column::new("mem", tr("Memory"), 100.0, |r: &Row| {
+                                                Cell::num(
+                                                    r.working_set as f64,
+                                                    format!("{:.1} MB", r.working_set as f64 / 1_048_576.0),
+                                                )
+                                            })
+                                            .right(),
+                                        )
+                                        .show(ui, &u.processes, &mut self.proc_table, |_, _| {});
+                                },
+                            );
                         }
                     });
                 ui.add_space(6.0);

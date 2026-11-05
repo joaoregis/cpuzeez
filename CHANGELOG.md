@@ -7,6 +7,23 @@ generated from its section below.
 
 ## [Unreleased]
 
+### Fixed
+
+- System › Services listed nothing: the table was laid out sideways and its rows got no height.
+- System › Performance: the device tiles sat in one overlapping row and the detail pane was empty.
+- The right-click menu of every table opened as a narrow column with one word per line.
+- System › Users: the session line and the usage figures overlapped.
+
+### Changed
+
+- Tables (processes, services, startup, users, app history, sensors): drag a column's edge to resize it,
+  double-click the edge to fit its content, "Reset column widths" in the header menu. Widths are kept.
+- Tables scroll sideways when the columns are wider than the window; the header follows.
+- Cut-off text ends with "…" and shows in full on hover.
+- Processes: double-click a row, or press Enter, to open the details panel.
+- Users: a user's processes are a sortable, filterable table.
+- `-screenshots` also captures the six System tabs.
+
 ## [1.0.0-beta.4] - 2026-11-05
 
 Fixes from the review of 1.0.0-beta.3: test the System hub on this one.

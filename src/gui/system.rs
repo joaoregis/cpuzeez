@@ -610,13 +610,21 @@ impl State {
             let avail = ui.available_width();
             let panel_w = (avail * 0.36).clamp(280.0, 440.0);
             ui.horizontal_top(|ui| {
-                ui.allocate_ui(egui::vec2(avail - panel_w - theme::GAP, ui.available_height()), |ui| {
-                    self.render_table(ui, &rows, snap);
-                });
+                ui.allocate_ui_with_layout(
+                    egui::vec2(avail - panel_w - theme::GAP, ui.available_height()),
+                    egui::Layout::top_down(egui::Align::Min),
+                    |ui| {
+                        self.render_table(ui, &rows, snap);
+                    },
+                );
                 ui.add_space(theme::GAP);
-                ui.allocate_ui(egui::vec2(panel_w, ui.available_height()), |ui| {
-                    self.render_details_panel(ui, selected_row.as_ref(), snap);
-                });
+                ui.allocate_ui_with_layout(
+                    egui::vec2(panel_w, ui.available_height()),
+                    egui::Layout::top_down(egui::Align::Min),
+                    |ui| {
+                        self.render_details_panel(ui, selected_row.as_ref(), snap);
+                    },
+                );
             });
         } else {
             self.render_table(ui, &rows, snap);
@@ -654,7 +662,7 @@ impl State {
             }))
             .col(Column::new("pid", "PID", 64.0, |r: &Row| Cell::num(r.pid as f64, r.pid.to_string())).right())
             .col(
-                Column::new("status", tr("Status"), 115.0, |r: &Row| {
+                Column::new("status", tr("Status"), 135.0, |r: &Row| {
                     let s = if r.not_responding {
                         tr("Not responding")
                     } else if r.suspended {
@@ -881,6 +889,10 @@ impl State {
                 }
             }
         });
+        // Double-click (or Enter) opens the details panel on that process.
+        if self.table.activated.is_some() {
+            self.show_details = true;
+        }
 
         if let Some(cmd) = ctx_action {
             let sel: Vec<&Row> = rows.iter().filter(|r| self.table.selected.contains(&r.key())).collect();

@@ -71,6 +71,12 @@ impl App {
                 }
                 true
             }
+            Step::System(tab) => {
+                self.page = Page::System;
+                self.system.tab = tab;
+                // Let the sampler and the background queries (services, startup) answer.
+                !first && self.auto.as_ref().is_some_and(|a| a.since.elapsed() > Duration::from_secs(3))
+            }
             Step::AboutPt => {
                 i18n::set(i18n::Lang::PtBr);
                 self.page = Page::About;

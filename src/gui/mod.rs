@@ -128,11 +128,12 @@ enum Step {
     Page(Page),
     Bench(BenchView),
     Tool(ToolView),
+    System(system::SysTab),
     /// The About page in Brazilian Portuguese, to show the translations.
     AboutPt,
 }
 
-const SHOTS: [(&str, Step); 17] = [
+const SHOTS: [(&str, Step); 23] = [
     ("overview", Step::Page(Page::Overview)),
     ("processor", Step::Page(Page::Processor)),
     ("mainboard", Step::Page(Page::Mainboard)),
@@ -146,6 +147,12 @@ const SHOTS: [(&str, Step); 17] = [
     ("history", Step::Bench(BenchView::History)),
     ("compare", Step::Tool(ToolView::Compare)),
     ("clocks", Step::Tool(ToolView::Clocks)),
+    ("system-processes", Step::System(system::SysTab::Processes)),
+    ("system-performance", Step::System(system::SysTab::Performance)),
+    ("system-history", Step::System(system::SysTab::AppHistory)),
+    ("system-startup", Step::System(system::SysTab::Startup)),
+    ("system-users", Step::System(system::SysTab::Users)),
+    ("system-services", Step::System(system::SysTab::Services)),
     ("settings", Step::Page(Page::Settings)),
     ("about", Step::Page(Page::About)),
     ("about-pt", Step::AboutPt),

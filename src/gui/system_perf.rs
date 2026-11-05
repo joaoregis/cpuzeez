@@ -140,142 +140,149 @@ impl State {
         let avail = ui.available_width();
         let left_w = (avail * 0.25).clamp(200.0, 260.0);
         ui.horizontal_top(|ui| {
-            ui.allocate_ui(vec2(left_w, ui.available_height()), |ui| {
-                egui::ScrollArea::vertical().id_salt("perf_sidebar").auto_shrink([false, false]).show(ui, |ui| {
-                    // CPU tile
-                    let cpu_pct = current_val(series, "cpu/load/total").unwrap_or(0.0);
-                    let cpu_ghz = current_val(series, "cpu/clock/avg").map(|m| m / 1000.0).unwrap_or(0.0);
-                    let cpu_sub = if cpu_ghz > 0.0 {
-                        format!("{cpu_pct:.0}% · {cpu_ghz:.2} GHz")
-                    } else {
-                        format!("{cpu_pct:.0}%")
-                    };
-                    if dev_tile(
-                        ui,
-                        icon::CPU,
-                        "CPU",
-                        &cpu_sub,
-                        &spark_pts(series, "cpu/load/total"),
-                        p.series[0],
-                        self.dev == PerfDev::Cpu,
-                    ) {
-                        self.dev = PerfDev::Cpu;
-                    }
-
-                    // Memory tile
-                    let mem_used_gb = current_val(series, "mem/size/used").unwrap_or(0.0) / 1024.0;
-                    let mem_pct = current_val(series, "mem/load/used").unwrap_or(0.0);
-                    let mem_sub = format!("{mem_used_gb:.1} GB ({mem_pct:.0}%)");
-                    if dev_tile(
-                        ui,
-                        icon::MEMORY,
-                        tr("Memory"),
-                        &mem_sub,
-                        &spark_pts(series, "mem/load/used"),
-                        p.series[3],
-                        self.dev == PerfDev::Memory,
-                    ) {
-                        self.dev = PerfDev::Memory;
-                    }
-
-                    // Disk tiles
-                    for (i, name) in disk_groups.iter().enumerate() {
-                        let id = format!("disk{i}/load/active");
-                        let act = current_val(series, &id).unwrap_or(0.0);
-                        let sub = format!("{name} · {act:.0}%");
-                        if dev_tile(
-                            ui,
-                            icon::HARD_DRIVES,
-                            &format!("{} {i}", tr("Disk")),
-                            &sub,
-                            &spark_pts(series, &id),
-                            p.series[2],
-                            self.dev == PerfDev::Disk(i),
-                        ) {
-                            self.dev = PerfDev::Disk(i);
-                        }
-                    }
-
-                    // Network tiles
-                    for (i, name) in net_groups.iter().enumerate() {
-                        let rx_id = format!("net{i}/rate/rx");
-                        let tx_id = format!("net{i}/rate/tx");
-                        let rx = current_val(series, &rx_id).unwrap_or(0.0);
-                        let tx = current_val(series, &tx_id).unwrap_or(0.0);
-                        let sub = format!("{name} · ↓{rx:.1} ↑{tx:.1} Mbps");
-                        if dev_tile(
-                            ui,
-                            icon::GLOBE,
-                            name,
-                            &sub,
-                            &spark_pts(series, &rx_id),
-                            p.series[4],
-                            self.dev == PerfDev::Net(i),
-                        ) {
-                            self.dev = PerfDev::Net(i);
-                        }
-                    }
-
-                    // GPU tiles
-                    for (i, g) in gpus.iter().enumerate() {
-                        let load = gpu_busy(series, i);
-                        let temp = current_val(series, &format!("gpu{i}/temp/core"));
-                        let sub = match temp {
-                            Some(t) => format!("{load:.0}% ({t:.0} °C)"),
-                            None => format!("{load:.0}%"),
+            ui.allocate_ui_with_layout(
+                vec2(left_w, ui.available_height()),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    egui::ScrollArea::vertical().id_salt("perf_sidebar").auto_shrink([false, false]).show(ui, |ui| {
+                        // CPU tile
+                        let cpu_pct = current_val(series, "cpu/load/total").unwrap_or(0.0);
+                        let cpu_ghz = current_val(series, "cpu/clock/avg").map(|m| m / 1000.0).unwrap_or(0.0);
+                        let cpu_sub = if cpu_ghz > 0.0 {
+                            format!("{cpu_pct:.0}% · {cpu_ghz:.2} GHz")
+                        } else {
+                            format!("{cpu_pct:.0}%")
                         };
                         if dev_tile(
                             ui,
-                            icon::GRAPHICS_CARD,
-                            &format!("GPU {i}"),
-                            &sub,
-                            &spark_pts_prefix(series, &format!("gpu{i}/")),
-                            p.series[1],
-                            self.dev == PerfDev::Gpu(i),
+                            icon::CPU,
+                            "CPU",
+                            &cpu_sub,
+                            &spark_pts(series, "cpu/load/total"),
+                            p.series[0],
+                            self.dev == PerfDev::Cpu,
                         ) {
-                            self.dev = PerfDev::Gpu(i);
+                            self.dev = PerfDev::Cpu;
                         }
-                        let _ = g;
-                    }
 
-                    // NPU tiles
-                    for (i, n) in npus.iter().enumerate() {
+                        // Memory tile
+                        let mem_used_gb = current_val(series, "mem/size/used").unwrap_or(0.0) / 1024.0;
+                        let mem_pct = current_val(series, "mem/load/used").unwrap_or(0.0);
+                        let mem_sub = format!("{mem_used_gb:.1} GB ({mem_pct:.0}%)");
                         if dev_tile(
                             ui,
-                            icon::CIRCUITRY,
-                            &format!("NPU {i}"),
-                            &n.name,
-                            &[],
-                            p.series[5],
-                            self.dev == PerfDev::Npu(i),
+                            icon::MEMORY,
+                            tr("Memory"),
+                            &mem_sub,
+                            &spark_pts(series, "mem/load/used"),
+                            p.series[3],
+                            self.dev == PerfDev::Memory,
                         ) {
-                            self.dev = PerfDev::Npu(i);
+                            self.dev = PerfDev::Memory;
                         }
-                    }
-                });
-            });
+
+                        // Disk tiles
+                        for (i, name) in disk_groups.iter().enumerate() {
+                            let id = format!("disk{i}/load/active");
+                            let act = current_val(series, &id).unwrap_or(0.0);
+                            let sub = format!("{name} · {act:.0}%");
+                            if dev_tile(
+                                ui,
+                                icon::HARD_DRIVES,
+                                &format!("{} {i}", tr("Disk")),
+                                &sub,
+                                &spark_pts(series, &id),
+                                p.series[2],
+                                self.dev == PerfDev::Disk(i),
+                            ) {
+                                self.dev = PerfDev::Disk(i);
+                            }
+                        }
+
+                        // Network tiles
+                        for (i, name) in net_groups.iter().enumerate() {
+                            let rx_id = format!("net{i}/rate/rx");
+                            let tx_id = format!("net{i}/rate/tx");
+                            let rx = current_val(series, &rx_id).unwrap_or(0.0);
+                            let tx = current_val(series, &tx_id).unwrap_or(0.0);
+                            let sub = format!("{name} · ↓{rx:.1} ↑{tx:.1} Mbps");
+                            if dev_tile(
+                                ui,
+                                icon::GLOBE,
+                                name,
+                                &sub,
+                                &spark_pts(series, &rx_id),
+                                p.series[4],
+                                self.dev == PerfDev::Net(i),
+                            ) {
+                                self.dev = PerfDev::Net(i);
+                            }
+                        }
+
+                        // GPU tiles
+                        for (i, g) in gpus.iter().enumerate() {
+                            let load = gpu_busy(series, i);
+                            let temp = current_val(series, &format!("gpu{i}/temp/core"));
+                            let sub = match temp {
+                                Some(t) => format!("{load:.0}% ({t:.0} °C)"),
+                                None => format!("{load:.0}%"),
+                            };
+                            if dev_tile(
+                                ui,
+                                icon::GRAPHICS_CARD,
+                                &format!("GPU {i}"),
+                                &sub,
+                                &spark_pts_prefix(series, &format!("gpu{i}/")),
+                                p.series[1],
+                                self.dev == PerfDev::Gpu(i),
+                            ) {
+                                self.dev = PerfDev::Gpu(i);
+                            }
+                            let _ = g;
+                        }
+
+                        // NPU tiles
+                        for (i, n) in npus.iter().enumerate() {
+                            if dev_tile(
+                                ui,
+                                icon::CIRCUITRY,
+                                &format!("NPU {i}"),
+                                &n.name,
+                                &[],
+                                p.series[5],
+                                self.dev == PerfDev::Npu(i),
+                            ) {
+                                self.dev = PerfDev::Npu(i);
+                            }
+                        }
+                    });
+                },
+            );
 
             ui.add_space(theme::GAP);
 
-            ui.allocate_ui(vec2(avail - left_w - theme::GAP, ui.available_height()), |ui| {
-                egui::ScrollArea::vertical().id_salt("perf_detail").auto_shrink([false, false]).show(
-                    ui,
-                    |ui| match self.dev {
-                        PerfDev::Cpu => self.render_cpu(ui, ctx, series, now, procs),
-                        PerfDev::Memory => self.render_memory(ui, ctx, series, now),
-                        PerfDev::Disk(i) => {
-                            let name = disk_groups.get(i).cloned().unwrap_or_else(|| format!("Disk {i}"));
-                            self.render_disk(ui, ctx, series, now, i, &name);
+            ui.allocate_ui_with_layout(
+                vec2(avail - left_w - theme::GAP, ui.available_height()),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    egui::ScrollArea::vertical().id_salt("perf_detail").auto_shrink([false, false]).show(ui, |ui| {
+                        match self.dev {
+                            PerfDev::Cpu => self.render_cpu(ui, ctx, series, now, procs),
+                            PerfDev::Memory => self.render_memory(ui, ctx, series, now),
+                            PerfDev::Disk(i) => {
+                                let name = disk_groups.get(i).cloned().unwrap_or_else(|| format!("Disk {i}"));
+                                self.render_disk(ui, ctx, series, now, i, &name);
+                            }
+                            PerfDev::Net(i) => {
+                                let name = net_groups.get(i).cloned().unwrap_or_else(|| format!("Adapter {i}"));
+                                self.render_net(ui, ctx, series, now, i, &name);
+                            }
+                            PerfDev::Gpu(i) => self.render_gpu(ui, ctx, series, now, i),
+                            PerfDev::Npu(i) => self.render_npu(ui, &npus, i),
                         }
-                        PerfDev::Net(i) => {
-                            let name = net_groups.get(i).cloned().unwrap_or_else(|| format!("Adapter {i}"));
-                            self.render_net(ui, ctx, series, now, i, &name);
-                        }
-                        PerfDev::Gpu(i) => self.render_gpu(ui, ctx, series, now, i),
-                        PerfDev::Npu(i) => self.render_npu(ui, &npus, i),
-                    },
-                );
-            });
+                    });
+                },
+            );
         });
     }
 

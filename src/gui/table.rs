@@ -18,17 +18,22 @@ use super::theme;
 use cpuzeez_core::query::{self, Value};
 use eframe::egui::{self, Align2, FontId, Rect, Sense, Stroke, Ui, vec2};
 use std::cmp::Ordering;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 pub const PT_BR: &[(&str, &str)] = &[
     ("Filter… e.g. name:chrome cpu>10 mem>1GB", "Filtrar… ex.: name:chrome cpu>10 mem>1GB"),
     ("Columns", "Colunas"),
     ("{} of {} rows", "{} de {} linhas"),
+    ("Reset column widths", "Restaurar larguras das colunas"),
+    ("Drag to resize, double-click to fit", "Arraste para redimensionar, clique duplo para ajustar"),
 ];
 pub const ES: &[(&str, &str)] = &[
     ("Filter… e.g. name:chrome cpu>10 mem>1GB", "Filtrar… p. ej. name:chrome cpu>10 mem>1GB"),
     ("Columns", "Columnas"),
     ("{} of {} rows", "{} de {} filas"),
+    ("Reset column widths", "Restablecer anchos de columna"),
+    ("Drag to resize, double-click to fit", "Arrastra para redimensionar, doble clic para ajustar"),
 ];
 
 /// One cell. Numbers keep their value (for sorting and `cpu>10`) and a display text.
@@ -116,8 +121,13 @@ pub struct State {
     pub sort: Option<(String, bool)>,
     pub hidden: BTreeSet<String>,
     pub collapsed: BTreeSet<String>,
+    /// Column widths the user dragged (column id -> points).
+    pub widths: BTreeMap<String, f32>,
     #[serde(skip)]
     pub selected: BTreeSet<u64>,
+    /// The row the user double-clicked (or pressed Enter on) this frame.
+    #[serde(skip)]
+    pub activated: Option<u64>,
     #[serde(skip)]
     anchor: Option<u64>,
     #[serde(skip)]
@@ -228,64 +238,27 @@ impl<'a, R> Table<'a, R> {
         let row_h = ui.text_style_height(&egui::TextStyle::Body) + 8.0;
         let font = FontId::proportional(ui.text_style_height(&egui::TextStyle::Body) - 2.0);
 
-        // Header: click sorts, right-click picks columns.
+        let widths: Vec<f32> = shown.iter().map(|c| st.widths.get(c.id).copied().unwrap_or(c.width)).collect();
+        let total_w = 16.0 + widths.iter().sum::<f32>();
+        // Header: click sorts, right-click picks columns, the edges resize. It is
+        // painted after the body so it follows the body's horizontal scroll.
         let (hdr, resp) = ui.allocate_exact_size(vec2(ui.available_width(), row_h), Sense::click());
-        let mut x = hdr.left() + 8.0;
-        for c in &shown {
-            let r = Rect::from_min_size(egui::pos2(x, hdr.top()), vec2(c.width, row_h));
-            // Phosphor carets: the UI fonts have no ▲▼▸▾ on every OS.
-            let arrow = match &st.sort {
-                Some((id, true)) if id == c.id => format!(" {}", theme::icon::CARET_UP),
-                Some((id, false)) if id == c.id => format!(" {}", theme::icon::CARET_DOWN),
-                _ => String::new(),
-            };
-            let (anchor, tx) =
-                if c.right { (Align2::RIGHT_CENTER, r.right() - 6.0) } else { (Align2::LEFT_CENTER, r.left()) };
-            ui.painter().with_clip_rect(r).text(
-                egui::pos2(tx, r.center().y),
-                anchor,
-                format!("{}{arrow}", c.title),
-                font.clone(),
-                p.text_secondary,
-            );
-            if resp.clicked() && resp.interact_pointer_pos().is_some_and(|pos| r.contains(pos)) {
-                st.sort = match &st.sort {
-                    Some((id, true)) if id == c.id => Some((c.id.into(), false)),
-                    Some((id, false)) if id == c.id => None,
-                    _ => Some((c.id.into(), true)),
-                };
-            }
-            x += c.width;
-        }
-        // Painted text is invisible to screen readers: describe the header.
-        let header: Vec<&str> = shown.iter().map(|c| c.title.as_str()).collect();
-        resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, header.join(", ")));
-        resp.context_menu(|ui| {
-            ui.label(egui::RichText::new(tr("Columns")).strong());
-            for c in &self.cols {
-                let mut on = !st.hidden.contains(c.id);
-                if ui.checkbox(&mut on, &c.title).changed() {
-                    if on {
-                        st.hidden.remove(c.id);
-                    } else if shown.len() > 1 {
-                        st.hidden.insert(c.id.into());
-                    }
-                }
-            }
-        });
-        ui.painter().hline(hdr.x_range(), hdr.bottom(), Stroke::new(1.0, p.border));
 
+        st.activated = None;
         self.keys(ui, rows, &items, st);
         let mut clicked: Option<(usize, egui::Modifiers)> = None;
         let mut toggle: Option<String> = None;
         let mut menu_for: Option<usize> = None;
-        egui::ScrollArea::vertical().id_salt(self.id).auto_shrink([false, false]).show_rows(
+        let mut tip: Option<String> = None;
+        let mut activated: Option<u64> = None;
+        let out = egui::ScrollArea::both().id_salt(self.id).auto_shrink([false, false]).show_rows(
             ui,
             row_h,
             items.len(),
             |ui, range| {
+                let row_w = ui.available_width().max(total_w);
                 for i in range {
-                    let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), row_h), Sense::click());
+                    let (r, resp) = ui.allocate_exact_size(vec2(row_w, row_h), Sense::click());
                     match &items[i] {
                         Item::Group { name, count, collapsed } => {
                             let caret = if *collapsed { theme::icon::CARET_RIGHT } else { theme::icon::CARET_DOWN };
@@ -324,31 +297,34 @@ impl<'a, R> Table<'a, R> {
                                 egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, &label)
                             });
                             let mut x = r.left() + 8.0;
-                            for c in &shown {
+                            let hover = resp.hover_pos();
+                            for (c, &w) in shown.iter().zip(&widths) {
                                 let cell_bg_rect =
-                                    Rect::from_min_size(egui::pos2(x - 3.0, r.top() + 1.0), vec2(c.width, row_h - 2.0));
+                                    Rect::from_min_size(egui::pos2(x - 3.0, r.top() + 1.0), vec2(w, row_h - 2.0));
                                 if !selected && let Some(fill) = c.bg.as_ref().and_then(|f| f(row)) {
                                     ui.painter().rect_filled(cell_bg_rect, egui::CornerRadius::same(3), fill);
                                 }
-                                let cr = Rect::from_min_size(egui::pos2(x, r.top()), vec2(c.width - 6.0, row_h));
+                                let cr = Rect::from_min_size(egui::pos2(x, r.top()), vec2(w - PAD, row_h));
                                 if let Some(draw) = &c.draw {
                                     draw(&ui.painter().with_clip_rect(cr), cr.shrink2(vec2(2.0, 4.0)), row);
                                 } else {
-                                    let (anchor, tx) = if c.right {
-                                        (Align2::RIGHT_CENTER, cr.right())
-                                    } else {
-                                        (Align2::LEFT_CENTER, cr.left())
-                                    };
                                     let color = c.color.as_ref().and_then(|f| f(row)).unwrap_or(p.text);
-                                    ui.painter().with_clip_rect(cr).text(
-                                        egui::pos2(tx, cr.center().y),
-                                        anchor,
-                                        (c.cell)(row).shown(),
-                                        font.clone(),
-                                        color,
-                                    );
+                                    let cell = (c.cell)(row);
+                                    let g = fit(ui.painter(), cell.shown(), &font, color, cr.width());
+                                    let elided = g.elided;
+                                    cell_text(ui.painter(), cr, c.right, g, color);
+                                    if elided && hover.is_some_and(|h| cr.contains(h)) {
+                                        tip = Some(cell.shown().to_string());
+                                    }
                                 }
-                                x += c.width;
+                                x += w;
+                            }
+                            let resp = match tip.take() {
+                                Some(t) => resp.on_hover_text(t),
+                                None => resp,
+                            };
+                            if resp.double_clicked() {
+                                activated = Some((self.key)(row));
                             }
                             if resp.clicked() {
                                 clicked = Some((i, ui.input(|inp| inp.modifiers)));
@@ -357,8 +333,16 @@ impl<'a, R> Table<'a, R> {
                                 menu_for = Some(i);
                             }
                             resp.context_menu(|ui| {
-                                let sel: Vec<&R> =
-                                    rows.iter().filter(|r| st.selected.contains(&(self.key)(r))).collect();
+                                // Never wrap menu items into a narrow column.
+                                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                                // Right-clicking an unselected row acts on that row: its
+                                // selection lands after this frame, and an empty first
+                                // frame would leave the menu stuck at zero width.
+                                let sel: Vec<&R> = if selected {
+                                    rows.iter().filter(|r| st.selected.contains(&(self.key)(r))).collect()
+                                } else {
+                                    vec![row]
+                                };
                                 menu(ui, &sel);
                             });
                         }
@@ -366,6 +350,23 @@ impl<'a, R> Table<'a, R> {
                 }
             },
         );
+        self.header(
+            ui,
+            Header {
+                rect: hdr,
+                resp: &resp,
+                shown: &shown,
+                widths: &widths,
+                offset_x: out.state.offset.x,
+                row_h,
+                font: &font,
+            },
+            rows,
+            st,
+        );
+        if activated.is_some() {
+            st.activated = activated;
+        }
         if let Some(g) = toggle
             && !st.collapsed.remove(&g)
         {
@@ -382,6 +383,84 @@ impl<'a, R> Table<'a, R> {
             st.focused = true;
             self.select(rows, &items, st, i, m);
         }
+    }
+
+    fn header(&self, ui: &mut Ui, h: Header<'_, 'a, R>, rows: &[R], st: &mut State) {
+        let p = theme::palette(ui);
+        let (hdr, row_h, font) = (h.rect, h.row_h, h.font);
+        let painter = ui.painter().with_clip_rect(hdr);
+        let mut x = hdr.left() + 8.0 - h.offset_x;
+        let mut on_edge = false;
+        for (c, &w) in h.shown.iter().zip(h.widths) {
+            let r = Rect::from_min_size(egui::pos2(x, hdr.top()), vec2(w, row_h));
+            // Phosphor carets: the UI fonts have no arrow glyphs on every OS.
+            let arrow = match &st.sort {
+                Some((id, true)) if id == c.id => format!(" {}", theme::icon::CARET_UP),
+                Some((id, false)) if id == c.id => format!(" {}", theme::icon::CARET_DOWN),
+                _ => String::new(),
+            };
+            let title = format!("{}{arrow}", c.title);
+            let g = fit(&painter, &title, font, p.text_secondary, w - 10.0);
+            let text_rect = Rect::from_min_max(r.min, egui::pos2(r.right() - PAD, r.bottom()));
+            cell_text(&painter, text_rect, c.right, g, p.text_secondary);
+
+            // Resize handle on the right edge.
+            let edge = Rect::from_center_size(egui::pos2(r.right() - 3.0, r.center().y), vec2(8.0, row_h));
+            if edge.intersects(hdr) {
+                let hr = ui
+                    .interact(
+                        edge.intersect(hdr),
+                        egui::Id::new((self.id, "col-resize", c.id)),
+                        Sense::click_and_drag(),
+                    )
+                    .on_hover_text(tr("Drag to resize, double-click to fit"));
+                let active = hr.hovered() || hr.dragged();
+                on_edge |= active;
+                if active {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+                }
+                let stroke = if active { Stroke::new(2.0, p.accent) } else { Stroke::new(1.0, p.border) };
+                painter.vline(r.right() - 3.0, r.y_range().shrink(if active { 2.0 } else { 7.0 }), stroke);
+                if hr.dragged() {
+                    st.widths.insert(c.id.into(), (w + hr.drag_delta().x).max(MIN_W));
+                }
+                if hr.double_clicked() {
+                    st.widths.insert(c.id.into(), fit_width(&painter, rows, c, &title, font));
+                }
+            }
+
+            if !on_edge && h.resp.clicked() && h.resp.interact_pointer_pos().is_some_and(|pos| r.contains(pos)) {
+                st.sort = match &st.sort {
+                    Some((id, true)) if id == c.id => Some((c.id.into(), false)),
+                    Some((id, false)) if id == c.id => None,
+                    _ => Some((c.id.into(), true)),
+                };
+            }
+            x += w;
+        }
+        // Painted text is invisible to screen readers: describe the header.
+        let header: Vec<&str> = h.shown.iter().map(|c| c.title.as_str()).collect();
+        h.resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, header.join(", ")));
+        h.resp.context_menu(|ui| {
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+            ui.label(egui::RichText::new(tr("Columns")).strong());
+            for c in &self.cols {
+                let mut on = !st.hidden.contains(c.id);
+                if ui.checkbox(&mut on, &c.title).changed() {
+                    if on {
+                        st.hidden.remove(c.id);
+                    } else if h.shown.len() > 1 {
+                        st.hidden.insert(c.id.into());
+                    }
+                }
+            }
+            ui.separator();
+            if ui.button(tr("Reset column widths")).clicked() {
+                st.widths.clear();
+                ui.close();
+            }
+        });
+        ui.painter().hline(hdr.x_range(), hdr.bottom(), Stroke::new(1.0, p.border));
     }
 
     fn select(&self, rows: &[R], items: &[Item], st: &mut State, i: usize, m: egui::Modifiers) {
@@ -421,13 +500,14 @@ impl<'a, R> Table<'a, R> {
         let pos = |st: &State| {
             items.iter().position(|it| matches!(it, Item::Row(j) if st.anchor == Some((self.key)(&rows[*j]))))
         };
-        let (up, down, all, esc, copy) = ui.input(|i| {
+        let (up, down, all, esc, copy, enter) = ui.input(|i| {
             (
                 i.key_pressed(egui::Key::ArrowUp),
                 i.key_pressed(egui::Key::ArrowDown),
                 i.modifiers.command && i.key_pressed(egui::Key::A),
                 i.key_pressed(egui::Key::Escape),
                 i.modifiers.command && i.key_pressed(egui::Key::C),
+                i.key_pressed(egui::Key::Enter),
             )
         });
         let step = |from: Option<usize>, back: bool| -> Option<usize> {
@@ -456,6 +536,9 @@ impl<'a, R> Table<'a, R> {
         if esc {
             st.selected.clear();
         }
+        if enter && st.selected.len() == 1 {
+            st.activated = st.anchor;
+        }
         if copy && !st.selected.is_empty() {
             let sel: Vec<Item> = items
                 .iter()
@@ -465,6 +548,44 @@ impl<'a, R> Table<'a, R> {
             ui.ctx().copy_text(to_tsv(rows, &self.cols, &sel, st));
         }
     }
+}
+
+const MIN_W: f32 = 36.0;
+/// Space between a cell's text and the next column.
+const PAD: f32 = 12.0;
+
+/// What the header needs from the frame's layout.
+struct Header<'h, 'a, R> {
+    rect: Rect,
+    resp: &'h egui::Response,
+    shown: &'h [&'h Column<'a, R>],
+    widths: &'h [f32],
+    offset_x: f32,
+    row_h: f32,
+    font: &'h FontId,
+}
+
+/// One line of text cut with an ellipsis at `w`.
+fn fit(painter: &egui::Painter, text: &str, font: &FontId, color: egui::Color32, w: f32) -> Arc<egui::Galley> {
+    let mut job = egui::text::LayoutJob::simple_singleline(text.to_owned(), font.clone(), color);
+    job.wrap = egui::text::TextWrapping::truncate_at_width(w.max(1.0));
+    painter.layout_job(job)
+}
+
+fn cell_text(painter: &egui::Painter, r: Rect, right: bool, g: Arc<egui::Galley>, color: egui::Color32) {
+    let y = r.center().y - g.size().y / 2.0;
+    let x = if right { r.right() - g.size().x } else { r.left() };
+    painter.galley(egui::pos2(x, y), g, color);
+}
+
+/// The width that shows the title and the widest cell (first 2000 rows) whole.
+fn fit_width<R>(painter: &egui::Painter, rows: &[R], c: &Column<R>, title: &str, font: &FontId) -> f32 {
+    if c.draw.is_some() {
+        return c.width; // a sparkline has no text width
+    }
+    let text_w = |t: &str| painter.layout_no_wrap(t.to_owned(), font.clone(), egui::Color32::WHITE).size().x;
+    let widest = rows.iter().take(2000).map(|r| text_w((c.cell)(r).shown())).fold(text_w(title) + 4.0, f32::max);
+    (widest + 16.0).clamp(MIN_W, 900.0)
 }
 
 #[cfg(test)]
