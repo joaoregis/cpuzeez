@@ -224,10 +224,47 @@ fn gpu_group(ctx: &Ctx, i: usize) -> String {
     format!("GPU · {}", name.map_or_else(|| format!("GPU {i}"), str::to_string))
 }
 
+/// RAM in use plus what the rest is used for (S1-D03); what an OS doesn't
+/// track is left out rather than shown as 0.
 fn memory(o: &mut Out) {
-    if let Some((total, used)) = os::memory() {
+    let c = cpuzeez_platform::memory::composition();
+    if let (Some(total), Some(used)) = (c.total, c.used)
+        && total > 0.0
+    {
         o.add("mem/load/used", "Memory", "Memory load", Unit::Percent, used * 100.0 / total);
-        o.add("mem/size/used", "Memory", "Memory used", Unit::Megabytes, used);
+    }
+    if let (Some(commit), Some(limit)) = (c.commit, c.commit_limit)
+        && limit > 0.0
+    {
+        o.add("mem/load/commit", "Memory", "Commit charge", Unit::Percent, commit * 100.0 / limit);
+    }
+    if let (Some(used), Some(total)) = (c.swap_used, c.swap_total)
+        && total > 0.0
+    {
+        o.add(
+            "mem/load/swap",
+            "Memory",
+            if cfg!(windows) { "Page file" } else { "Swap" },
+            Unit::Percent,
+            used * 100.0 / total,
+        );
+    }
+    for (id, label, v) in [
+        ("used", "Memory used", c.used),
+        ("available", "Available", c.available),
+        ("free", "Free", c.free),
+        ("cached", if cfg!(windows) { "Standby" } else { "Cached" }, c.cached),
+        ("modified", "Modified", c.modified),
+        ("compressed", "Compressed", c.compressed),
+        ("wired", if cfg!(windows) { "Non-paged pool" } else { "Wired" }, c.wired),
+        ("pagedpool", if cfg!(windows) { "Paged pool" } else { "Kernel (reclaimable)" }, c.paged_pool),
+        ("commit", "Committed", c.commit),
+        ("commitlimit", "Commit limit", c.commit_limit),
+        ("swapused", if cfg!(windows) { "Page file used" } else { "Swap used" }, c.swap_used),
+    ] {
+        if let Some(v) = v {
+            o.add(format!("mem/size/{id}"), "Memory", label, Unit::Megabytes, v);
+        }
     }
 }
 

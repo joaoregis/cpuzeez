@@ -1,8 +1,8 @@
 //! OS-level telemetry inputs that no hardware monitor covers: per-CPU load,
-//! RAM in use, kernel throttle counters and the Ctrl+C flag for `-log=`.
-//! Windows load comes from the sensors module's PDH query (one open query per
-//! process); Linux reads /proc/stat and /proc/meminfo, macOS uses Mach host
-//! statistics.
+//! kernel throttle counters and the Ctrl+C flag for `-log=`. Windows load
+//! comes from the sensors module's PDH query (one open query per process);
+//! Linux reads /proc/stat, macOS uses Mach host statistics. RAM is
+//! `cpuzeez_platform::memory`.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -72,13 +72,9 @@ mod mach {
         pub fn mach_host_self() -> u32;
         pub static mach_task_self_: u32;
         pub fn host_processor_info(host: u32, flavor: i32, count: *mut u32, info: *mut *mut i32, n: *mut u32) -> i32;
-        pub fn host_statistics64(host: u32, flavor: i32, info: *mut i32, n: *mut u32) -> i32;
         pub fn vm_deallocate(task: u32, addr: usize, size: usize) -> i32;
     }
     pub const PROCESSOR_CPU_LOAD_INFO: i32 = 2;
-    pub const HOST_VM_INFO64: i32 = 4;
-    /// sizeof(vm_statistics64) / sizeof(integer_t).
-    pub const HOST_VM_INFO64_COUNT: u32 = 38;
 }
 
 /// host_processor_info(PROCESSOR_CPU_LOAD_INFO): user, system, idle, nice ticks per CPU.
@@ -119,71 +115,6 @@ fn ticks() -> Option<Vec<(u64, u64)>> {
 
 #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 fn ticks() -> Option<Vec<(u64, u64)>> {
-    None
-}
-
-/// RAM (total MB, in use MB).
-#[cfg(windows)]
-pub fn memory() -> Option<(f64, f64)> {
-    #[repr(C)]
-    struct MemoryStatusEx {
-        len: u32,
-        load: u32,
-        total_phys: u64,
-        avail_phys: u64,
-        rest: [u64; 5],
-    }
-    #[link(name = "kernel32")]
-    unsafe extern "system" {
-        fn GlobalMemoryStatusEx(m: *mut MemoryStatusEx) -> i32;
-    }
-    let mut m = MemoryStatusEx { len: 64, load: 0, total_phys: 0, avail_phys: 0, rest: [0; 5] };
-    // SAFETY: dwLength set to sizeof(MEMORYSTATUSEX).
-    (unsafe { GlobalMemoryStatusEx(&mut m) } != 0 && m.total_phys > 0)
-        .then(|| (m.total_phys as f64 / 1048576.0, (m.total_phys - m.avail_phys) as f64 / 1048576.0))
-}
-
-#[cfg(target_os = "linux")]
-pub fn memory() -> Option<(f64, f64)> {
-    let s = std::fs::read_to_string("/proc/meminfo").ok()?;
-    let kb = |k: &str| {
-        s.lines().find_map(|l| l.strip_prefix(k)?.strip_prefix(':')?.split_whitespace().next()?.parse::<f64>().ok())
-    };
-    let (total, avail) = (kb("MemTotal")?, kb("MemAvailable")?);
-    Some((total / 1024.0, (total - avail) / 1024.0))
-}
-
-/// In use = total minus free, inactive and speculative pages (what can be
-/// handed out without paging).
-#[cfg(target_os = "macos")]
-pub fn memory() -> Option<(f64, f64)> {
-    let mut total = 0u64;
-    let mut len = std::mem::size_of::<u64>();
-    let mut st = [0i32; 64];
-    let mut n = mach::HOST_VM_INFO64_COUNT;
-    // SAFETY: sysctl/host_statistics64 out-params sized as documented.
-    unsafe {
-        if libc::sysctlbyname(
-            c"hw.memsize".as_ptr(),
-            (&mut total as *mut u64).cast(),
-            &mut len,
-            std::ptr::null_mut(),
-            0,
-        ) != 0
-            || mach::host_statistics64(mach::mach_host_self(), mach::HOST_VM_INFO64, st.as_mut_ptr(), &mut n) != 0
-        {
-            return None;
-        }
-    }
-    let page = unsafe { libc::sysconf(libc::_SC_PAGESIZE) }.max(4096) as u64;
-    // vm_statistics64: free_count [0], inactive_count [2], speculative_count at byte 92.
-    let free = (st[0] as u32 as u64 + st[2] as u32 as u64 + st[23] as u32 as u64) * page;
-    let mb = |b: u64| b as f64 / 1048576.0;
-    (total > 0).then(|| (mb(total), mb(total.saturating_sub(free))))
-}
-
-#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
-pub fn memory() -> Option<(f64, f64)> {
     None
 }
 
