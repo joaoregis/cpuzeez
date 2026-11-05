@@ -78,7 +78,7 @@ Processor, caches, mainboard, memory and SPD, graphics, sensors, drives, network
   - New flags: `-sensors`, `-log=`, `-membench`, `-diff=`, `-checkupdate`.
   - A `cpuzeez.ini` with the same keys as `cpuz.ini`.
 - **One-click updates.** The app finds new releases and installs the right package for your OS, after verifying its SHA-256.
-- **A single native binary**, about 8 MB, with no runtime dependencies.
+- **A single native binary**, about 20 MB (most of it the GPU renderer and the GPU benchmark), with no runtime dependencies.
 
 ## Screenshots
 

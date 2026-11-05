@@ -78,7 +78,7 @@ Processador, caches, placa-mãe, memória e SPD, gráficos, sensores, discos, re
   - Opções novas: `-sensors`, `-log=`, `-membench`, `-diff=`, `-checkupdate`.
   - Um `cpuzeez.ini` com as mesmas chaves do `cpuz.ini`.
 - **Atualização em um clique.** O app encontra releases novas e instala o pacote certo para o seu SO, depois de conferir o SHA-256.
-- **Um único binário nativo**, de cerca de 8 MB, sem dependências em tempo de execução.
+- **Um único binário nativo**, de cerca de 20 MB (a maior parte é o renderizador e o benchmark de GPU), sem dependências em tempo de execução.
 
 ## Screenshots
 
