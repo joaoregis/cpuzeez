@@ -37,7 +37,9 @@ Processor, caches, mainboard, memory and SPD, graphics, sensors, drives, network
 ## Highlights
 
 - **A modern interface.**
-  - Sidebar navigation and a live **Overview** dashboard: CPU, GPU and chipset temperatures with sparklines, plus health and throttling status.
+  - Sidebar navigation and a live **Overview**: a one-line summary of the build, health pills, tiles you choose (with presets), quick actions and opt-in local alerts.
+  - **Build health:** common setup mistakes and how to fix them (single memory module, XMP/EXPO off, GPU on fewer lanes, Resizable BAR off, power-saving plan, monitor below its refresh rate or plugged into the motherboard).
+  - A **command palette** (`Ctrl+K`) that finds any field, page or action; **Basic / Advanced / Expert** detail levels; copy or **pin** any row to the Overview; units of your choice (°C/°F, MHz/GHz, MB/MiB).
   - Card-based pages in light and dark themes, using the OS's own UI font.
   - Available in English, Português (Brasil) and Español.
 - **Everything CPU-Z reports.**
@@ -50,18 +52,24 @@ Processor, caches, mainboard, memory and SPD, graphics, sensors, drives, network
 - **A hardware monitor.**
   - Every sensor with min/max/average, live charts and CSV logging.
   - Thermal, power and current **throttling detection**.
-  - A **monitored stress test** that stops automatically at a temperature limit.
-  - A tray / menu-bar icon with the CPU temperature, and an always-on-top mini monitor.
+  - **Tray icons**, one per metric you pick, as a number, bar, mini graph or ring.
+  - **Mini monitors:** as many small always-on-top windows as you like, each with its own layout (list, bar, grid, one big number or your own), lockable (click-through), hidden while a full-screen game runs.
   - Sensor sources:
     - **CPU:** AMD SMU per-core temperatures, rails and PPT/TDC/EDC; Intel and AMD RAPL; per-core effective clocks.
     - **GPU:** temperature, hot spot, memory junction, fans, power, load.
     - **Mainboard:** Super I/O voltages, temperatures and fans, with maps for more than 150 board models.
     - **Chipset, DIMMs and drives.**
-- **Benchmarks.**
-  - CPU single- and multi-threaded, in Scalar, AVX2, AVX-512 and NEON variants.
-  - **Memory and cache latency and bandwidth.**
-  - A local **benchmark history** to compare before and after an overclock or a BIOS update.
-- **Devices.** Full **SMART** for NVMe and SATA, **battery health** (wear, cycles), and **network adapters** (link, IPs, DNS, driver, Wi-Fi).
+- **Benchmarks** (our own workloads; 1000 points = the reference Ryzen 9 7900X / RTX 4060):
+  - **CPU suite:** compression, n-body, SIMD matrix math, AES with and without the AES instructions, SHA-256, a ray tracer and sorting, single- and multi-threaded; thread scaling, P- vs E-cores, and a sustained run that shows throttling.
+  - **Memory:** latency and bandwidth per cache level, STREAM triad, GUPS, the cost of TLB misses, latency per CCD.
+  - **GPU** (DX12/Vulkan/Metal): FP32/FP16, VRAM bandwidth, the PCIe link both ways, a raster scene.
+  - **Storage:** sequential and 4K random, uncached, plus a sustained write that finds the SSD's cache size.
+  - **Core-to-core latency** heat map, and a **stability test** (CPU light/heavy/mixed, a memory test, GPU stress, or all at once) that stops itself at temperature limits.
+  - Every result records its conditions and can be saved to a local **history** and compared sub-test by sub-test.
+- **Devices.**
+  - **Drives:** full **SMART**, SMART self-tests, a read-only surface scan, written data against the rated endurance, partition alignment, TRIM, encryption, and the decoded Identify data.
+  - **Displays** (refresh rate, HDR, refresh range), **USB** as a tree with negotiated speed, **Thunderbolt/USB4**, **audio** devices with their format, **Bluetooth** battery levels.
+  - **Battery health** (wear, cycles) and **network adapters** (link, IPs, DNS, driver, Wi-Fi).
 - **Tools.**
   - **Compare reports**: what changed after a hardware or BIOS change.
   - Live clocks of every core and GPU, timers, and TXT/HTML/JSON export.
@@ -170,7 +178,7 @@ With Rust installed you can also run `cargo install --git https://github.com/joa
 
 ## Privileged hardware access
 
-Like CPU-Z, some information can only come from hardware registers: MSRs, the SMBus where the SPD EEPROMs live, the Super I/O sensor chip, the memory controller and the AMD SMU. CPU-Z installs its own kernel driver for this. **CpuZeeZ never ships a driver.** It uses what each OS already offers, and simply leaves out what it can't read.
+Like CPU-Z, some information can only come from hardware registers: MSRs, the SMBus where the SPD EEPROMs live, the Super I/O sensor chip, the memory controller and the AMD SMU. CPU-Z installs its own kernel driver for this. **CpuZeeZ has no driver of its own.** On Windows it uses [PawnIO](#windows-pawnio), a signed open-source driver that the packages include as an optional component; elsewhere it uses what the OS already offers. Whatever it can't read, it simply leaves out.
 
 | | Without privileges | With privileges |
 |---|---|---|
@@ -249,8 +257,8 @@ CheckUpdates=1  ; update notice at startup
 ```
 
 Interface preferences live in the per-user data folder, editable on the **Settings** page:
-- language, theme, tray icon, close to tray;
-- sensor sampling period, graph history, warning temperature.
+- language, theme, units, tray icons, close to tray, mini monitors and their layouts;
+- sensor sampling period, graph history, warning temperature, local alerts.
 
 The folder is `%APPDATA%\CpuZeeZ`, `~/Library/Application Support/CpuZeeZ` or `~/.config/cpuzeez`. It also holds the benchmark history (`history.json`) and the sensor logs.
 
@@ -300,7 +308,10 @@ Legend:
 | USB devices, NPU / AI devices | ✅ | ✅ | ☑️ |
 | Software: OS, edition, build, install date, DirectX / Vulkan / Metal | ✅ | ✅ | ☑️ |
 | Sensors page, CSV log, throttling detection, tray / mini monitor | ✅ | ✅ (mini monitor; tray needs a StatusNotifier host) | ☑️ |
-| CPU benchmark, memory/cache benchmark, history, stress test | ✅ | ✅ | ✅ (CI) |
+| CPU suite, memory, storage and core-to-core latency benchmarks, history, stability test | ✅ | ✅ | ✅ (CI; latency as a statistical spread) |
+| GPU benchmark (wgpu) | ✅ (DX12, Vulkan) | ☑️ (Vulkan) | ☑️ (Metal) |
+| Drive health: SMART self-tests, surface scan, endurance | ✅🔑 | ☑️🔑 | ❌ self-tests · ☑️🔑 scan |
+| Displays HDR / refresh range, audio formats, Thunderbolt/USB4, Bluetooth battery | ✅ | ☑️ | ☑️ |
 | Reports (TXT/HTML/JSON), compare reports, F5/F6/F7 | ✅ | ✅ | ✅ (CI) |
 
 ¹ No PawnIO module offers generic PCI configuration access on Windows. Device IDs, names and links still come from the OS.
@@ -387,25 +398,27 @@ Release ([`release.yml`](.github/workflows/release.yml)): pushing a `v*` tag bui
 
 ## Architecture
 
+A Cargo workspace ([ADR 0011](docs/adr/README.md)):
+
 ```
-src/
+crates/core/       pure logic, no OS calls, unit-tested everywhere:
+                   report tree, Metric Engine, Widget Engine layouts (overview, tray, mini monitors),
+                   SPD/EDID/SMART/Identify decoders, build health, alerts, units, detail levels
+crates/platform/   per-OS adapters: CPUID, privileged access (PawnIO / Linux kernel interfaces),
+                   disk/network/memory/GPU-engine counters, displays, firmware, partitions,
+                   C-states, uncached I/O, large pages, encryption
+src/               the app:
 ├── main.rs        CLI (CPU-Z options + -sensors/-log/-membench/-diff), Ctx, section order
-├── report.rs      report tree (Field / Group / Hex) → TXT, HTML, JSON (and back, for diffs)
-├── config.rs      cpuzeez.ini              settings.rs   per-user GUI preferences + data folder
-├── hw/            privileged access: trait Hw { rdmsr, pci_read, io, smn, smbus, smu, mchbar, pch }
-├── cpu/           CPUID (x86.rs), ARM (arm.rs), clocks, names database (db.rs)
-├── smbios.rs  bios.rs  chipset.rs (+ chipset/intel.rs, chipset/macos.rs)  pci/  spd/
-├── sensors/       Super I/O + board maps, AMD SMU (amd_pm.rs), RAPL, hwmon, SMC, PDH
-├── telemetry.rs   sampler: series, min/max/avg, CSV, throttling detection
-├── gpu/  npu.rs  storage.rs (+ storage/smart.rs)  battery.rs  network.rs  usb.rs  software.rs
-├── bench.rs  membench.rs  history.rs  diff.rs  timers.rs  update.rs
-└── gui/           egui front-end:
-                   theme.rs + widgets.rs  design system
-                   pages: overview, sensors, stress, devices, tools, settings_ui
-                   tray.rs, plot.rs, i18n.rs (en / pt-BR / es)
+├── cpu/  gpu/  pci/  spd/  sensors/  chipset.rs  smbios.rs  storage.rs  usb.rs  …   probes
+├── telemetry.rs   sampler on the Metric Engine: series, CSV, throttling detection
+├── benchkit.rs    benchmark principles (conditions, N runs, 1000-point score), background jobs
+├── bench.rs  cpusuite.rs  membench.rs  memplus.rs  gpubench.rs  diskbench.rs  latency.rs
+├── memtest.rs  drivetest.rs  history.rs  diff.rs  update.rs  executor.rs (audited actions)
+└── gui/           egui front-end: pages, benchmark views, tray, mini monitors, layout editor,
+                   command palette, i18n (en / pt-BR / es)
 ```
 
-Every probe returns report sections. The GUI, the TXT/HTML/JSON writers and `-console` all read that same tree, so the app and the report always agree.
+Every probe returns report sections. The GUI, the TXT/HTML/JSON writers and `-console` all read that same tree, so the app and the report always agree. The 1.0 plan and its roadmap are in [docs/v1/](docs/v1/README.md).
 
 ## Contributing
 

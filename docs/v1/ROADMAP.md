@@ -136,7 +136,6 @@ Goal: fix what's broken, build the shared building blocks, and set up the tests 
 
   | Spike | Waiting on | Blocks |
   |---|---|---|
-  | X02 (rest): DX12/Vulkan/OpenGL/FG, 240+ FPS | Games with those APIs | S2b gate |
   | X02 (rest): Frame Generation, 240+ FPS | A play session (DLSS/FSR FG game) | S2b gate |
   | X03, X09: overlay over games × display modes; overlay GPU cost | A play session with the overlay prototype (S2b) | S2b gate |
   | X04, X07, X11: macOS overlay over fullscreen, Metal HUD, per-process GPU | Mac results ([docs/testing/macos.md](../testing/macos.md)) | S2a/S2b gates |
