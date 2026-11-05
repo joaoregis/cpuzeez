@@ -24,12 +24,11 @@ generated from its section below.
   - The modules are installed next to the app, so nothing is left to download by hand.
   - [THIRD_PARTY.md](THIRD_PARTY.md) and *About › Third-party components* list what is bundled and under which license.
 - **The GUI opens on machines without a working OpenGL driver**, such as VMs, Remote Desktop and missing GPU drivers. If OpenGL fails, CpuZeeZ restarts its window on wgpu (DX12/WARP, Vulkan or Metal). `CZ_RENDERER=wgpu` forces it ([ADR 0013](docs/adr/0013-gui-renders-with-glow-and-falls-back-to-wgpu.md)).
+- **Per-disk activity** in the Sensors list and CSV logs: read/write speed, IOPS, latency, active time and queue for every physical disk, on Windows, Linux and macOS, without administrator rights.
 
 ### Changed
 
 - README (English and pt-BR): the install section now explains why the builds are unsigned (a paid certificate the project can't fund yet), what the SmartScreen/Gatekeeper warning means, and how to verify a download with `SHA256SUMS.txt`.
-
-- **Per-disk activity** in the Sensors list and CSV logs: read/write speed, IOPS, latency, active time and queue for every physical disk, on Windows, Linux and macOS, without administrator rights.
 
 ### Fixed
 
