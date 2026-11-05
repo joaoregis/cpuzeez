@@ -984,15 +984,7 @@ fn throttle_hook(ctx: Arc<Ctx>, out: Arc<Mutex<Vec<Throttle>>>) -> metrics::Hook
 pub fn cli_once(ctx: &Ctx) {
     let mut s = String::new();
     for r in read_all(ctx) {
-        s += &format!(
-            "{:<28} {:<32} {:>10.2} {:<4} {}
-",
-            r.group,
-            r.label,
-            r.value,
-            r.unit.suffix(),
-            r.id
-        );
+        s += &format!("{:<28} {:<32} {:>10.2} {:<4} {}\n", r.group, r.label, r.value, r.unit.suffix(), r.id);
     }
     crate::out(&s);
 }
