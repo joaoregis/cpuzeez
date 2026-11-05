@@ -678,7 +678,7 @@ fn charts(ui: &mut egui::Ui, series: &[Series], plotted: &BTreeSet<String>, span
     });
 }
 /// `settings::dir()/logs/cpuzeez-YYYYmmdd-HHMMSS.csv` (local time).
-fn log_path() -> Option<PathBuf> {
+pub(super) fn log_path() -> Option<PathBuf> {
     let dir = crate::settings::dir()?.join("logs");
     std::fs::create_dir_all(&dir).ok()?;
     Some(dir.join(format!("{}-{}.csv", crate::NAME, local_stamp())))

@@ -12,6 +12,7 @@ mod devices;
 pub mod i18n;
 pub mod overview;
 mod pages;
+mod palette;
 pub mod pins;
 mod settings_ui;
 mod shots;
@@ -172,6 +173,8 @@ struct App {
     /// Sensors page, stress monitor, tray and mini monitor (gui/sensors.rs).
     /// Its `settings` is the app's one copy of settings.json.
     mon: sensors::Monitor,
+    /// Ctrl+K search (S1-U02).
+    palette: palette::Palette,
 }
 
 pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
@@ -234,6 +237,7 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         update_manual: Arc::new(Mutex::new(None)),
         title: String::new(),
         mon,
+        palette: Default::default(),
     };
     if app.auto.is_none() {
         crate::data::expire_logs(app.mon.settings.log_retention_days);
@@ -640,6 +644,42 @@ impl App {
         if f7 {
             let r = self.report.lock().unwrap().clone();
             self.save(&r, "cvf");
+        }
+        if ectx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::K)) && self.welcome.is_none() {
+            let r = self.report.lock().unwrap().clone().unwrap_or_default();
+            let pages: Vec<(Page, &str)> = NAV.iter().chain(NAV_BOTTOM.iter()).map(|n| (n.0, n.2)).collect();
+            self.palette.open(&r, &pages);
+        }
+        if let Some(t) = self.palette.show(ectx) {
+            self.run_palette(t);
+        }
+    }
+
+    /// What the command palette picked (S1-U02).
+    fn run_palette(&mut self, t: palette::Target) {
+        use palette::{Act, Target};
+        match t {
+            Target::Page(p) => self.page = p,
+            Target::Act(Act::SaveTxt | Act::SaveHtml) => {
+                let r = self.report.lock().unwrap().clone();
+                self.save(&r, if t == Target::Act(Act::SaveTxt) { "txt" } else { "html" });
+            }
+            Target::Act(Act::ToggleCsv) => {
+                let tel = self.mon.tel();
+                if tel.csv_path().is_some() {
+                    tel.stop_csv();
+                } else if let Some(p) = sensors::log_path()
+                    && let Err(e) = tel.start_csv(&p)
+                {
+                    self.status = format!("{}: {e}", p.display());
+                }
+            }
+            Target::Act(Act::ToggleMini) => {
+                let on = !self.mon.show_mini;
+                self.mon.set_mini(on);
+            }
+            Target::Act(Act::ResetMinMax) => self.mon.tel().reset_stats(),
+            Target::Act(Act::Stress) => self.mon.show_stress = true,
         }
     }
 

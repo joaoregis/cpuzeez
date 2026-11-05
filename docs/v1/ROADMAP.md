@@ -163,7 +163,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 | ID | Item | Type | Source | Done when |
 |---|---|---|---|---|
 | S1-U01 | Detail levels: Basic / Advanced / Expert | ✨ | [core-pages §1](core-pages.md) | On every page; kittest. ✅ Switch in the Processor, Mainboard, Memory and Graphics headers, remembered per page; Advanced (default) = the pre-1.0 view, Basic = essentials, Expert adds thread 0's CPUID leaves and MSRs (`core::detail`, kittest `detail_levels_filter_cards`). Devices/Sensors get it with their S1-G07/G08 rebuilds |
-| S1-U02 | **Command palette** (`Ctrl+K`): search every page, run actions | ✨ | core-pages §1 | Finds fields and actions across pages |
+| S1-U02 | **Command palette** (`Ctrl+K`): search every page, run actions | ✨ | core-pages §1 | Finds fields and actions across pages. ✅ Every report field (with its value and path), every page and six actions; every word must match, title-prefix first; Enter opens the page that shows it (tests + kittest) |
 | S1-U03 | Copy / copy as report text / **pin to Overview** on every row and card | ✨ | core-pages §1 | Everywhere. ✅ Right-click any card row (`widgets::kv_list`, so every page): copy value, row, card as text, pin. Sensors rows pin their metric (live on the Overview's *Pinned* card); pins persist in settings; kittest `a_row_pins_under_its_card` |
 | S1-U04 | Global units (°C/°F, MHz/GHz, MB/MiB, decimals) and a raw-value toggle | ✨ | core-pages §1 | Everywhere. ✅ `core::units` (tested) + *Settings › Units*; every live value, tile, tray/mini text and page clock goes through it; stored values stay °C/MHz/MiB. Raw values come with Expert detail (U01) |
 
