@@ -24,8 +24,10 @@ mod diskbench_view;
 mod drivehealth_view;
 mod gpubench_view;
 mod latency_view;
+mod layout_editor;
 pub mod layout_view;
 mod memplus_view;
+mod mini;
 mod plot;
 pub mod sensors;
 pub mod stress;
@@ -161,6 +163,9 @@ struct App {
     page: Page,
     /// Reload history.json when the History view is opened.
     history_dirty: bool,
+    /// Mini monitor whose editor is open in Settings, and its JSON import box.
+    mini_edit: Option<usize>,
+    mini_import: String,
     bench_view: BenchView,
     tool_view: ToolView,
     core: usize,
@@ -235,6 +240,8 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         welcome: (shots.is_none() && mon.settings.privacy_seen < welcome::PRIVACY_VERSION).then(Default::default),
         page: Page::Overview,
         history_dirty: true,
+        mini_edit: None,
+        mini_import: String::new(),
         bench_view: BenchView::Cpu,
         tool_view: ToolView::Compare,
         core: 0,
@@ -324,6 +331,12 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
 }
 
 impl eframe::App for App {
+    /// Transparent, so the mini monitors' rounded, see-through cards show the
+    /// desktop behind them (the main window's panels cover it).
+    fn clear_color(&self, _: &egui::Visuals) -> [f32; 4] {
+        [0.0; 4]
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         units::set(self.mon.settings.units);
         let ectx = ui.ctx().clone();
@@ -399,6 +412,10 @@ impl eframe::App for App {
                 }
             });
         self.mon.frame(&ectx);
+        if let Some(i) = self.mon.edit_mini.take() {
+            self.page = Page::Settings;
+            self.mini_edit = Some(i);
+        }
         self.take_screenshot(&ectx);
         self.auto_shots(&ectx, report.as_deref());
     }
@@ -685,19 +702,23 @@ impl App {
                     self.mon.apply_sampling();
                 }
                 ui.add_space(theme::GAP);
-                widgets::card(ui, icon::MONITOR, tr("Mini monitor"), |ui| {
-                    ui.label(
-                        RichText::new(tr("A small always-on-top window with CPU, GPU and chipset temperatures."))
-                            .color(theme::palette(ui).text_secondary),
-                    );
-                    let mut on = self.mon.show_mini;
-                    if ui.checkbox(&mut on, tr("Show the mini monitor")).changed() {
-                        self.mon.set_mini(on);
-                        if on {
-                            self.mon.tel();
-                        }
-                    }
+                let tjmax = self.mon.tjmax();
+                let mut minis = self.mon.settings.minis.clone();
+                widgets::card(ui, icon::MONITOR, tr("Mini monitors"), |ui| {
+                    mini::settings_card(ui, &mut minis, &mut self.mini_edit, &mut self.mini_import, tjmax);
                 });
+                if minis != self.mon.settings.minis {
+                    let on = minis.iter().any(|m| m.open);
+                    if persist {
+                        self.mon.set_setting(move |s| s.minis = minis.clone());
+                    } else {
+                        self.mon.settings.minis = minis;
+                    }
+                    self.mon.show_mini = on;
+                    if on {
+                        self.mon.tel();
+                    }
+                }
             }
             Page::About => self.about_tab(ui, r),
         }

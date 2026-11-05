@@ -72,6 +72,8 @@ fn tables() -> &'static [(Table, Table)] {
         (super::memplus_view::PT_BR, super::memplus_view::ES),
         (super::gpubench_view::PT_BR, super::gpubench_view::ES),
         (super::drivehealth_view::PT_BR, super::drivehealth_view::ES),
+        (super::mini::PT_BR, super::mini::ES),
+        (super::layout_editor::PT_BR, super::layout_editor::ES),
     ]
 }
 

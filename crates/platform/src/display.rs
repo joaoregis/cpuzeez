@@ -164,3 +164,18 @@ pub fn small_icon_px() -> Option<usize> {
     #[cfg(not(windows))]
     None
 }
+
+/// Whether a full-screen app (a game, a video, a presentation) has the
+/// foreground, so desktop widgets can step aside. Windows only; elsewhere false.
+pub fn fullscreen_app() -> bool {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::Shell::SHQueryUserNotificationState;
+        let mut state = 0;
+        // SAFETY: writes one enum value into `state`.
+        // QUNS_BUSY (2), QUNS_RUNNING_D3D_FULL_SCREEN (3), QUNS_PRESENTATION_MODE (4).
+        (unsafe { SHQueryUserNotificationState(&mut state) }) >= 0 && matches!(state, 2..=4)
+    }
+    #[cfg(not(windows))]
+    false
+}

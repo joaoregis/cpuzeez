@@ -19,6 +19,18 @@ pub enum Direction {
     #[default]
     Vertical,
     Horizontal,
+    /// `Layout::columns` per row.
+    Grid,
+}
+
+/// Colours of a surface: the app's theme, or always dark / light.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum Theme {
+    #[default]
+    Follow,
+    Dark,
+    Light,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -131,11 +143,12 @@ pub struct Style {
     /// Corner radius in points.
     pub corner: u8,
     pub padding: u8,
+    pub theme: Theme,
 }
 
 impl Default for Style {
     fn default() -> Self {
-        Style { scale: 1.0, opacity: 0.85, outline: false, corner: 8, padding: 8 }
+        Style { scale: 1.0, opacity: 0.85, outline: false, corner: 8, padding: 8, theme: Theme::Follow }
     }
 }
 
@@ -145,6 +158,8 @@ pub struct Layout {
     pub version: u32,
     pub name: String,
     pub direction: Direction,
+    /// Widgets per row in a grid.
+    pub columns: u8,
     pub style: Style,
     pub widgets: Vec<Widget>,
 }
@@ -155,6 +170,7 @@ impl Default for Layout {
             version: VERSION,
             name: String::new(),
             direction: Direction::Vertical,
+            columns: 2,
             style: Style::default(),
             widgets: Vec::new(),
         }
@@ -246,8 +262,34 @@ pub mod presets {
         }
     }
 
+    /// Four readings in two columns.
+    pub fn grid(tjmax: f64) -> Layout {
+        Layout {
+            name: "Grid".into(),
+            direction: Direction::Grid,
+            columns: 2,
+            widgets: vec![
+                Widget::metric(Kind::LabelValue, "@cpu_temp", "CPU").with_thresholds(&temp_thresholds(tjmax)),
+                Widget::metric(Kind::LabelValue, "@gpu_temp", "GPU").with_thresholds(&temp_thresholds(90.0)),
+                Widget::metric(Kind::LabelValue, "@cpu_load", "CPU %").with_thresholds(&[(90.0, Tone::Warning)]),
+                Widget::metric(Kind::LabelValue, "@gpu_load", "GPU %"),
+            ],
+            ..Default::default()
+        }
+    }
+
+    /// One big number (the CPU temperature).
+    pub fn big(tjmax: f64) -> Layout {
+        Layout {
+            name: "Big number".into(),
+            style: Style { scale: 3.0, ..Style::default() },
+            widgets: vec![Widget::metric(Kind::Value, "@cpu_temp", "CPU").with_thresholds(&temp_thresholds(tjmax))],
+            ..Default::default()
+        }
+    }
+
     pub fn all(tjmax: f64) -> Vec<Layout> {
-        vec![mini(tjmax), compact(tjmax), detailed(tjmax)]
+        vec![mini(tjmax), compact(tjmax), detailed(tjmax), grid(tjmax), big(tjmax)]
     }
 
     /// The Overview's tile sets (S1-G01). "Default" is the pre-1.0 Overview.
@@ -289,6 +331,69 @@ pub mod presets {
                 temp("@chipset_temp", "Chipset temperature", 90.0),
             ],
         }
+    }
+}
+
+/// Mini monitors (S1-M02): each one is a layout shown in its own small
+/// always-on-top window, with where it sits and how it behaves.
+pub mod mini {
+    use super::Layout;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[serde(default)]
+    pub struct Mini {
+        pub layout: Layout,
+        pub open: bool,
+        /// Top-left corner on the desktop (points); None = the OS picks.
+        pub pos: Option<[f32; 2]>,
+        /// Click-through: it becomes part of the desktop.
+        pub locked: bool,
+        pub hide_fullscreen: bool,
+        /// Show more detail while the pointer is over it.
+        pub expand_hover: bool,
+    }
+
+    impl Default for Mini {
+        fn default() -> Self {
+            Mini {
+                layout: super::presets::mini(95.0),
+                open: true,
+                pos: None,
+                locked: false,
+                hide_fullscreen: true,
+                expand_hover: false,
+            }
+        }
+    }
+
+    /// Snaps a window at `pos` (size `size`) to the edges of a `screen`-sized
+    /// area when it's within `dist` of one.
+    pub fn snap(pos: [f32; 2], size: [f32; 2], screen: [f32; 2], dist: f32) -> [f32; 2] {
+        let axis = |p: f32, s: f32, max: f32| {
+            if p.abs() <= dist {
+                0.0
+            } else if (max - (p + s)).abs() <= dist {
+                max - s
+            } else {
+                p
+            }
+        };
+        [axis(pos[0], size[0], screen[0]), axis(pos[1], size[1], screen[1])]
+    }
+
+    /// The hover-expanded version: every reading gets its graph, one per line.
+    pub fn expanded(l: &Layout) -> Layout {
+        use super::{Direction, Kind};
+        let mut e = l.clone();
+        e.direction = Direction::Vertical;
+        for w in &mut e.widgets {
+            if matches!(w.kind, Kind::Value | Kind::LabelValue) {
+                w.kind = Kind::Sparkline;
+            }
+        }
+        e.style.scale = e.style.scale.min(1.5);
+        e
     }
 }
 
@@ -379,5 +484,21 @@ pub mod tray {
         #[default]
         App,
         Mini,
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn mini_snaps_and_expands() {
+        use crate::layout::{Direction, Kind, mini::*, presets};
+        let scr = [1920.0, 1080.0];
+        assert_eq!(snap([10.0, 500.0], [200.0, 100.0], scr, 20.0), [0.0, 500.0]);
+        assert_eq!(snap([1715.0, 975.0], [200.0, 100.0], scr, 20.0), [1720.0, 980.0], "right/bottom edges");
+        assert_eq!(snap([600.0, 500.0], [200.0, 100.0], scr, 20.0), [600.0, 500.0], "far from edges: unchanged");
+        let e = expanded(&presets::compact(95.0));
+        assert_eq!(e.direction, Direction::Vertical);
+        assert!(e.widgets.iter().all(|w| w.kind == Kind::Sparkline));
+        let m = Mini::default();
+        let back: Mini = serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
+        assert_eq!(back, m);
     }
 }

@@ -64,6 +64,8 @@ pub struct Settings {
     /// Tray icons, one per metric (S1-M01).
     pub tray_items: Vec<cpuzeez_core::layout::tray::Item>,
     pub tray_click: cpuzeez_core::layout::tray::Click,
+    /// Mini monitors (S1-M02). Empty = one default, open when `mini` is set.
+    pub minis: Vec<cpuzeez_core::layout::mini::Mini>,
 }
 
 /// A row pinned to the Overview (S1-U03).
@@ -104,6 +106,7 @@ impl Default for Settings {
             tbw: Default::default(),
             tray_items: vec![Default::default()],
             tray_click: Default::default(),
+            minis: Vec::new(),
         }
     }
 }

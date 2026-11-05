@@ -26,6 +26,7 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Pause monitoring", "Pausar monitoramento"),
     ("Resume monitoring", "Retomar monitoramento"),
     ("Update every", "Atualizar a cada"),
+    ("Lock mini monitors", "Travar mini monitores"),
     ("Quit", "Sair"),
 ];
 pub const ES: &[(&str, &str)] = &[
@@ -36,6 +37,7 @@ pub const ES: &[(&str, &str)] = &[
     ("Pause monitoring", "Pausar la supervisión"),
     ("Resume monitoring", "Reanudar la supervisión"),
     ("Update every", "Actualizar cada"),
+    ("Lock mini monitors", "Bloquear minimonitores"),
     ("Quit", "Salir"),
 ];
 
@@ -54,6 +56,7 @@ pub enum Action {
     Mini,
     Sensors,
     Pause,
+    Lock,
     Speed(u64),
     Quit,
 }
@@ -65,6 +68,8 @@ pub struct MenuState {
     pub mini: bool,
     pub paused: bool,
     pub speed_ms: u64,
+    /// Some(locked) while a mini monitor is open.
+    pub lock: Option<bool>,
 }
 
 /// Menu/click events from the tray backends (their callbacks run on other
@@ -90,6 +95,7 @@ fn event(id: &str) {
         "mini" => push(Action::Mini),
         "sensors" => push(Action::Sensors),
         "pause" => push(Action::Pause),
+        "lock" => push(Action::Lock),
         "quit" => push(Action::Quit),
         s => {
             if let Some(ms) = s.strip_prefix("speed-").and_then(|v| v.parse().ok()) {
@@ -117,16 +123,22 @@ pub fn menu(s: &MenuState) -> Vec<Row> {
             item(&format!("speed-{ms}"), &label, Some(ms == s.speed_ms))
         })
         .collect();
-    vec![
+    let mut rows = vec![
         item("toggle", tr(if s.visible { "Hide CpuZeeZ" } else { "Show CpuZeeZ" }), None),
         item("mini", tr("Mini monitor"), Some(s.mini)),
+    ];
+    if let Some(l) = s.lock {
+        rows.push(item("lock", tr("Lock mini monitors"), Some(l)));
+    }
+    rows.extend([
         item("sensors", tr("Sensors"), None),
         Row::Separator,
         item("pause", tr(if s.paused { "Resume monitoring" } else { "Pause monitoring" }), None),
         Row::Sub { label: tr("Update every").into(), items: speeds },
         Row::Separator,
         item("quit", tr("Quit"), None),
-    ]
+    ]);
+    rows
 }
 
 /// One icon's picture and tooltip line, ready to show.
@@ -426,7 +438,7 @@ mod tests {
 
     #[test]
     fn menu_follows_its_state() {
-        let s = MenuState { visible: true, mini: false, paused: false, speed_ms: 1000 };
+        let s = MenuState { visible: true, mini: false, paused: false, speed_ms: 1000, lock: None };
         let m = menu(&s);
         assert!(matches!(&m[0], Row::Item { label, .. } if label == "Hide CpuZeeZ"));
         let Row::Sub { items, .. } = &m[5] else { panic!("speed submenu") };

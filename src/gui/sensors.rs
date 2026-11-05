@@ -116,7 +116,6 @@ const CHART_MIN_H: f32 = 120.0;
 const MIN_SPAN: f64 = 60.0;
 const CHART_MAX_H: f32 = 220.0;
 const WINDOW_SIZE: [f32; 2] = [900.0, 760.0];
-const MINI_SIZE: [f32; 2] = [230.0, 96.0];
 
 #[derive(Default)]
 struct View {
@@ -152,15 +151,23 @@ pub struct Monitor {
     pub paused: bool,
     /// (icons, click) the tray was built with, to rebuild when they change.
     tray_shape: (usize, tray::Click),
+    pub(super) mini_rt: super::mini::Runtime,
+    /// A mini monitor asked for its editor (Settings opens on it).
+    pub edit_mini: Option<usize>,
 }
 
 impl Monitor {
     pub fn new(ctx: Arc<Ctx>) -> Monitor {
-        let settings = Settings::load();
+        let mut settings = Settings::load();
+        if settings.minis.is_empty() {
+            // 0.3.0 / early 1.0 files: one mini monitor, open if it was.
+            let open = settings.mini;
+            settings.minis.push(cpuzeez_core::layout::mini::Mini { open, ..Default::default() });
+        }
         Monitor {
             ctx,
             tel: None,
-            show_mini: settings.mini,
+            show_mini: settings.minis.iter().any(|m| m.open),
             alerts: Vec::new(),
             settings,
             show_sensors: false,
@@ -174,6 +181,8 @@ impl Monitor {
             hidden: false,
             paused: false,
             tray_shape: (0, tray::Click::App),
+            mini_rt: Default::default(),
+            edit_mini: None,
         }
     }
 
@@ -211,12 +220,18 @@ impl Monitor {
         }
     }
 
-    /// Show or hide the mini monitor and remember it.
+    /// Show or hide every mini monitor and remember it.
     pub fn set_mini(&mut self, on: bool) {
-        if on != self.show_mini {
-            self.show_mini = on;
-            self.set_setting(|s| s.mini = on);
-        }
+        self.show_mini = on;
+        self.set_setting(|s| {
+            s.mini = on;
+            if s.minis.is_empty() {
+                s.minis.push(Default::default());
+            }
+            for m in &mut s.minis {
+                m.open = on;
+            }
+        });
     }
 
     /// CPU Tjmax, else the configured warning temperature.
@@ -302,6 +317,10 @@ impl Monitor {
                     let on = !self.show_mini;
                     self.set_mini(on);
                 }
+                tray::Action::Lock => {
+                    let on = !self.settings.minis.iter().any(|m| m.open && m.locked);
+                    self.set_setting(move |s| s.minis.iter_mut().filter(|m| m.open).for_each(|m| m.locked = on));
+                }
                 tray::Action::Pause => {
                     self.paused = !self.paused;
                     self.apply_sampling();
@@ -335,9 +354,6 @@ impl Monitor {
                 lease.extend(shown.iter().map(|s| s.to_string()));
                 tel.want("tray", &lease.iter().map(String::as_str).collect::<Vec<_>>());
             }
-            if self.show_mini {
-                tel.want("mini", &shown);
-            }
             if self.settings.alerts_on {
                 let ws: Vec<cpuzeez_core::layout::Widget> = self
                     .settings
@@ -362,6 +378,7 @@ impl Monitor {
                     mini: self.show_mini,
                     paused: self.paused,
                     speed_ms: self.settings.sample_ms,
+                    lock: self.show_mini.then(|| self.settings.minis.iter().any(|m| m.open && m.locked)),
                 };
                 self.tray.update(&shown, &extra, &state);
             }
@@ -392,48 +409,7 @@ impl Monitor {
             self.show_stress = open;
         }
         if self.show_mini {
-            self.mini(ectx);
-        }
-    }
-
-    /// Always-on-top borderless window with the key readings (all OSes).
-    fn mini(&mut self, ectx: &egui::Context) {
-        let tel = self.tel();
-        let series = tel.series_with(|_| false);
-        let layout = cpuzeez_core::layout::presets::mini(self.tjmax());
-        let builder = egui::ViewportBuilder::default()
-            .with_title(format!("{} · {}", crate::DISPLAY_NAME, tr("Mini monitor")))
-            .with_inner_size(MINI_SIZE)
-            .with_always_on_top()
-            .with_decorations(false)
-            .with_resizable(false);
-        let keep = ectx.show_viewport_immediate(egui::ViewportId::from_hash_of("mini-monitor"), builder, |ui, _| {
-            let mut keep = !ui.ctx().input(|i| i.viewport().close_requested());
-            egui::CentralPanel::default().show(ui, |ui| {
-                let bg = ui.interact(ui.max_rect(), ui.id().with("drag"), egui::Sense::click_and_drag());
-                if bg.drag_started() {
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
-                }
-                bg.context_menu(|ui| {
-                    if ui.button(tr("Show CpuZeeZ")).clicked() {
-                        ectx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
-                        ectx.send_viewport_cmd(egui::ViewportCommand::Focus);
-                    }
-                    if ui.button(tr("Close")).clicked() {
-                        keep = false;
-                    }
-                });
-                let drawn = super::layout_view::show(ui, &layout, &series, &|id| tel.points(id)).rect;
-                // Fit the window to what was drawn (fonts and DPI vary by OS).
-                let want = egui::vec2(drawn.width(), drawn.height()) + egui::vec2(16.0, 16.0);
-                if (ui.ctx().content_rect().size() - want).length() > 2.0 {
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(want));
-                }
-            });
-            keep
-        });
-        if !keep {
-            self.set_mini(false);
+            super::mini::show_all(self, ectx);
         }
     }
 }

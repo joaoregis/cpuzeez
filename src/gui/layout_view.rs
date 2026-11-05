@@ -120,28 +120,61 @@ pub fn show(
     series: &[Series],
     points: &dyn Fn(&str) -> Vec<(f64, f64)>,
 ) -> egui::Response {
-    let p = theme::palette(ui);
-    let st = &layout.style;
-    let bg = p.card.gamma_multiply(st.opacity.clamp(0.0, 1.0));
-    Frame::default()
-        .fill(bg)
-        .corner_radius(CornerRadius::same(st.corner))
-        .inner_margin(Margin::same(st.padding as i8))
-        .show(ui, |ui| {
-            let body = |ui: &mut Ui| {
-                for (i, w) in layout.widgets.iter().enumerate() {
-                    if layout.direction == Direction::Horizontal && i > 0 && w.kind != Kind::Separator {
-                        ui.label(RichText::new("·").color(p.text_muted));
-                    }
-                    widget(ui, w, series, points, st.scale);
+    ui.scope(|ui| {
+        let st = &layout.style;
+        match st.theme {
+            cpuzeez_core::layout::Theme::Dark => ui.style_mut().visuals = egui::Visuals::dark(),
+            cpuzeez_core::layout::Theme::Light => ui.style_mut().visuals = egui::Visuals::light(),
+            cpuzeez_core::layout::Theme::Follow => {}
+        }
+        let p = theme::palette(ui);
+        let bg = p.card.gamma_multiply(st.opacity.clamp(0.0, 1.0));
+        // ponytail: "outline" is a dark plate behind each reading, not a glyph
+        // stroke; it reads over any background. A real stroke needs painted text.
+        let one = |ui: &mut Ui, w: &Widget| {
+            if st.outline {
+                Frame::default()
+                    .fill(Color32::from_black_alpha(150))
+                    .corner_radius(CornerRadius::same(4))
+                    .inner_margin(Margin::symmetric(4, 1))
+                    .show(ui, |ui| widget(ui, w, series, points, st.scale));
+            } else {
+                widget(ui, w, series, points, st.scale);
+            }
+        };
+        Frame::default()
+            .fill(bg)
+            .corner_radius(CornerRadius::same(st.corner))
+            .inner_margin(Margin::same(st.padding as i8))
+            .show(ui, |ui| match layout.direction {
+                Direction::Vertical => {
+                    ui.vertical(|ui| layout.widgets.iter().for_each(|w| one(ui, w)));
                 }
-            };
-            match layout.direction {
-                Direction::Vertical => ui.vertical(body),
-                Direction::Horizontal => ui.horizontal(body),
-            };
-        })
-        .response
+                Direction::Horizontal => {
+                    ui.horizontal(|ui| {
+                        for (i, w) in layout.widgets.iter().enumerate() {
+                            if i > 0 && w.kind != Kind::Separator {
+                                ui.label(RichText::new("·").color(p.text_muted));
+                            }
+                            one(ui, w);
+                        }
+                    });
+                }
+                Direction::Grid => {
+                    let cols = layout.columns.max(1) as usize;
+                    egui::Grid::new(ui.id().with("layout-grid")).spacing([12.0, 4.0]).show(ui, |ui| {
+                        for (i, w) in layout.widgets.iter().enumerate() {
+                            one(ui, w);
+                            if (i + 1) % cols == 0 {
+                                ui.end_row();
+                            }
+                        }
+                    });
+                }
+            })
+            .response
+    })
+    .inner
 }
 
 fn widget(ui: &mut Ui, w: &Widget, series: &[Series], points: &dyn Fn(&str) -> Vec<(f64, f64)>, scale: f32) {
@@ -212,7 +245,8 @@ fn widget(ui: &mut Ui, w: &Widget, series: &[Series], points: &dyn Fn(&str) -> V
 }
 
 fn bar(ui: &mut Ui, frac: f32, color: Color32, h: f32) {
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width().min(160.0), h), egui::Sense::hover());
+    let (rect, _) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width().clamp(60.0, 160.0), h), egui::Sense::hover());
     let r = CornerRadius::same(3);
     ui.painter().rect_filled(rect, r, theme::palette(ui).border);
     let mut fill = rect;
