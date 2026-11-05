@@ -33,6 +33,7 @@ pub mod units;
 
 pub mod cpu {
     pub mod db;
+    pub mod limits;
 }
 pub mod gpu {
     pub mod db;

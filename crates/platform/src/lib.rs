@@ -6,6 +6,7 @@
 //! each page is rebuilt (docs/v1/engineering.md §10).
 
 pub mod cpu_os;
+pub mod cstates;
 pub mod direct_io;
 pub mod disk_io;
 pub mod display;

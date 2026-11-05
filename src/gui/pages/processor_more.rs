@@ -7,6 +7,10 @@ use crate::gui::*;
 use cpuzeez_core::detail::Level;
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Idle states", "Estados de repouso"),
+    ("Preferred", "Preferido"),
+    ("PL1 (long-term)", "PL1 (longo prazo)"),
+    ("PL2 (short-term)", "PL2 (curto prazo)"),
     ("Cores", "Núcleos"),
     ("Topology", "Topologia"),
     ("Package {}", "Encapsulamento {}"),
@@ -40,6 +44,10 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Idle states", "Estados de reposo"),
+    ("Preferred", "Preferido"),
+    ("PL1 (long-term)", "PL1 (largo plazo)"),
+    ("PL2 (short-term)", "PL2 (corto plazo)"),
     ("Cores", "Núcleos"),
     ("Topology", "Topología"),
     ("Package {}", "Encapsulado {}"),
@@ -81,6 +89,10 @@ struct CoreRow {
     mhz: Option<f64>,
     temp: Option<f64>,
     load: Option<f64>,
+    /// "C1 20% · C2 70%" (deepest states last).
+    cstates: String,
+    /// CPPC rank (1 = preferred) and highest performance.
+    cppc: Option<(usize, u32)>,
 }
 
 /// Instruction groups and what each one is for (short, plain words).
@@ -110,6 +122,9 @@ impl App {
         tel.want("processor-cores", &["cpu/"]);
         let snap = tel.snapshot();
         let get = |id: String| snap.get(&id).map(|s| s.current);
+        let cst = cpuzeez_platform::cstates::read();
+        let highest = crate::cpu::power::cppc(&self.ctx);
+        let ranks = cpuzeez_core::cpu::limits::ranks(highest);
         let cores: Vec<CoreRow> = c
             .logical
             .iter()
@@ -130,6 +145,11 @@ impl App {
                     mhz: get(format!("cpu/clock/core{i}")),
                     temp: get(format!("cpu/temp/core{i}")),
                     load: (!threads.is_empty()).then(|| threads.iter().sum::<f64>() / threads.len() as f64),
+                    cstates: cst
+                        .get(l.cpu)
+                        .map(|v| v.iter().map(|(n, p)| format!("{n} {p:.0}%")).collect::<Vec<_>>().join(" · "))
+                        .unwrap_or_default(),
+                    cppc: ranks.get(i).copied().flatten().zip(highest.get(i).copied().flatten()),
                 }
             })
             .collect();
@@ -164,10 +184,22 @@ impl App {
                     r.load.map_or_else(dash, |l| Cell::num(l, format!("{l:.0} %")))
                 })
                 .right(),
-            );
+            )
+            .col(Column::new("cstates", tr("Idle states"), 200.0, |r: &CoreRow| Cell::Text(r.cstates.clone())))
+            .col(Column::new("cppc", tr("Preferred"), 110.0, |r: &CoreRow| match r.cppc {
+                Some((rank, perf)) => Cell::num(rank as f64, format!("#{rank} ({perf})")),
+                None => Cell::Text(String::new()),
+            }));
         // Hybrid CPUs (P/E cores) only: elsewhere the column would be empty.
         if cores.iter().all(|r| r.kind.is_empty()) {
             self.cores_table.hidden.insert("type".into());
+        }
+        // Columns with nothing to show here (no CPPC ranking, no C-state counters).
+        if cores.iter().all(|r| r.cppc.is_none()) {
+            self.cores_table.hidden.insert("cppc".into());
+        }
+        if cores.iter().all(|r| r.cstates.is_empty()) {
+            self.cores_table.hidden.insert("cstates".into());
         }
         let h = (cores.len() as f32 + 3.0) * 30.0;
         widgets::card(ui, "", "", |ui| {
@@ -179,10 +211,10 @@ impl App {
 
         topology(ui, c);
 
-        // AMD SMU limits (PawnIO / ryzen_smu); Intel's live in MSRs we don't read yet.
+        // AMD SMU limits (PawnIO / ryzen_smu); Intel PL1/PL2 from MSRs 606h/610h.
         let lim =
             |id: &str, label: &'static str, unit: &str| get(id.to_string()).map(|v| (label, format!("{v:.0} {unit}")));
-        let limits: Vec<(&str, String)> = [
+        let mut limits: Vec<(&str, String)> = [
             lim("cpu/power/pptlimit", "PPT Limit", "W"),
             lim("cpu/curr/tdclimit", "TDC Limit", "A"),
             lim("cpu/curr/edclimit", "EDC Limit", "A"),
@@ -190,6 +222,12 @@ impl App {
         .into_iter()
         .flatten()
         .collect();
+        if let Some((pl1, pl2)) = crate::cpu::power::intel_limits(&self.ctx) {
+            let off = |l: &cpuzeez_core::cpu::limits::Limit| if l.enabled { "" } else { " (off)" };
+            let tau = pl1.seconds.map_or(String::new(), |s| format!(", τ {s:.0} s"));
+            limits.push(("PL1 (long-term)", format!("{:.0} W{tau}{}", pl1.watts, off(&pl1))));
+            limits.push(("PL2 (short-term)", format!("{:.0} W{}", pl2.watts, off(&pl2))));
+        }
         if !limits.is_empty() {
             boxed(ui, "Power limits", &limits);
         }
