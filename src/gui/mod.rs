@@ -359,6 +359,7 @@ impl eframe::App for App {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         // The ETW session behind the Network column outlives the process otherwise.
         cpuzeez_platform::proc_net::stop();
+        self.system.history.flush();
     }
 
     /// Transparent, so the mini monitors' rounded, see-through cards show the
@@ -372,6 +373,9 @@ impl eframe::App for App {
         let ectx = ui.ctx().clone();
         self.take_pins(&ectx);
         ectx.request_repaint_after(Duration::from_millis(500));
+        if self.auto.is_none() {
+            self.system.background(&self.mon.settings);
+        }
         self.hotkeys(&ectx);
         self.window_title(&ectx);
         self.access.frame(&ectx);

@@ -19,3 +19,7 @@ Apache-2.0, BSD, ISC, Zlib, Unicode-3.0, MPL-2.0, BSL-1.0, OFL-1.1). CI enforces
 this with `cargo deny` ([`deny.toml`](deny.toml)). Scoped exceptions:
 egui's bundled fonts (Ubuntu Font Licence 1.0) and `ksni`, the Linux tray
 (Unlicense, public domain). The full list: `cargo deny list`.
+
+**SQLite** ([sqlite.org](https://sqlite.org), public domain) is compiled in
+through `rusqlite`'s `bundled` feature for the App history store; no system
+SQLite is used.

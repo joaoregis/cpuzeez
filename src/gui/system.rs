@@ -375,9 +375,6 @@ impl State {
         self.history.enabled = mon.settings.app_history_enabled;
         self.history.retention_days = mon.settings.app_history_retention_days;
         let snap = self.sampler.snapshot();
-        if self.tab != SysTab::AppHistory {
-            self.history.ingest_snapshot(&snap);
-        }
         if self.tab == SysTab::Performance {
             self.header_and_tabs(ui, &snap);
             self.perf.show(ui, ctx, mon, &snap);
@@ -389,6 +386,13 @@ impl State {
             let on = self.history.enabled;
             mon.set_setting(|s| s.app_history_enabled = on);
         }
+    }
+
+    /// Every frame, whatever page is shown: the app history recorder.
+    pub fn background(&mut self, settings: &crate::settings::Settings) {
+        self.history.enabled = settings.app_history_enabled;
+        self.history.retention_days = settings.app_history_retention_days;
+        self.history.background(&self.sampler);
     }
 
     fn header_and_tabs(&mut self, ui: &mut Ui, snap: &Snapshot) {
@@ -462,7 +466,7 @@ impl State {
                 let ctx = Arc::new(crate::Ctx::new(Default::default()));
                 self.perf.show_with_series(ui, &ctx, &[], 0.0, snap);
             }
-            SysTab::AppHistory => self.history.show(ui, snap),
+            SysTab::AppHistory => self.history.show(ui),
             SysTab::Startup => self.startup.show(ui),
             SysTab::Users => self.users.show(ui, snap),
             SysTab::Services => self.services.show(ui),
