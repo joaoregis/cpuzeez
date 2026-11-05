@@ -26,6 +26,7 @@ pub mod proc_ops;
 pub mod procs;
 pub mod services;
 pub mod startup;
+pub mod users;
 
 pub mod cpu {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]

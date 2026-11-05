@@ -38,6 +38,7 @@ pub mod system;
 pub mod system_perf;
 pub mod system_services;
 pub mod system_startup;
+pub mod system_users;
 pub mod table;
 mod tray;
 mod trayicon;

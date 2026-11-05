@@ -253,6 +253,7 @@ pub struct State {
     pub perf: super::system_perf::State,
     pub services: super::system_services::State,
     pub startup: super::system_startup::State,
+    pub users: super::system_users::State,
     pub mode: ProcMode,
     pub tree: bool,
     pub preset: Preset,
@@ -284,6 +285,7 @@ impl Default for State {
             perf: Default::default(),
             services: Default::default(),
             startup: Default::default(),
+            users: Default::default(),
             mode: ProcMode::Grouped,
             tree: false,
             preset,
@@ -430,14 +432,7 @@ impl State {
                 );
             }
             SysTab::Startup => self.startup.show(ui),
-            SysTab::Users => {
-                widgets::empty_state(
-                    ui,
-                    icon::USERS,
-                    tr("Users"),
-                    tr("Signed-in user sessions and resource usage (S2a-09)."),
-                );
-            }
+            SysTab::Users => self.users.show(ui, snap),
             SysTab::Services => self.services.show(ui),
         }
 

@@ -78,6 +78,7 @@ fn tables() -> &'static [(Table, Table)] {
         (super::system_perf::PT_BR, super::system_perf::ES),
         (super::system_services::PT_BR, super::system_services::ES),
         (super::system_startup::PT_BR, super::system_startup::ES),
+        (super::system_users::PT_BR, super::system_users::ES),
     ]
 }
 
