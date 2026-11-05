@@ -59,6 +59,8 @@ pub struct Settings {
     /// Local alerts are opt-in (P1): off until turned on in Settings.
     pub alerts_on: bool,
     pub alerts: Vec<cpuzeez_core::alerts::Rule>,
+    /// Rated endurance (TB written) per drive serial, typed by the user.
+    pub tbw: std::collections::BTreeMap<String, f64>,
 }
 
 /// A row pinned to the Overview (S1-U03).
@@ -96,6 +98,7 @@ impl Default for Settings {
             overview_tiles: None,
             alerts_on: false,
             alerts: cpuzeez_core::alerts::defaults(),
+            tbw: Default::default(),
         }
     }
 }

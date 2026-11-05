@@ -21,6 +21,7 @@ mod update_ui;
 mod benchkit_view;
 mod cpusuite_view;
 mod diskbench_view;
+mod drivehealth_view;
 mod gpubench_view;
 mod latency_view;
 pub mod layout_view;
@@ -98,6 +99,7 @@ enum ToolView {
     Clocks,
     Timers,
     Reports,
+    Drives,
 }
 
 enum Shot {
@@ -191,6 +193,7 @@ struct App {
     latency: latency_view::State,
     cpusuite: cpusuite_view::State,
     memplus: memplus_view::State,
+    drivehealth: drivehealth_view::State,
     gpubench: gpubench_view::State,
     diskbench: diskbench_view::State,
 }
@@ -262,6 +265,7 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         latency: Default::default(),
         cpusuite: Default::default(),
         memplus: Default::default(),
+        drivehealth: Default::default(),
         gpubench: Default::default(),
         diskbench: Default::default(),
     };

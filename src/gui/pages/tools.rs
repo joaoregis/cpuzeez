@@ -13,6 +13,7 @@ impl App {
                 (ToolView::Compare, icon::GIT_DIFF, tr("Compare reports")),
                 (ToolView::Clocks, icon::SPEEDOMETER, tr("Clocks")),
                 (ToolView::Timers, icon::TIMER, tr("Timers")),
+                (ToolView::Drives, icon::HEARTBEAT, tr("Drive health")),
                 (ToolView::Reports, icon::EXPORT, tr("Reports")),
             ],
         );
@@ -20,6 +21,7 @@ impl App {
             ToolView::Compare => self.compare.page(ui, Some(r)),
             ToolView::Clocks => self.clocks_body(ui),
             ToolView::Timers => timers_body(ui, r),
+            ToolView::Drives => self.drivehealth.page(ui, &self.ctx, &mut self.mon),
             ToolView::Reports => {
                 widgets::card(ui, icon::FILE_TEXT, tr("Save a report"), |ui| {
                     ui.label(

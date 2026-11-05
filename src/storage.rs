@@ -460,7 +460,7 @@ pub(crate) mod win {
 }
 
 #[cfg(windows)]
-mod imp {
+pub(crate) mod imp {
     use super::win::*;
     use super::{Drive, Volume, ata_identify, controller_class, controller_line, link_line};
     use crate::Ctx;
@@ -481,6 +481,11 @@ mod imp {
     /// (0xEC) or SMART (0xB0) READ DATA (0xD0) / READ THRESHOLDS (0xD1).
     /// Needs a read/write handle, i.e. admin.
     fn ata_cmd(h: &Handle, command: u8, features: u8) -> Option<Vec<u8>> {
+        ata_cmd_lba(h, command, features, 0)
+    }
+
+    /// [`ata_cmd`] with LBA low set (SMART READ LOG takes the log address there).
+    pub(crate) fn ata_cmd_lba(h: &Handle, command: u8, features: u8, lba_lo: u8) -> Option<Vec<u8>> {
         const IOCTL_ATA_PASS_THROUGH: u32 = 0x4D02C;
         // ATA_PASS_THROUGH_EX: DataBufferOffset is a ULONG_PTR.
         let (hdr, off_at) = if cfg!(target_pointer_width = "64") { (48, 24) } else { (40, 20) };
@@ -494,12 +499,69 @@ mod imp {
         let tf = &mut q[hdr - 8..hdr];
         tf[0] = features;
         tf[1] = 1;
+        tf[2] = lba_lo;
         if command == 0xB0 {
             (tf[3], tf[4]) = (0x4F, 0xC2); // SMART signature
         }
         tf[6] = command;
         let out = h.ioctl(IOCTL_ATA_PASS_THROUGH, &q, q.len())?;
         out.get(hdr..hdr + 512).filter(|d| d.iter().any(|&b| b != 0)).map(<[u8]>::to_vec)
+    }
+
+    /// A non-data SMART command (SMART EXECUTE OFF-LINE IMMEDIATE: features
+    /// D4h, the subcommand in LBA low). Needs a read/write handle (admin).
+    pub(crate) fn ata_smart_nodata(h: &Handle, features: u8, lba_lo: u8) -> Result<(), String> {
+        const IOCTL_ATA_PASS_THROUGH: u32 = 0x4D02C;
+        let (hdr, off_at) = if cfg!(target_pointer_width = "64") { (48, 24) } else { (40, 20) };
+        let mut q = vec![0u8; hdr];
+        q[0..2].copy_from_slice(&(hdr as u16).to_le_bytes());
+        q[2] = 0x1; // ATA_FLAGS_DRDY_REQUIRED, no data
+        q[12..16].copy_from_slice(&10u32.to_le_bytes());
+        q[off_at..off_at + 4].copy_from_slice(&(hdr as u32).to_le_bytes());
+        let tf = &mut q[hdr - 8..hdr];
+        (tf[0], tf[2], tf[3], tf[4], tf[6]) = (features, lba_lo, 0x4F, 0xC2, 0xB0);
+        let out =
+            h.ioctl(IOCTL_ATA_PASS_THROUGH, &q, q.len()).ok_or_else(|| std::io::Error::last_os_error().to_string())?;
+        // Status register (CurrentTaskFile[6] on return): ERR bit 0.
+        if out.get(hdr - 2).is_some_and(|s| s & 1 != 0) {
+            return Err("the drive rejected the command".into());
+        }
+        Ok(())
+    }
+
+    /// An NVMe admin command without data through IOCTL_STORAGE_PROTOCOL_COMMAND
+    /// (Windows 10 1903+ lets Device Self-test through). Needs admin.
+    pub(crate) fn nvme_admin_nodata(h: &Handle, opcode: u8, nsid: u32, cdw10: u32) -> Result<(), String> {
+        const IOCTL_STORAGE_PROTOCOL_COMMAND: u32 = 0x2DD3C0;
+        // STORAGE_PROTOCOL_COMMAND (80 bytes) + the 64-byte NVMe command.
+        let mut q = vec![0u8; 80 + 64];
+        let set = |q: &mut Vec<u8>, off: usize, v: u32| q[off..off + 4].copy_from_slice(&v.to_le_bytes());
+        set(&mut q, 0, 1); // Version
+        set(&mut q, 4, 80); // Length
+        set(&mut q, 8, 3); // ProtocolTypeNvme
+        set(&mut q, 12, 0x8000_0000); // STORAGE_PROTOCOL_COMMAND_FLAG_ADAPTER_REQUEST
+        set(&mut q, 24, 64); // CommandLength
+        set(&mut q, 40, 30); // TimeOutValue, s
+        set(&mut q, 56, 1); // CommandSpecific: admin command
+        q[80] = opcode;
+        set(&mut q, 84, nsid);
+        set(&mut q, 80 + 40, cdw10);
+        let out = h
+            .ioctl(IOCTL_STORAGE_PROTOCOL_COMMAND, &q, q.len())
+            .ok_or_else(|| std::io::Error::last_os_error().to_string())?;
+        match le32(&out, 16) {
+            1 => Ok(()),
+            5 => Err("busy: a test is already running".into()),
+            8 => Err("throttled: Windows allows a new self-test about 10 minutes after the last one".into()),
+            0xFF => Err("this drive or driver doesn't support it".into()),
+            s => Err(format!("the drive answered status {s}")),
+        }
+    }
+
+    /// NVMe log page `lid` (`len` bytes) without admin.
+    pub(crate) fn nvme_log_page(h: &Handle, lid: u32, len: u32) -> Option<Vec<u8>> {
+        // StorageDeviceProtocolSpecificProperty, ProtocolTypeNvme, NVMeDataTypeLogPage.
+        protocol(h, 50, 3, 2, lid, len)
     }
 
     /// SMART_RCV_DRIVE_DATA (legacy SMART IOCTL, admin): 0xD0 data / 0xD1 thresholds.
@@ -724,7 +786,7 @@ pub fn unescape_mount(s: &str) -> String {
 }
 
 #[cfg(target_os = "linux")]
-mod imp {
+pub(crate) mod imp {
     use super::*;
     use crate::os::{read_trim, read_u64};
     use std::os::unix::fs::OpenOptionsExt;
@@ -814,22 +876,38 @@ mod imp {
 
     /// Get Log Page, SMART / Health (02h), controller-wide. Needs root.
     fn nvme_log(ctrl: &str) -> Option<Vec<u8>> {
+        nvme_log_page(ctrl, 0x02, 512)
+    }
+
+    /// Get Log Page `lid` (`len` bytes, a multiple of 4). Needs root.
+    pub(crate) fn nvme_log_page(ctrl: &str, lid: u32, len: u32) -> Option<Vec<u8>> {
+        let mut buf = vec![0u8; len as usize];
+        nvme_admin(ctrl, 0x02, (((len / 4 - 1) & 0xFFFF) << 16) | lid, Some(&mut buf)).ok()?;
+        Some(buf)
+    }
+
+    /// An NVMe admin command on controller `ctrl` ("nvme0"), all namespaces.
+    pub(crate) fn nvme_admin(ctrl: &str, opcode: u8, cdw10: u32, buf: Option<&mut [u8]>) -> Result<u32, String> {
         use std::os::fd::AsRawFd;
         const NVME_IOCTL_ADMIN_CMD: u32 = 0xC048_4E41; // _IOWR('N', 0x41, 72 bytes)
-        let f = std::fs::File::open(format!("/dev/{ctrl}")).ok()?;
-        let mut buf = vec![0u8; 512];
+        let f = std::fs::File::open(format!("/dev/{ctrl}")).map_err(|e| e.to_string())?;
+        let (addr, len) = buf.map_or((0, 0), |b| (b.as_mut_ptr() as u64, b.len() as u32));
         let mut c = NvmeAdminCmd {
-            opcode: 0x02,
+            opcode,
             nsid: 0xFFFF_FFFF,
-            addr: buf.as_mut_ptr() as u64,
-            data_len: 512,
-            cdw10: (127 << 16) | 0x02, // NUMDL = 512/4 - 1, LID 02h
+            addr,
+            data_len: len,
+            cdw10,
             timeout_ms: 3000,
             ..NvmeAdminCmd::default()
         };
         // SAFETY: c and buf outlive the call; the kernel writes at most data_len bytes.
         let r = unsafe { libc::ioctl(f.as_raw_fd(), NVME_IOCTL_ADMIN_CMD as _, &mut c) };
-        (r == 0).then_some(buf)
+        match r {
+            0 => Ok(c.result),
+            r if r < 0 => Err(std::io::Error::last_os_error().to_string()),
+            status => Err(format!("the drive answered status {status:#x}")),
+        }
     }
 
     /// struct sg_io_hdr (scsi/sg.h).
@@ -862,17 +940,25 @@ mod imp {
     /// SMART READ DATA / READ THRESHOLDS through SCSI ATA PASS-THROUGH(16)
     /// (SAT, PIO data-in, 1 sector). Needs root (O_RDWR on the disk node).
     fn sat_smart_cmd(f: &std::fs::File, features: u8) -> Option<Vec<u8>> {
+        sat_cmd(f, features, 0, true)
+    }
+
+    /// A SMART command through ATA PASS-THROUGH(16): PIO data-in of one sector
+    /// (`data`), or non-data. LBA low carries the log address / subcommand.
+    pub(crate) fn sat_cmd(f: &std::fs::File, features: u8, lba_lo: u8, data: bool) -> Option<Vec<u8>> {
         use std::os::fd::AsRawFd;
         const SG_IO: u32 = 0x2285;
-        let cdb: [u8; 16] = [0x85, 4 << 1, 0x0E, 0, features, 0, 1, 0, 0, 0, 0x4F, 0, 0xC2, 0, 0xB0, 0];
+        let (proto, t) = if data { (4u8, 0x0Eu8) } else { (3, 0x20) }; // PIO in / non-data (+CK_COND)
+        let cdb: [u8; 16] =
+            [0x85, proto << 1, t, 0, features, 0, u8::from(data), 0, lba_lo, 0, 0x4F, 0, 0xC2, 0, 0xB0, 0];
         let (mut buf, mut sense) = (vec![0u8; 512], [0u8; 32]);
         let mut h = SgIoHdr {
             interface_id: b'S' as i32,
-            dxfer_direction: -3, // SG_DXFER_FROM_DEV
+            dxfer_direction: if data { -3 } else { -1 }, // SG_DXFER_FROM_DEV / SG_DXFER_NONE
             cmd_len: 16,
             mx_sb_len: sense.len() as u8,
             iovec_count: 0,
-            dxfer_len: 512,
+            dxfer_len: if data { 512 } else { 0 },
             dxferp: buf.as_mut_ptr().cast(),
             cmdp: cdb.as_ptr(),
             sbp: sense.as_mut_ptr(),
@@ -892,6 +978,10 @@ mod imp {
         };
         // SAFETY: every pointer in h refers to a live local buffer of the stated size.
         let r = unsafe { libc::ioctl(f.as_raw_fd(), SG_IO as _, &mut h) };
+        if !data {
+            // CK_COND returns the ATA status in the sense data: ERR is bit 0 of byte 21.
+            return (r == 0 && h.host_status == 0 && sense[21] & 1 == 0).then_some(Vec::new());
+        }
         (r == 0 && h.status == 0 && h.host_status == 0 && h.info & 1 == 0 && buf.iter().any(|&b| b != 0)).then_some(buf)
     }
 
