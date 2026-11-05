@@ -19,6 +19,7 @@ mod gpu;
 mod gui;
 mod health;
 mod history;
+mod latency;
 mod membench;
 mod network;
 mod npu;

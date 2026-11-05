@@ -18,6 +18,7 @@ mod settings_ui;
 mod shots;
 mod update_ui;
 // ---- monitoring (sensors / stress / tray) ----
+mod latency_view;
 pub mod layout_view;
 mod plot;
 pub mod sensors;
@@ -79,6 +80,7 @@ fn page_name(p: Page) -> &'static str {
 enum BenchView {
     Cpu,
     Memory,
+    Latency,
     Stress,
     History,
 }
@@ -179,6 +181,7 @@ struct App {
     /// Processor › Cores table (sort, columns).
     cores_table: table::State,
     pcie_table: table::State,
+    latency: latency_view::State,
 }
 
 pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
@@ -245,6 +248,7 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         overview: Default::default(),
         cores_table: Default::default(),
         pcie_table: Default::default(),
+        latency: Default::default(),
     };
     if app.auto.is_none() {
         crate::data::expire_logs(app.mon.settings.log_retention_days);
@@ -599,6 +603,7 @@ impl App {
                     &[
                         (BenchView::Cpu, icon::CPU, tr("Processor")),
                         (BenchView::Memory, icon::MEMORY, tr("Memory")),
+                        (BenchView::Latency, icon::GRID_FOUR, tr("Latency")),
                         (BenchView::Stress, icon::FLAME, tr("Stress test")),
                         (BenchView::History, icon::CLOCK_COUNTER_CLOCKWISE, tr("History")),
                     ],
@@ -606,6 +611,7 @@ impl App {
                 match self.bench_view {
                     BenchView::Cpu => self.bench.cpu_page(ui, &self.ctx, &mut self.mon),
                     BenchView::Memory => self.bench.memory_page(ui, &self.ctx),
+                    BenchView::Latency => self.latency.page(ui, &self.ctx),
                     BenchView::Stress => stress::page(ui, &mut self.mon, true),
                     BenchView::History => {
                         if self.history_dirty {

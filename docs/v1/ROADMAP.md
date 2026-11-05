@@ -186,7 +186,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 |---|---|---|---|---|
 | S1-K01 | Benchmark principles: test-file only, reproducibility (conditions recorded, N runs + median), documented score (1000 = reference machine) | ✨ | core-pages §7.1 | Every benchmark follows them |
 | S1-K02 | **CPU suite**: integer, FP, SIMD GEMM, crypto, ray tracer, branchy, thread scaling, P × E, 10-min sustained | ✨ | core-pages §7.2 | Scores stable within tolerance across 3 runs on the reference machine |
-| S1-K03 | **Core-to-core latency** heat map | 🆕 | core-pages §7.2 | Win/Linux; macOS statistical |
+| S1-K03 | **Core-to-core latency** heat map | 🆕 | core-pages §7.2 | Win/Linux; macOS statistical. ✅ *Benchmarks › Latency*: pinned ping-pong per core pair (`src/latency.rs`, tested), heat map with min/median/max. 7900X: ~20 ns within a CCD, ~165 ns across, 0.3 s total. 🟡 macOS (no pinning) says so; statistical mode later |
 | S1-K04 | **Memory** additions: GUPS, STREAM triad, huge pages, per-CCD/NUMA latency | ✨ | core-pages §7.2 | Same |
 | S1-K05 | **GPU benchmark** (`wgpu`, feature `gpu-bench`): FP32/FP16, VRAM bandwidth, PCIe host↔GPU, raster scene | 🆕 | core-pages §7.2 | DX12/Vulkan/Metal |
 | S1-K06 | **Storage benchmark** (CrystalDiskMark-style + sustained write with a warning) | 🆕 | core-pages §7.2 | Uncached I/O verified; cleans up its test file |
