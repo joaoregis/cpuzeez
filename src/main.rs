@@ -60,6 +60,18 @@ impl Ctx {
 }
 
 /// Every report section, in CPU-Z's order.
+/// Writes to stdout. A reader that stops early (`cpuzeez -sensors | head`)
+/// closes the pipe: that's a normal end of the output, not a crash.
+pub fn out(s: &str) {
+    use std::io::Write;
+    let mut o = std::io::stdout().lock();
+    if let Err(e) = o.write_all(s.as_bytes()).and_then(|()| o.flush())
+        && e.kind() == std::io::ErrorKind::BrokenPipe
+    {
+        std::process::exit(0);
+    }
+}
+
 pub fn collect(ctx: &Ctx) -> Vec<Section> {
     let mut r = vec![section(
         "Binaries",
@@ -162,7 +174,7 @@ fn main() {
 
     let rep = collect(&ctx);
     if console {
-        print!("{}", report::to_txt(&rep));
+        out(&report::to_txt(&rep));
     }
     for o in outs {
         let (name, ext, body) = match o {
