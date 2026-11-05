@@ -100,8 +100,10 @@ mod imp {
                     .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
                     .map(|e| {
                         let name = e.file_name().to_string_lossy().into_owned();
+                        // Unreadable without root: the name is the signature, numbered
+                        // when a table repeats (SSDT1, SSDT2…).
                         std::fs::read(e.path()).ok().and_then(|b| Header::parse(&b)).unwrap_or(Header {
-                            signature: name,
+                            signature: name.chars().take(4).collect(),
                             length: 0,
                             revision: 0,
                             oem_id: String::new(),
