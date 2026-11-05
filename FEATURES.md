@@ -116,3 +116,28 @@ Version, tools buttons (Validate omitted, Save report, Clocks, Timers), Windows/
 - Online validation / submission to valid.x86.fr (CPUID's proprietary service).
 - CPU-Z's benchmark algorithm and its reference scores (we ship our own benchmark).
 - Code, tables or text copied from `cpuz.exe`. Our names databases are built from public data.
+
+## 14. Beyond CPU-Z: what 1.0 adds (per OS)
+
+These go past CPU-Z's feature set; the design is in [docs/v1/](docs/v1/README.md). Same legend as above.
+
+| Feature | Windows | Linux | macOS |
+|---|---|---|---|
+| Overview tiles, build health, local alerts, command palette, detail levels, pins, units | ✅ | ✅ | ✅ |
+| CPU suite (8 workloads ST/MT, scaling, P × E, sustained) | ✅ | ✅ | ✅ (no core pinning: P × E needs a hybrid x86) |
+| Core-to-core latency | ✅ heat map | ✅ heat map | ⚠ statistical spread (no affinity) |
+| Memory extras: STREAM, GUPS, large pages, per-CCD latency | ✅ (large pages 🔑 *Lock pages in memory*) | ✅ (THP) | ⚠ (no large pages) |
+| GPU benchmark (FP32/FP16, VRAM, PCIe, raster) | ✅ DX12/Vulkan | ✅ Vulkan | ✅ Metal |
+| Storage benchmark + sustained write (uncached) | ✅ | ✅ (`O_DIRECT`) | ✅ (`F_NOCACHE`) |
+| Stability: CPU loads, user-mode memory test, GPU stress, combined, auto-stop | ✅ | ✅ | ✅ (CPU temperature through SMC) |
+| SMART self-tests (NVMe, ATA) | 🔑 | 🔑 | ❌ (no pass-through without a third-party driver) |
+| Read-only surface scan | 🔑 | 🔑 | 🔑 |
+| Volume encryption (BitLocker / LUKS / FileVault) | ✅ | ✅ | ✅ |
+| Decoded NVMe/ATA Identify | ✅ | 🔑 NVMe · ✅ ATA | ❌ |
+| C-state residency, CPPC preferred cores | ✅ (CPPC 🧩) | ✅ | ❌ |
+| Resizable BAR / Above 4G | ✅ (allocated resources) | ✅ (sysfs) | ❌ |
+| Displays: HDR, colour depth, refresh range | ✅ | ⚠ refresh range only (EDID) | ⚠ refresh range only |
+| Audio endpoints and mix format | ✅ | ⚠ while a stream is open | ✅ (sample rate) |
+| Thunderbolt / USB4, Bluetooth battery, USB tree | ✅ | ✅ | ⚠ Bluetooth battery only |
+| Tray icons per metric (4 styles), dynamic menu | ✅ | ✅ (StatusNotifier host) | ✅ one menu-bar item with every metric as text |
+| Mini monitors (several, layouts, lock, snap) | ✅ (hide on full screen too) | ✅ | ✅ |

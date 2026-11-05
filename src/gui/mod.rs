@@ -18,6 +18,8 @@ mod settings_ui;
 mod shots;
 mod update_ui;
 // ---- monitoring (sensors / stress / tray) ----
+#[cfg(test)]
+mod bench_views_test;
 mod benchkit_view;
 mod cpusuite_view;
 mod diskbench_view;

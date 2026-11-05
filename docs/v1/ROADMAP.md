@@ -1,7 +1,7 @@
 # CpuZeeZ 1.0: detailed roadmap
 
 > Part of the [1.0 plan](README.md). This document is the **work list**: every fix, foundation piece, improvement, new feature, spike, packaging task and doc change that came out of the planning, with an ID, its source, its dependencies and a testable "done when".
-> **Status:** not started · **Baseline:** 0.3.0 (`26d9f0e`) · **Date:** 2026-11-04.
+> **Status:** S0 and S1 closed (`1.0.0-beta.1`), S2a next · **Baseline:** 0.3.0 (`26d9f0e`) · **Date:** 2026-11-05.
 
 ## How to read this
 
@@ -202,6 +202,11 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 | S1-M02 | **Mini monitor** on the Widget Engine: layouts, resizable, appearance, lock (click-through), snap and remember, several instances, hide on fullscreen, expand on hover, context menu, persistence | ✨ | core-pages §9 | Shares layouts with the overlay editor. ✅ `core::layout::mini` (model, edge snap, hover expansion; tested) + Grid direction, per-layout theme, *Grid* and *Big number* presets; `gui/mini.rs` (one transparent always-on-top viewport per monitor, click-through lock also from the tray, `SHQueryUserNotificationState` full-screen hide, Ctrl+scroll scale, context menu, positions saved) + `gui/layout_editor.rs`, the alias-based editor the overlay will reuse (kittest `layout_editor_edits`). Verified on screen: two monitors, dark list + light grid, transparent corners. 🟡 Edge snapping uses the primary monitor's size (secondary-monitor origins need winit); outline = dark plate, not a glyph stroke |
 
 **S1 gate → pre-release `1.0.0-beta.1`.**
+
+**S1 gate status (2026-11-05): closed → `1.0.0-beta.1`.**
+- Every S1 item is in. CI (Windows, Linux x64/arm64 and containers, macOS Intel/ARM) runs rustfmt, clippy `-D warnings`, the unit/fixture/contract tests and the kittests, including the new benchmark views (`gui/bench_views_test.rs`), the tray settings and the layout editor.
+- Known limits shipped as documented, not guessed: Intel memory secondaries and DDR5 GDM/2T (no Intel machine to verify), Linux display refresh (needs KMS), mini-monitor edge snapping on the primary display only, rare ~30 ms per-core read spikes (D05, revisit if SP8 needs it).
+- The manual hardware pass is the beta itself: [docs/testing/beta1.md](../testing/beta1.md).
 
 ---
 

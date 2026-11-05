@@ -7,9 +7,13 @@ generated from its section below.
 
 ## [Unreleased]
 
+## [1.0.0-beta.1] - 2026-11-05
+
+First pre-release of 1.0, for testers: the existing features, improved (stage S1 of the [roadmap](docs/v1/ROADMAP.md)). ZeeZ Live, the bottleneck detector and the System hub come in the next betas. What to try first is in [docs/testing/beta1.md](docs/testing/beta1.md).
+
 ### Added
 
-- **1.0 plan** in [`docs/v1/`](docs/v1/README.md). Nothing is implemented yet. It covers:
+- **1.0 plan** in [`docs/v1/`](docs/v1/README.md). It covers:
   - Principles: local-first data, opt-in recording, transparent privileges, no injection, zero install friction.
   - A diagnosis of 0.3.0.
   - The target architecture, engineering practices and per-stage quality gates.
@@ -158,7 +162,8 @@ features.
 - GUI with CPU-Z's tabs.
 - Installers for Windows (MSI), macOS (DMG/PKG), Debian/Ubuntu (DEB) and Arch.
 
-[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.1...HEAD
+[1.0.0-beta.1]: https://github.com/joaoregis/cpuzeez/compare/v0.3.0...v1.0.0-beta.1
 [0.3.0]: https://github.com/joaoregis/cpuzeez/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/joaoregis/cpuzeez/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/joaoregis/cpuzeez/releases/tag/v0.1.0
