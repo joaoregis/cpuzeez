@@ -7,6 +7,10 @@ generated from its section below.
 
 ## [Unreleased]
 
+## [1.0.0-beta.4] - 2026-11-05
+
+Fixes from the review of 1.0.0-beta.3: test the System hub on this one.
+
 ### Security
 
 - **Process actions check they still have the right process.** A process ID can be reused after its process exits, and an administrator prompt can stay open for a while; ending, suspending or changing a process now first checks that the ID still belongs to the process you picked (same start time), and refuses otherwise.
@@ -21,7 +25,7 @@ generated from its section below.
 
 ## [1.0.0-beta.3] - 2026-11-05
 
-The **System hub**, a Task Manager for Windows, Linux and macOS. ZeeZ Live comes in `1.0.0-beta.4` and the Bottleneck detector in `1.0.0-beta.5`.
+The **System hub**, a Task Manager for Windows, Linux and macOS. ZeeZ Live and the Bottleneck detector come in later betas.
 
 ### Added
 
@@ -198,7 +202,9 @@ features.
 - GUI with CPU-Z's tabs.
 - Installers for Windows (MSI), macOS (DMG/PKG), Debian/Ubuntu (DEB) and Arch.
 
-[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.2...HEAD
+[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.4...HEAD
+[1.0.0-beta.4]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.3...v1.0.0-beta.4
+[1.0.0-beta.3]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.2...v1.0.0-beta.3
 [1.0.0-beta.2]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.1...v1.0.0-beta.2
 [1.0.0-beta.1]: https://github.com/joaoregis/cpuzeez/compare/v0.3.0...v1.0.0-beta.1
 [0.3.0]: https://github.com/joaoregis/cpuzeez/compare/v0.2.0...v0.3.0

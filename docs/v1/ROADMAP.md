@@ -1,7 +1,7 @@
 # CpuZeeZ 1.0: detailed roadmap
 
 > Part of the [1.0 plan](README.md). This document is the **work list**: every fix, foundation piece, improvement, new feature, spike, packaging task and doc change that came out of the planning, with an ID, its source, its dependencies and a testable "done when".
-> **Status:** S0, S1 (`1.0.0-beta.1` / `beta.2`) and S2a (`1.0.0-beta.3`) closed, S2b next · **Baseline:** 0.3.0 (`26d9f0e`) · **Date:** 2026-11-05.
+> **Status:** S0, S1 (`1.0.0-beta.1` / `beta.2`) and S2a (`1.0.0-beta.3`, fixes in `beta.4`) closed, S2b next · **Baseline:** 0.3.0 (`26d9f0e`) · **Date:** 2026-11-05.
 
 ## How to read this
 
@@ -30,7 +30,7 @@
 
 ```
 S0 Foundation ──► S1 Existing features ──► S2a System ──► S2b ZeeZ Live ──► S2c Bottleneck ──► S3 Hardening ──► 1.0.0
-   │                 │ beta.1 (+ beta.2 fix)    │ beta.3        │ beta.4          │ beta.5          rc.N
+   │                 │ beta.1 (+ beta.2 fix)    │ beta.3 (+ beta.4 fix) │ beta.5   │ beta.6          rc.N
    └─ spikes ────────┴──────────────────────────┴───────────────┴─── feed S2 ─────┘
 ```
 
@@ -230,7 +230,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 
 **S2a gate status (2026-11-05): closed → `1.0.0-beta.3`.**
 - All 11 S2a items (`S2a-01`..`S2a-11`) are implemented, unit/GUI tested (`egui_kittest`), i18n-verified (`pt-BR` and `es`), and clean under multi-target Clippy (`windows`, `linux`, `macos`) and the `pages_never_probe_in_a_frame` guard.
-- **Review after the release (2026-11-05).** Fixed on the branch for the next beta:
+- **Review after the release (2026-11-05).** Fixed in `1.0.0-beta.4`:
   - process actions carry each target's start time and the executor refuses a reused PID; service names and startup ids are validated in the app and in the elevated helper (`Action::validate`, tested), `systemctl`/`launchctl` get `--` before the name;
   - memory dumps are refused for anti-cheat-protected processes (`core::procs::anti_cheat`), as P4 requires;
   - the details panel's thread/connection refresh and the Performance memory counters moved off the UI thread;
@@ -259,7 +259,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 | S2b-11 | **Per-game profiles** and automation | 🆕 | zeez-live §5.4 | 03 | Same |
 | S2b-12 | **Anti-cheat safety**: "no PawnIO" mode where needed, the compatibility list from X08 | 🆕 | zeez-live §7 | X08 | Documented |
 
-**S2b gate → pre-release `1.0.0-beta.4`** (ZeeZ Live).
+**S2b gate → pre-release `1.0.0-beta.5`** (ZeeZ Live).
 
 ## S2c. Bottleneck detector
 
@@ -272,7 +272,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 | S2c-05 | Integrations: overlay pill, report section, Overview shortcut | 🆕 | bottleneck §5 | S2b | Same |
 | S2c-06 | *(Conditional)* static hardware balance from our own benchmarks | 🆕 | bottleneck §4 | S1-K02, K05 | Calibration passes, or the ADR cuts it |
 
-**S2c gate → pre-release `1.0.0-beta.5`** (Bottleneck detector). (`1.0.0-beta.2` was a fix release for beta.1's UI frame time.)
+**S2c gate → pre-release `1.0.0-beta.6`** (Bottleneck detector). (`1.0.0-beta.2` and `1.0.0-beta.4` were fix releases: beta.1's UI frame time, beta.3's review.)
 
 ---
 

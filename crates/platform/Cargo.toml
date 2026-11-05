@@ -1,6 +1,6 @@
 [package]
 name = "cpuzeez-platform"
-version = "1.0.0-beta.3"
+version = "1.0.0-beta.4"
 edition = "2024"
 rust-version = "1.89"
 description = "CpuZeeZ per-OS adapters: OS helpers, CPUID and the privileged hardware backends (PawnIO, Linux kernel interfaces)."
