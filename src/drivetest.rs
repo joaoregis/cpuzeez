@@ -62,6 +62,8 @@ pub fn kinds(d: &Drive) -> Vec<Kind> {
         return Vec::new();
     }
     match (is_nvme(d), is_ata(d)) {
+        // Identify Controller OACS bit 4: Device Self-test supported (not every drive has it).
+        (true, _) if d.identify.as_ref().is_some_and(|id| id.len() >= 258 && id[256] & 0x10 == 0) => Vec::new(),
         (true, _) => vec![Kind::Short, Kind::Extended],
         (_, true) => vec![Kind::Short, Kind::Extended, Kind::Conveyance],
         _ => Vec::new(),
@@ -426,5 +428,16 @@ mod tests {
             s.add(ms);
         }
         assert_eq!(s.buckets, [1; 6]);
+    }
+
+    #[test]
+    fn nvme_without_self_test_offers_none() {
+        let mut d = Drive { bus: 17, ..Default::default() };
+        let mut id = vec![0u8; 4096];
+        d.identify = Some(id.clone());
+        assert!(kinds(&d).is_empty() || cfg!(target_os = "macos"));
+        id[256] = 0x10;
+        d.identify = Some(id);
+        assert_eq!(kinds(&d).len(), if cfg!(target_os = "macos") { 0 } else { 2 });
     }
 }

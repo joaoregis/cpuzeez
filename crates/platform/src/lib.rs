@@ -11,6 +11,7 @@ pub mod direct_io;
 pub mod disk_io;
 pub mod display;
 pub mod elevation;
+pub mod encryption;
 pub mod firmware;
 pub mod gpu_engines;
 pub mod hw;

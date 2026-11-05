@@ -72,6 +72,8 @@ pub struct Drive {
     pub health: Vec<(String, String)>,
     /// SMART / NVMe health (only when `cfg.smart` and the OS lets us read it).
     pub smart: Option<Smart>,
+    /// Raw NVMe Identify Controller (4096 B) or ATA IDENTIFY DEVICE (512 B).
+    pub identify: Option<Vec<u8>>,
 }
 
 const BUS: [&str; 21] = [
@@ -691,6 +693,7 @@ pub(crate) mod imp {
                     d.serial = ascii(&id[4..24]).or(d.serial);
                     d.name = ascii(&id[24..64]).unwrap_or(d.name);
                     d.revision = ascii(&id[64..72]).or(d.revision);
+                    d.identify = Some(id);
                 }
                 if ctx.cfg.smart {
                     let log = protocol(&h, 50, 3, 2, 2, 512).or_else(|| protocol(&h, 49, 3, 2, 2, 512));
@@ -707,6 +710,7 @@ pub(crate) mod imp {
                     if rpm == Some(1) {
                         d.ssd = true;
                     }
+                    d.identify = Some(id);
                 }
                 if ctx.cfg.smart && d.bus != 7 {
                     d.smart = ata_smart(&h, rw.as_ref());
@@ -1042,6 +1046,7 @@ pub(crate) mod imp {
             // ATA Information VPD page carries the IDENTIFY block at offset 60.
             if let Some(id) = std::fs::read(dev.join("vpd_pg89")).ok().filter(|b| b.len() >= 572) {
                 let id = &id[60..572];
+                d.identify = Some(id.to_vec());
                 (d.rpm, d.features) = ata_identify(id);
                 d.revision = ata_string(id, 23, 27).or(d.revision); // sysfs `rev` keeps 4 chars
                 d.serial = d.serial.or_else(|| ata_string(id, 10, 20));
@@ -1073,6 +1078,14 @@ pub(crate) mod imp {
                     s.evaluate();
                     Some(s)
                 });
+            }
+            if d.bus == 17 {
+                // Identify Controller (CNS 01h), root only.
+                let n: String = name.trim_start_matches("nvme").chars().take_while(char::is_ascii_digit).collect();
+                let mut id = vec![0u8; 4096];
+                if nvme_admin(&format!("nvme{n}"), 0x06, 1, Some(&mut id)).is_ok() {
+                    d.identify = Some(id);
+                }
             }
             d.volumes = volumes(&name);
             out.push(d);

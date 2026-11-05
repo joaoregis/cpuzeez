@@ -11,6 +11,16 @@ use eframe::egui::{self, RichText};
 use std::sync::{Arc, Mutex};
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Encryption", "Criptografia"),
+    ("BitLocker on", "BitLocker ativado"),
+    ("Off", "Desativada"),
+    ("BitLocker (encrypting)", "BitLocker (criptografando)"),
+    ("BitLocker (decrypting)", "BitLocker (descriptografando)"),
+    ("BitLocker suspended", "BitLocker suspenso"),
+    ("BitLocker on (locked)", "BitLocker ativado (bloqueado)"),
+    ("FileVault on", "FileVault ativado"),
+    ("Identify data ({} bytes)", "Dados de identificação ({} bytes)"),
+    ("Raw (hex)", "Bruto (hex)"),
     ("Displays", "Telas"),
     ("{} Hz (supports {} Hz)", "{} Hz (suporta {} Hz)"),
     ("Below its refresh rate", "Abaixo da sua taxa de atualização"),
@@ -97,6 +107,16 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Encryption", "Cifrado"),
+    ("BitLocker on", "BitLocker activado"),
+    ("Off", "Desactivado"),
+    ("BitLocker (encrypting)", "BitLocker (cifrando)"),
+    ("BitLocker (decrypting)", "BitLocker (descifrando)"),
+    ("BitLocker suspended", "BitLocker suspendido"),
+    ("BitLocker on (locked)", "BitLocker activado (bloqueado)"),
+    ("FileVault on", "FileVault activado"),
+    ("Identify data ({} bytes)", "Datos de identificación ({} bytes)"),
+    ("Raw (hex)", "Sin procesar (hex)"),
     ("Displays", "Pantallas"),
     ("{} Hz (supports {} Hz)", "{} Hz (admite {} Hz)"),
     ("Below its refresh rate", "Por debajo de su frecuencia"),
@@ -463,6 +483,15 @@ fn drive(ui: &mut egui::Ui, i: usize, d: &crate::storage::Drive) {
         ("Link Speed", d.link.clone().unwrap_or_default()),
     ];
     r.extend(d.volumes.iter().map(|v| ("Volume", crate::storage::volume_line(v))));
+    // S1-G06: encryption per volume (read in the background the first time).
+    let names: Vec<String> = d.volumes.iter().map(|v| v.name.clone()).collect();
+    if let Some(enc) = cpuzeez_platform::encryption::status(&names) {
+        for v in &d.volumes {
+            if let Some(e) = enc.get(&v.name) {
+                r.push(("Encryption", format!("{} {}", v.name, tr(e))));
+            }
+        }
+    }
     // S1-G06: alignment, the OS's TRIM setting, NVMe thermal throttling.
     let (parts, trim) = layout(&d.path);
     if !parts.is_empty() {
@@ -501,6 +530,33 @@ fn drive(ui: &mut egui::Ui, i: usize, d: &crate::storage::Drive) {
             }
         }
         widgets::kv_list(ui, &rows(r));
+        // Expert: the drive's whole Identify block, decoded and as hex.
+        if let Some(id) =
+            d.identify.as_ref().filter(|_| super::detail::get(ui.ctx()) >= cpuzeez_core::detail::Level::Expert)
+        {
+            let fields = if id.len() >= 4096 {
+                cpuzeez_core::storage::identify::nvme(id)
+            } else {
+                cpuzeez_core::storage::identify::ata(id)
+            };
+            egui::CollapsingHeader::new(trf("Identify data ({} bytes)", &[&id.len()])).id_salt(("identify", i)).show(
+                ui,
+                |ui| {
+                    egui::Grid::new(("identify-grid", i)).striped(true).spacing([12.0, 3.0]).show(ui, |ui| {
+                        for (k, v) in &fields {
+                            ui.label(tr(k));
+                            super::value(ui, v);
+                            ui.end_row();
+                        }
+                    });
+                    egui::CollapsingHeader::new(tr("Raw (hex)")).id_salt(("identify-hex", i)).show(ui, |ui| {
+                        egui::ScrollArea::both().id_salt(("identify-hex-scroll", i)).max_height(260.0).show(ui, |ui| {
+                            ui.label(RichText::new(cpuzeez_core::storage::identify::hex_dump(id)).monospace().small());
+                        });
+                    });
+                },
+            );
+        }
         let Some(s) = s else { return };
         let n = s.ata_attributes.len() + s.nvme_log.len();
         if n == 0 {

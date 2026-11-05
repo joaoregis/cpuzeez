@@ -48,5 +48,6 @@ pub mod spd {
     pub mod jep106;
 }
 pub mod storage {
+    pub mod identify;
     pub mod smart;
 }
