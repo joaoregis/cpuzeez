@@ -545,7 +545,7 @@ dependencies = [
 
 [[package]]
 name = "cpuzeez"
-version = "1.0.0-beta.1"
+version = "1.0.0-beta.2"
 dependencies = [
  "cpuzeez-core",
  "cpuzeez-platform",
@@ -563,7 +563,7 @@ dependencies = [
 
 [[package]]
 name = "cpuzeez-core"
-version = "1.0.0-beta.1"
+version = "1.0.0-beta.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -571,7 +571,7 @@ dependencies = [
 
 [[package]]
 name = "cpuzeez-platform"
-version = "1.0.0-beta.1"
+version = "1.0.0-beta.2"
 dependencies = [
  "cpuzeez-core",
  "libc",

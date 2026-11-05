@@ -7,6 +7,10 @@ generated from its section below.
 
 ## [Unreleased]
 
+## [1.0.0-beta.2] - 2026-11-05
+
+A fix release for testers of 1.0.0-beta.1.
+
 ### Fixed
 
 - **The interface felt sluggish** (reported on 1.0.0-beta.1). The Overview re-read every drive's SMART data several times per frame, about 150 ms per frame, so the whole app lagged; it now takes under 2 ms. Drives, batteries, firmware details, the OS's CPU settings and the GPU list are read on a background thread and refreshed from time to time, never while a frame is drawn, and a test keeps it that way. `CZ_FRAME_LOG=1` prints any part of a frame that takes longer than 4 ms, for reports like this one.
@@ -166,7 +170,8 @@ features.
 - GUI with CPU-Z's tabs.
 - Installers for Windows (MSI), macOS (DMG/PKG), Debian/Ubuntu (DEB) and Arch.
 
-[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.1...HEAD
+[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.2...HEAD
+[1.0.0-beta.2]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.1...v1.0.0-beta.2
 [1.0.0-beta.1]: https://github.com/joaoregis/cpuzeez/compare/v0.3.0...v1.0.0-beta.1
 [0.3.0]: https://github.com/joaoregis/cpuzeez/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/joaoregis/cpuzeez/compare/v0.1.0...v0.2.0

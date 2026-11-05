@@ -30,7 +30,7 @@
 
 ```
 S0 Foundation ──► S1 Existing features ──► S2a System ──► S2b ZeeZ Live ──► S2c Bottleneck ──► S3 Hardening ──► 1.0.0
-   │                 │ beta.1                 │ beta.2       │ beta.3          │ beta.4            rc.N
+   │                 │ beta.1 (+ beta.2 fix)    └──────────────── beta.3 ────────────────┘            rc.N
    └─ spikes ────────┴───────────────────────────── feed S2 ───────────────────┘
 ```
 
@@ -226,7 +226,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 | S2a-10 | **App history** recorder (opt-in, SQLite, retention) + UI | 🆕 | task-manager §5 | S0-B07–B08 | Off by default; covers-only-while-running notice shown |
 | S2a-11 | *Settings › System* (every Task Manager setting + new ones) | 🆕 | task-manager §9 | — | Same |
 
-**S2a gate → `1.0.0-beta.2`.**
+**S2a gate:** internal (no pre-release of its own; see the S2 note below).
 
 ## S2b. ZeeZ Live
 
@@ -245,7 +245,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 | S2b-11 | **Per-game profiles** and automation | 🆕 | zeez-live §5.4 | 03 | Same |
 | S2b-12 | **Anti-cheat safety**: "no PawnIO" mode where needed, the compatibility list from X08 | 🆕 | zeez-live §7 | X08 | Documented |
 
-**S2b gate → `1.0.0-beta.3`.**
+**S2b gate:** internal.
 
 ## S2c. Bottleneck detector
 
@@ -258,7 +258,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 | S2c-05 | Integrations: overlay pill, report section, Overview shortcut | 🆕 | bottleneck §5 | S2b | Same |
 | S2c-06 | *(Conditional)* static hardware balance from our own benchmarks | 🆕 | bottleneck §4 | S1-K02, K05 | Calibration passes, or the ADR cuts it |
 
-**S2c gate → `1.0.0-beta.4`.**
+**S2c gate → `1.0.0-beta.3`: the whole of S2 (System hub, ZeeZ Live, Bottleneck detector) ships together** (decided 2026-11-05). `1.0.0-beta.2` was a fix release for beta.1 (UI frame time).
 
 ---
 
