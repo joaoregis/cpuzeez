@@ -17,9 +17,10 @@ The Windows packages (MSI and portable zip) ship `PawnIO_setup.exe` 2.2.0 and
 the modules, pinned with their SHA-256 in `packaging/pins.txt`. Nothing is
 installed without consent:
 
-- **MSI:** the optional *Hardware access (PawnIO driver)* feature, unticked
-  by default, runs `PawnIO_setup.exe -install -silent` during the install. A
-  failure doesn't fail the install. Silent installs: `ADDLOCAL=ALL`.
+- **MSI:** the *Hardware access (PawnIO driver)* feature, ticked by default
+  and explained in *Custom Setup*, runs `PawnIO_setup.exe -install -silent`
+  during the install. A failure doesn't fail the install. Untick it to skip
+  the driver. Silent installs include it; `ADDLOCAL=Main` leaves it out.
 - **In the app:** *Install hardware access* in the banner runs the allow-listed
   `install-pawn-io` action in an elevated one-shot copy. It holds the bundled
   installer open without write or delete sharing, checks its SHA-256 against

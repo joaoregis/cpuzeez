@@ -162,10 +162,10 @@ Como no CPU-Z, algumas informações só vêm de registradores do hardware: MSRs
 
 O [PawnIO](https://pawnio.eu) é um driver de kernel assinado, open source e programável, também usado pelo LibreHardwareMonitor e pelo FanControl.
 
-Os pacotes para Windows trazem o PawnIO com versão fixada e SHA-256 conferido ([`packaging/pins.txt`](packaging/pins.txt)), e só o instalam se você pedir:
+Os pacotes para Windows trazem o PawnIO com versão fixada e SHA-256 conferido ([`packaging/pins.txt`](packaging/pins.txt)):
 
 1. Instale:
-   - **MSI:** marque *Hardware access (PawnIO driver)* em *Custom Setup*. Vem desmarcado. Em instalação silenciosa, use `msiexec /i cpuzeez-….msi ADDLOCAL=ALL`.
+   - **MSI:** *Hardware access (PawnIO driver)* vem marcado em *Custom Setup*. Desmarque para não instalar o driver. Para instalar em silêncio sem ele, use `msiexec /i cpuzeez-….msi ADDLOCAL=Main`.
    - **No app:** clique em *Instalar acesso ao hardware* no aviso amarelo. O CpuZeeZ confere o instalador incluído com o hash fixado, e o Windows pede permissão.
    - **Por conta própria:** `winget install namazso.PawnIO`, ou o instalador em [pawnio.eu](https://pawnio.eu).
 2. Os módulos oficiais ([PawnIO.Modules](https://github.com/namazso/PawnIO.Modules/releases), LGPL-2.1) vêm na pasta `pawnio-modules` ao lado do `cpuzeez.exe`. Se compilar do código-fonte, extraia-os lá.

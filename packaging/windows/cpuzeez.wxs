@@ -1,10 +1,10 @@
 <!-- WiX v5 per-machine installer: cpuzeez.exe in Program Files, Start menu
      shortcut, added to PATH, PawnIO modules next to the exe, and the optional
-     "Hardware access" feature (off by default) that runs the bundled PawnIO
+     "Hardware access" feature (ticked by default, can be unticked) that runs the bundled PawnIO
      installer. Inputs come from .github/scripts/fetch_pawnio.sh OUT:
      wix build cpuzeez.wxs -ext WixToolset.UI.wixext -arch x64 -d Version=x.y.z -d Bin=path\to\cpuzeez.exe
        -d IconFile=assets\cpuzeez.ico -d PawnIo=ABSOLUTE\PATH\TO\OUT (Files/@Include resolves a relative path against this file's folder)
-     Silent installs pick it with ADDLOCAL=ALL (or ADDLOCAL=Main,HardwareAccess). -->
+     Silent installs include it; ADDLOCAL=Main leaves the driver out. -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package Name="CpuZeeZ" Manufacturer="CpuZeeZ contributors" Version="$(Version)"
            UpgradeCode="6F2C1A0E-4B7D-4E8A-9C35-2D1B7A9E0C41" Scope="perMachine" Compressed="yes">
@@ -50,9 +50,10 @@
       <Files Directory="ModulesFolder" Include="$(PawnIo)\pawnio-modules\*" />
     </Feature>
 
-    <!-- Level 2 > INSTALLLEVEL 1: unticked unless the user ticks it (P2: consent). -->
-    <Feature Id="HardwareAccess" Level="2" Title="Hardware access (PawnIO driver)"
-             Description="Installs the PawnIO driver by namazso (pawnio.eu) so CpuZeeZ can read CPU temperatures, voltages, memory SPD and timings. Shared with LibreHardwareMonitor and FanControl; uninstalling CpuZeeZ keeps it. You can also install it later from the app.">
+    <!-- Ticked by default (owner's decision, 2026-11-05) and explained in Custom Setup,
+         where it can be unticked. -->
+    <Feature Id="HardwareAccess" Level="1" Title="Hardware access (PawnIO driver)"
+             Description="Installs the PawnIO driver by namazso (pawnio.eu) so CpuZeeZ can read CPU temperatures, voltages, memory SPD and timings. Shared with LibreHardwareMonitor and FanControl; uninstalling CpuZeeZ keeps it. Untick it to skip the driver; you can install it later from the app.">
       <Component Id="HardwareAccessChoice" Directory="INSTALLFOLDER" Guid="*">
         <RegistryValue Root="HKLM" Key="Software\CpuZeeZ" Name="HardwareAccess" Type="integer" Value="1" KeyPath="yes" />
       </Component>

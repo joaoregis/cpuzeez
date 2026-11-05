@@ -20,7 +20,7 @@ generated from its section below.
   - A detailed roadmap ([`docs/v1/ROADMAP.md`](docs/v1/ROADMAP.md)) listing every fix, improvement and feature by stage, with IDs and acceptance criteria.
 - Static-analysis evidence scripts for the Task Manager design (`docs/v1/evidence/`).
 - **PawnIO ships with the Windows packages** (S0-P01–P03). The installer (2.2.0) and the official modules (0.2.11) are pinned with their SHA-256 in `packaging/pins.txt` and checked when a release is built.
-  - The driver is installed only on request: the MSI's optional *Hardware access* feature (unticked by default), or *Install hardware access* in the app's banner. The app re-checks the installer's hash before running it, and logs the action in the local audit log.
+  - The MSI's *Hardware access* feature installs the driver. It's ticked by default, explained in *Custom Setup*, and can be unticked. Portable users get *Install hardware access* in the app's banner. The app re-checks the installer's hash before running it, and logs the action in the local audit log.
   - The modules are installed next to the app, so nothing is left to download by hand.
   - [THIRD_PARTY.md](THIRD_PARTY.md) and *About › Third-party components* list what is bundled and under which license.
 - **The GUI opens on machines without a working OpenGL driver**, such as VMs, Remote Desktop and missing GPU drivers. If OpenGL fails, CpuZeeZ restarts its window on wgpu (DX12/WARP, Vulkan or Metal). `CZ_RENDERER=wgpu` forces it ([ADR 0013](docs/adr/0013-gui-renders-with-glow-and-falls-back-to-wgpu.md)).

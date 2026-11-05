@@ -72,7 +72,16 @@ def diff(a, b, tol=24):
 
 
 def compare(before, after, max_diff):
-    names = sorted(f for f in os.listdir(before) if f.endswith(".png"))
+    pngs = lambda d: sorted(f for f in os.listdir(d) if f.endswith(".png")) if os.path.isdir(d) else []
+    names = pngs(before)
+    if not pngs(after):
+        print(f"FAIL {after}: no screenshots (the build under test didn't render)")
+        return True
+    if not names:
+        # A base without the wgpu fallback can't open a window on a runner
+        # without OpenGL 2.0; the head's set was still required above.
+        print(f"SKIP {before} has no screenshots (the base build couldn't render): nothing to compare")
+        return False
     missing = sorted(set(names) ^ {f for f in os.listdir(after) if f.endswith(".png")})
     failed = bool(missing)
     for m in missing:

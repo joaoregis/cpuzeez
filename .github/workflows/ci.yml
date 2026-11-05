@@ -199,10 +199,9 @@ jobs:
           function PawnIo { Test-Path HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO }
           if (PawnIo) { throw 'the runner already has PawnIO: the feature test would prove nothing' }
           foreach ($v in '1.0.0-beta.1', '1.0.0-rc.1', '1.0.0', '1.0.1') {
-            # The first install ticks the optional Hardware access feature; later ones keep the defaults.
-            $extra = if ($v -eq '1.0.0-beta.1') { 'ADDLOCAL=ALL' } else { '' }
-            $p = Start-Process msiexec -ArgumentList "/i cz-$v.msi /qn $extra /l*v i-$v.log" -Wait -PassThru; if ($p.ExitCode) { throw "install ${v}: $($p.ExitCode)" }
-            if ($v -eq '1.0.0-beta.1' -and -not (PawnIo)) { throw 'Hardware access was ticked but PawnIO is not installed' }
+            # Hardware access is ticked by default, so a plain install brings PawnIO.
+            $p = Start-Process msiexec -ArgumentList "/i cz-$v.msi /qn /l*v i-$v.log" -Wait -PassThru; if ($p.ExitCode) { throw "install ${v}: $($p.ExitCode)" }
+            if ($v -eq '1.0.0-beta.1' -and -not (PawnIo)) { throw 'Hardware access is the default but PawnIO is not installed' }
             $e = @(Installed); "$v -> $($e.Count) entry, version $($e.DisplayVersion)"
             if ($e.Count -ne 1) { throw "after $v there are $($e.Count) entries" }
           }

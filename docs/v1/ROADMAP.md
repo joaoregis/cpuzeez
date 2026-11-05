@@ -103,7 +103,7 @@ Goal: fix what's broken, build the shared building blocks, and set up the tests 
 
 | ID | Item | Type | Source | Done when |
 |---|---|---|---|---|
-| S0-P01 | Bundle the **official PawnIO installer**: MSI optional checkbox + in-app "Install hardware access" (portable). ✅ Feature unticked by default; the in-app action re-checks the pinned SHA-256 with the file locked; CI installs it and checks uninstall keeps it | 📦 | dependencies §3 | Checkbox installs PawnIO; uninstalling CpuZeeZ leaves it, and says so |
+| S0-P01 | Bundle the **official PawnIO installer**: MSI optional checkbox + in-app "Install hardware access" (portable). ✅ Feature ticked by default (owner's decision), can be unticked; the in-app action re-checks the pinned SHA-256 with the file locked; CI installs it and checks uninstall keeps it | 📦 | dependencies §3 | Checkbox installs PawnIO; uninstalling CpuZeeZ leaves it, and says so |
 | S0-P02 | Release workflow downloads pinned **PawnIO modules**, verifies SHA-256, and ships them with `COPYING` and the source tag. ✅ `packaging/pins.txt` + `fetch_pawnio.sh`, MSI and portable zip | 📦 | dependencies §3 | Modules load from a fresh MSI install with no manual copy |
 | S0-P03 | `THIRD_PARTY.md` + *About › Third-party components* ✅ | 📦📝 | dependencies §4 | Every bundled binary listed with version, license and hash |
 | S0-P04 | **Pre-release pipeline**: prerelease flag for `-beta`/`-rc` tags, opt-in **Beta channel** in Settings, "Beta report" issue template | 📦 | README §6.1 | A test tag publishes a pre-release that stable users don't see |

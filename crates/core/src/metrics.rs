@@ -813,8 +813,12 @@ mod tests {
         let e = Engine::start(vec![cpu, gpu], quick());
         std::thread::sleep(Duration::from_millis(350));
         assert_eq!(cpu_reads.load(Ordering::SeqCst) + gpu_reads.load(Ordering::SeqCst), 0, "no lease, no reads");
-        e.want("overview", &["cpu/temp"]);
-        wait_until("cpu reads", || cpu_reads.load(Ordering::SeqCst) >= 2);
+        // Renewed while waiting, as the GUI does every frame: on a slow
+        // machine a single 400 ms lease can lapse before two reads happen.
+        wait_until("cpu reads", || {
+            e.want("overview", &["cpu/temp"]);
+            cpu_reads.load(Ordering::SeqCst) >= 2
+        });
         assert_eq!(gpu_reads.load(Ordering::SeqCst), 0, "gpu not covered by the lease");
         assert!(e.snapshot().get("cpu/value").is_some());
         // The lease lapses without renewal.
@@ -823,8 +827,10 @@ mod tests {
         std::thread::sleep(Duration::from_millis(350));
         assert_eq!(cpu_reads.load(Ordering::SeqCst), n, "lapsed lease stops reads");
         // "" covers everything; so does `always`.
-        e.want("sensors", &[""]);
-        wait_until("gpu reads", || gpu_reads.load(Ordering::SeqCst) >= 1);
+        wait_until("gpu reads", || {
+            e.want("sensors", &[""]);
+            gpu_reads.load(Ordering::SeqCst) >= 1
+        });
     }
 
     #[test]
