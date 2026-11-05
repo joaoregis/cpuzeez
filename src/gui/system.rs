@@ -257,10 +257,12 @@ struct RunTaskModal {
 #[derive(Default)]
 struct InspectorCache {
     pid: u32,
-    cmdline: String,
     threads: Vec<os_procs::Thread>,
     conns: Vec<proc_ops::NetConn>,
-    sha256: Option<String>,
+    /// The file's SHA-256, computed on a background thread (large executables
+    /// take longer than a frame). (pid, result).
+    sha256: Arc<Mutex<Option<(u32, String)>>>,
+    hashing: bool,
     last_refresh: Option<std::time::Instant>,
     /// Threads and connections read on a background thread (a full snapshot
     /// with threads plus the socket table took longer than a frame).
@@ -1121,8 +1123,8 @@ impl State {
                 self.inspector.pid = r.pid;
                 self.inspector.last_refresh = Some(std::time::Instant::now());
                 if pid_changed {
-                    self.inspector.cmdline = os_procs::command_line(r.pid).unwrap_or_default();
-                    self.inspector.sha256 = None;
+                    *self.inspector.sha256.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                    self.inspector.hashing = false;
                 }
                 if self.inspector.pending.is_none() {
                     let slot = Arc::new(Mutex::new(None));
@@ -1182,7 +1184,7 @@ impl State {
                             (tr("Description"), r.description.clone()),
                             (tr("Publisher"), r.publisher.clone()),
                             (tr("Path"), r.path.clone()),
-                            (tr("Command line"), self.inspector.cmdline.clone()),
+                            (tr("Command line"), r.command_line.clone()),
                             (tr("User"), r.user.clone()),
                             (tr("Parent PID"), r.ppid.to_string()),
                             (tr("CPU time"), format!("{:.2} s", r.cpu_time_s)),
@@ -1237,10 +1239,22 @@ impl State {
                         }
                     }
                     DetailTab::Security => {
+                        let opt = |v: Option<bool>, y: &str, n: &str| match v {
+                            Some(true) => tr(y).to_string(),
+                            Some(false) => tr(n).to_string(),
+                            None => String::new(),
+                        };
                         let kvs = vec![
                             (tr("Publisher"), r.publisher.clone()),
                             (tr("Account"), r.user.clone()),
                             (tr("Session"), r.session.map_or_else(|| "–".into(), |s| s.to_string())),
+                            (tr("Elevated"), opt(r.elevated, "Yes", "No")),
+                            (
+                                tr("Integrity"),
+                                if r.integrity.is_empty() { String::new() } else { tr(&r.integrity).into() },
+                            ),
+                            (tr("UAC virtualization"), opt(r.virtualization, "Enabled", "Disabled")),
+                            (tr("Architecture"), r.arch.clone()),
                             (
                                 tr("Anti-cheat safe"),
                                 tr("Queried via kernel snapshot / limited handle only (memory never read)").into(),
@@ -1249,17 +1263,27 @@ impl State {
                         widgets::kv_list(ui, &kvs);
                         ui.add_space(6.0);
                         if !r.path.is_empty() {
-                            if let Some(hash) = &self.inspector.sha256 {
+                            let done = self.inspector.sha256.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                            if let Some((_, hash)) = done.filter(|d| d.0 == r.pid) {
                                 ui.label(RichText::new("SHA-256:").small().weak());
-                                ui.label(RichText::new(hash).monospace().small());
+                                ui.label(RichText::new(&hash).monospace().small());
                                 if ui.small_button(tr("Copy SHA-256")).clicked() {
-                                    ui.ctx().copy_text(hash.clone());
+                                    ui.ctx().copy_text(hash);
                                 }
+                            } else if self.inspector.hashing {
+                                ui.horizontal(|ui| {
+                                    ui.spinner();
+                                    ui.label(RichText::new(tr("Computing…")).small().weak());
+                                });
+                                ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
                             } else if ui.button(tr("Compute file SHA-256")).clicked() {
-                                self.inspector.sha256 = Some(
-                                    crate::update::sha256_file(std::path::Path::new(&r.path))
-                                        .unwrap_or_else(|e| e.to_string()),
-                                );
+                                self.inspector.hashing = true;
+                                let (slot, path, pid) = (self.inspector.sha256.clone(), r.path.clone(), r.pid);
+                                std::thread::spawn(move || {
+                                    let h = crate::update::sha256_file(std::path::Path::new(&path))
+                                        .unwrap_or_else(|e| e.to_string());
+                                    *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some((pid, h));
+                                });
                             }
                         }
                     }
@@ -1464,6 +1488,7 @@ fn power_color(p: &theme::Palette, score: f64) -> Option<Color32> {
 }
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Computing…", "Calculando…"),
     ("Network per process needs administrator rights.", "A rede por processo requer direitos de administrador."),
     ("This system gives no network counters per process.", "Este sistema não fornece contadores de rede por processo."),
     ("I/O reads", "Leituras de E/S"),
@@ -1649,6 +1674,7 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Computing…", "Calculando…"),
     ("Network per process needs administrator rights.", "La red por proceso requiere derechos de administrador."),
     ("This system gives no network counters per process.", "Este sistema no ofrece contadores de red por proceso."),
     ("I/O reads", "Lecturas de E/S"),
