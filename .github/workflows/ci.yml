@@ -72,16 +72,36 @@ jobs:
           fi
       - name: GUI on Wayland (headless Weston)
         if: runner.os == 'Linux'
-        timeout-minutes: 5
+        # A normal run takes ~1 min. Rarely (5e49edf, da4c3e8) the app or headless
+        # Weston stalls and nothing gets logged, so each attempt is bounded, gets a
+        # fresh compositor, prints where it stopped, and is retried once.
+        timeout-minutes: 7
         shell: bash
         run: |
           set -e
           sudo apt-get install -y -qq weston mesa-vulkan-drivers libwayland-egl1 >/dev/null
-          export XDG_RUNTIME_DIR=$(mktemp -d); chmod 700 "$XDG_RUNTIME_DIR"
-          weston --backend=headless --socket=wayland-cz --width=1280 --height=1024 &
-          for i in $(seq 50); do test -S "$XDG_RUNTIME_DIR/wayland-cz" && break; sleep 0.1; done
-          env -u DISPLAY WAYLAND_DISPLAY=wayland-cz target/release/cpuzeez -screenshots=out/wayland 2>&1 | tail -n 25
-          ls out/wayland | wc -l
+          attempt() {
+            export XDG_RUNTIME_DIR=$(mktemp -d); chmod 700 "$XDG_RUNTIME_DIR"
+            rm -rf out/wayland
+            weston --backend=headless --socket=wayland-cz --width=1280 --height=1024 &
+            local weston_pid=$!
+            for i in $(seq 50); do test -S "$XDG_RUNTIME_DIR/wayland-cz" && break; sleep 0.1; done
+            local rc=0
+            env -u DISPLAY WAYLAND_DISPLAY=wayland-cz \
+              timeout --kill-after=10 150 target/release/cpuzeez -screenshots=out/wayland \
+              > "out/wayland-attempt$1.log" 2>&1 || rc=$?
+            kill "$weston_pid" 2>/dev/null || true; wait "$weston_pid" 2>/dev/null || true
+            echo "::group::attempt $1 (exit $rc), last log lines"
+            tail -n 25 "out/wayland-attempt$1.log"
+            echo "screenshots: $(ls out/wayland 2>/dev/null | wc -l)"
+            echo "::endgroup::"
+            return $rc
+          }
+          mkdir -p out
+          if ! attempt 1; then
+            echo "::warning::Wayland GUI attempt 1 failed or stalled; retrying once with a fresh Weston"
+            attempt 2
+          fi
           test -s out/wayland/overview.png
       - uses: actions/upload-artifact@v4
         with:
