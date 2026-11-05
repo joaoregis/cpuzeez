@@ -46,6 +46,8 @@ generated from its section below.
 
 ### Fixed
 
+- Tests that switched the interface language could change the labels other tests were clicking (now per test thread).
+- On Windows and Linux, Super I/O readings labelled "CPU …" were filed under the CPU and missing from leases that asked for the mainboard; they stay with the mainboard now (macOS's SMC still files them under the CPU).
 - With PawnIO installed but its modules missing, the banner said "PawnIO has no module for this CPU". It now says the `pawnio-modules` folder is missing.
 
 ## [0.3.0] - 2026-10-14
