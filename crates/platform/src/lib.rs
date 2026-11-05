@@ -15,6 +15,7 @@ pub mod hw;
 pub mod memory;
 pub mod net_io;
 pub mod os;
+pub mod partitions;
 
 pub mod cpu {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]

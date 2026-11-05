@@ -11,6 +11,14 @@ use eframe::egui::{self, RichText};
 use std::sync::{Arc, Mutex};
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Partition alignment", "Alinhamento das partições"),
+    ("All {} partitions aligned", "Todas as {} partições alinhadas"),
+    ("Partition {} not aligned to 4 KiB (slower writes)", "Partição {} não alinhada a 4 KiB (gravação mais lenta)"),
+    ("TRIM (OS)", "TRIM (sistema)"),
+    ("On", "Ligado"),
+    ("Off", "Desligado"),
+    ("Thermal throttling", "Limitação térmica"),
+    ("{} times, {} s in total", "{} vezes, {} s no total"),
     ("Devices", "Dispositivos"),
     ("Storage", "Armazenamento"),
     ("Network", "Rede"),
@@ -79,6 +87,14 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Partition alignment", "Alineación de particiones"),
+    ("All {} partitions aligned", "Las {} particiones alineadas"),
+    ("Partition {} not aligned to 4 KiB (slower writes)", "Partición {} sin alinear a 4 KiB (escrituras más lentas)"),
+    ("TRIM (OS)", "TRIM (sistema)"),
+    ("On", "Activado"),
+    ("Off", "Desactivado"),
+    ("Thermal throttling", "Limitación térmica"),
+    ("{} times, {} s in total", "{} veces, {} s en total"),
     ("Devices", "Dispositivos"),
     ("Storage", "Almacenamiento"),
     ("Network", "Red"),
@@ -329,6 +345,19 @@ fn level(l: crate::storage::HealthLevel) -> Health {
     }
 }
 
+/// Partitions and TRIM of a drive, read once (they don't change while we run).
+fn layout(path: &str) -> (Vec<cpuzeez_platform::partitions::Partition>, Option<bool>) {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+    static CACHE: Mutex<Option<HashMap<String, (Vec<cpuzeez_platform::partitions::Partition>, Option<bool>)>>> =
+        Mutex::new(None);
+    let mut g = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    g.get_or_insert_with(HashMap::new)
+        .entry(path.to_string())
+        .or_insert_with(|| (cpuzeez_platform::partitions::of(path), cpuzeez_platform::partitions::trim(path)))
+        .clone()
+}
+
 fn bytes_tb(b: u64) -> String {
     if b >= 1_000_000_000_000 { format!("{:.2} TB", b as f64 / 1e12) } else { format!("{:.1} GB", b as f64 / 1e9) }
 }
@@ -357,6 +386,34 @@ fn drive(ui: &mut egui::Ui, i: usize, d: &crate::storage::Drive) {
         ("Link Speed", d.link.clone().unwrap_or_default()),
     ];
     r.extend(d.volumes.iter().map(|v| ("Volume", crate::storage::volume_line(v))));
+    // S1-G06: alignment, the OS's TRIM setting, NVMe thermal throttling.
+    let (parts, trim) = layout(&d.path);
+    if !parts.is_empty() {
+        let bad: Vec<String> = parts.iter().filter(|p| !p.aligned()).map(|p| p.number.to_string()).collect();
+        let text = if bad.is_empty() {
+            trf("All {} partitions aligned", &[&parts.len()])
+        } else {
+            trf("Partition {} not aligned to 4 KiB (slower writes)", &[&bad.join(", ")])
+        };
+        r.push(("Partition alignment", text));
+    }
+    if d.ssd
+        && let Some(t) = trim
+    {
+        r.push(("TRIM (OS)", tr(if t { "On" } else { "Off" }).to_string()));
+    }
+    if let Some(s) = s {
+        let num = |k: &str| {
+            s.nvme_log.iter().find(|(n, _)| n == k).and_then(|(_, v)| v.split_whitespace().next()?.parse::<u64>().ok())
+        };
+        let count = num("Thermal Mgmt Temp 1 Transition Count").unwrap_or(0)
+            + num("Thermal Mgmt Temp 2 Transition Count").unwrap_or(0);
+        let secs = num("Total Time For Thermal Mgmt Temp 1").unwrap_or(0)
+            + num("Total Time For Thermal Mgmt Temp 2").unwrap_or(0);
+        if s.nvme_log.iter().any(|(n, _)| n.starts_with("Thermal Mgmt")) {
+            r.push(("Thermal throttling", trf("{} times, {} s in total", &[&count, &secs])));
+        }
+    }
     let h = s.map_or_else(|| health(&d.health), |s| level(s.health));
     let (t, text) = tone(h);
     device_card(ui, icon::HARD_DRIVE, &d.name, (t, tr(text)), |ui| {
