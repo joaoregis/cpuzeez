@@ -70,6 +70,20 @@ jobs:
           else
             target/release/cpuzeez -screenshots=out/screenshots
           fi
+      - name: GUI on Wayland (headless Weston)
+        if: runner.os == 'Linux'
+        continue-on-error: true  # S0-T01: made required once it's proven stable
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -e
+          sudo apt-get install -y -qq weston mesa-vulkan-drivers libwayland-egl1 >/dev/null
+          export XDG_RUNTIME_DIR=$(mktemp -d); chmod 700 "$XDG_RUNTIME_DIR"
+          weston --backend=headless --socket=wayland-cz --width=1280 --height=1024 &
+          for i in $(seq 50); do test -S "$XDG_RUNTIME_DIR/wayland-cz" && break; sleep 0.1; done
+          env -u DISPLAY WAYLAND_DISPLAY=wayland-cz target/release/cpuzeez -screenshots=out/wayland 2>&1 | tail -n 25
+          ls out/wayland | wc -l
+          test -s out/wayland/overview.png
       - uses: actions/upload-artifact@v4
         with:
           name: report-${{ matrix.os }}
