@@ -1464,6 +1464,26 @@ fn power_color(p: &theme::Palette, score: f64) -> Option<Color32> {
 }
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Network per process needs administrator rights.", "A rede por processo requer direitos de administrador."),
+    ("This system gives no network counters per process.", "Este sistema não fornece contadores de rede por processo."),
+    ("I/O reads", "Leituras de E/S"),
+    ("I/O writes", "Gravações de E/S"),
+    ("GDI objects", "Objetos GDI"),
+    ("USER objects", "Objetos USER"),
+    ("Power usage", "Consumo de energia"),
+    ("Power usage trend", "Tendência de consumo de energia"),
+    ("Very low", "Muito baixo"),
+    ("Moderate", "Moderado"),
+    ("Very high", "Muito alto"),
+    ("Architecture", "Arquitetura"),
+    ("Elevated", "Elevado"),
+    ("Integrity", "Integridade"),
+    ("Untrusted", "Não confiável"),
+    ("Medium Plus", "Médio Plus"),
+    ("Protected", "Protegido"),
+    ("AppContainer", "AppContainer"),
+    ("UAC virtualization", "Virtualização do UAC"),
+    ("Close window", "Fechar janela"),
     (
         "Protected by an anti-cheat: CpuZeeZ never reads its memory.",
         "Protegido por um anti-cheat: o CpuZeeZ nunca lê a memória dele.",
@@ -1629,6 +1649,26 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Network per process needs administrator rights.", "La red por proceso requiere derechos de administrador."),
+    ("This system gives no network counters per process.", "Este sistema no ofrece contadores de red por proceso."),
+    ("I/O reads", "Lecturas de E/S"),
+    ("I/O writes", "Escrituras de E/S"),
+    ("GDI objects", "Objetos GDI"),
+    ("USER objects", "Objetos USER"),
+    ("Power usage", "Consumo de energía"),
+    ("Power usage trend", "Tendencia de consumo de energía"),
+    ("Very low", "Muy bajo"),
+    ("Moderate", "Moderado"),
+    ("Very high", "Muy alto"),
+    ("Architecture", "Arquitectura"),
+    ("Elevated", "Elevado"),
+    ("Integrity", "Integridad"),
+    ("Untrusted", "No confiable"),
+    ("Medium Plus", "Medio Plus"),
+    ("Protected", "Protegido"),
+    ("AppContainer", "AppContainer"),
+    ("UAC virtualization", "Virtualización de UAC"),
+    ("Close window", "Cerrar ventana"),
     (
         "Protected by an anti-cheat: CpuZeeZ never reads its memory.",
         "Protegido por un anti-cheat: CpuZeeZ nunca lee su memoria.",

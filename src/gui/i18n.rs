@@ -189,4 +189,60 @@ mod tests {
             }
         }
     }
+
+    /// Every literal passed to `tr`/`trf` in the GUI's code (tests left out)
+    /// has a pt-BR (and so an es) translation.
+    #[test]
+    fn every_literal_is_translated() {
+        fn files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            for e in std::fs::read_dir(dir).unwrap().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    files(&p, out);
+                } else if p.extension().is_some_and(|x| x == "rs") {
+                    out.push(p);
+                }
+            }
+        }
+        /// The string literal at the start of `s` (after its opening quote), unescaped.
+        fn literal(s: &str) -> Option<String> {
+            let mut out = String::new();
+            let mut it = s.chars();
+            while let Some(c) = it.next() {
+                match c {
+                    '"' => return Some(out),
+                    '\\' => match it.next()? {
+                        'n' => out.push('\n'),
+                        't' => out.push('\t'),
+                        c => out.push(c),
+                    },
+                    c => out.push(c),
+                }
+            }
+            None
+        }
+        let keys: std::collections::HashSet<&str> = tables().iter().flat_map(|t| t.0.iter().map(|e| e.0)).collect();
+        let mut srcs = Vec::new();
+        files(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/gui"), &mut srcs);
+        let (mut missing, mut seen) = (Vec::new(), 0usize);
+        for f in srcs {
+            let text = std::fs::read_to_string(&f).unwrap();
+            let code = text.split("#[cfg(test)]").next().unwrap_or("");
+            for pat in ["tr(\"", "trf(\""] {
+                for (i, _) in code.match_indices(pat) {
+                    let before = code[..i].chars().next_back();
+                    if before.is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                        continue; // e.g. `str("`
+                    }
+                    let Some(k) = literal(&code[i + pat.len()..]) else { continue };
+                    seen += 1;
+                    if !keys.contains(k.as_str()) {
+                        missing.push(format!("{}: {k}", f.file_name().unwrap().to_string_lossy()));
+                    }
+                }
+            }
+        }
+        assert!(seen > 500, "the scan found only {seen} literals");
+        assert!(missing.is_empty(), "untranslated:\n{}", missing.join("\n"));
+    }
 }

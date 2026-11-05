@@ -587,6 +587,8 @@ fn render_daily_chart(ui: &mut Ui, days: &[(String, f64)]) {
 }
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("History unavailable: {}", "Histórico indisponível: {}"),
+    ("Delete every recorded day?", "Excluir todos os dias gravados?"),
     (
         "Covers only the time CpuZeeZ (or its tray icon) was running.",
         "Cobre apenas o período em que o CpuZeeZ (ou seu ícone na bandeja) esteve em execução.",
@@ -612,6 +614,8 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("History unavailable: {}", "Historial no disponible: {}"),
+    ("Delete every recorded day?", "¿Eliminar todos los días registrados?"),
     (
         "Covers only the time CpuZeeZ (or its tray icon) was running.",
         "Cubre únicamente el tiempo en que CpuZeeZ (o su icono en la bandeja) estuvo en ejecución.",

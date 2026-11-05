@@ -728,6 +728,7 @@ pub fn export_series_csv(series: &[Series]) -> String {
 }
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Hot spot", "Ponto mais quente"),
     ("Summary view", "Visão resumida"),
     ("Window:", "Janela:"),
     ("1m", "1m"),
@@ -785,6 +786,7 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Hot spot", "Punto caliente"),
     ("Summary view", "Vista resumida"),
     ("Window:", "Ventana:"),
     ("1m", "1m"),
