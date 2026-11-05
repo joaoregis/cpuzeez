@@ -18,6 +18,35 @@ pub struct UsbDevice {
     pub speed_mbps: Option<f64>,
     /// bcdUSB: the USB version the device supports (0x0320 = 3.2).
     pub usb_bcd: Option<u16>,
+    /// This device's id and its parent's (a hub), for the tree view.
+    pub id: String,
+    pub parent: Option<String>,
+}
+
+/// (depth, index) in tree order: each device after its hub, roots first.
+pub fn tree(devs: &[UsbDevice]) -> Vec<(usize, usize)> {
+    fn walk(
+        devs: &[UsbDevice],
+        parent: Option<&str>,
+        depth: usize,
+        out: &mut Vec<(usize, usize)>,
+        seen: &mut Vec<bool>,
+    ) {
+        for (i, d) in devs.iter().enumerate() {
+            let under = match parent {
+                None => d.parent.as_deref().is_none_or(|p| !devs.iter().any(|x| x.id == p)),
+                Some(p) => d.parent.as_deref() == Some(p),
+            };
+            if under && !seen[i] && depth < 8 {
+                seen[i] = true;
+                out.push((depth, i));
+                walk(devs, Some(&d.id), depth + 1, out, seen);
+            }
+        }
+    }
+    let (mut out, mut seen) = (Vec::new(), vec![false; devs.len()]);
+    walk(devs, None, 0, &mut out, &mut seen);
+    out
 }
 
 impl UsbDevice {
@@ -149,6 +178,8 @@ mod imp {
                 .or_else(|| class_from_compat(&reg_strs(dn, DRP_COMPATIBLEIDS)))
                 .unwrap_or((0, 0));
             out.push(UsbDevice {
+                id: id.to_ascii_uppercase(),
+                parent: parent(dn).and_then(dev_id).map(|p| p.to_ascii_uppercase()),
                 name: reg_str(dn, DRP_DEVICEDESC).unwrap_or_else(|| "USB Device".into()),
                 class,
                 subclass,
@@ -193,7 +224,12 @@ mod imp {
                     let (a, b) = v.trim().split_once('.')?;
                     Some((a.parse::<u16>().ok()? << 8) | u16::from_str_radix(&format!("{b:0<2}")[..2], 16).ok()?)
                 });
+                // "1-2.3" hangs off the hub "1-2"; "1-2" off the root hub.
+                let id = p.file_name()?.to_string_lossy().into_owned();
+                let parent = id.rsplit_once('.').map(|x| x.0.to_string());
                 Some(UsbDevice {
+                    id,
+                    parent,
                     name,
                     class: hex(p, "bDeviceClass").unwrap_or(0) as u8,
                     subclass: hex(p, "bDeviceSubClass").unwrap_or(0) as u8,
@@ -287,5 +323,16 @@ mod tests {
         assert_eq!((d.version_text(), d.speed_text()), ("USB 3.2".to_string(), "480 Mbps".to_string()));
         assert!(!UsbDevice { speed_mbps: Some(5000.0), ..d.clone() }.slowed());
         assert!(!UsbDevice { usb_bcd: Some(0x0200), ..d }.slowed(), "a USB 2 device at USB 2 speed is fine");
+    }
+
+    #[test]
+    fn tree_order() {
+        let d = |id: &str, parent: Option<&str>| super::UsbDevice {
+            id: id.into(),
+            parent: parent.map(Into::into),
+            ..Default::default()
+        };
+        let devs = vec![d("1-2.1", Some("1-2")), d("1-2", None), d("1-3", Some("usb1")), d("1-2.1.4", Some("1-2.1"))];
+        assert_eq!(super::tree(&devs), vec![(0, 1), (1, 0), (2, 3), (0, 2)]);
     }
 }

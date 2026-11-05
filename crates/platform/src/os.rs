@@ -257,6 +257,42 @@ pub mod win {
         }
     }
 
+    /// Names of HKLM\sub's subkeys.
+    pub fn reg_subkeys(sub: &str) -> Vec<String> {
+        use windows_sys::Win32::System::Registry::{
+            HKEY, HKEY_LOCAL_MACHINE, KEY_READ, RegCloseKey, RegEnumKeyExW, RegOpenKeyExW,
+        };
+        let s = w(sub);
+        let mut out = Vec::new();
+        // SAFETY: our own key handle and name buffer; closed below.
+        unsafe {
+            let mut k: HKEY = std::ptr::null_mut();
+            if RegOpenKeyExW(HKEY_LOCAL_MACHINE, s.as_ptr(), 0, KEY_READ, &mut k) != 0 {
+                return out;
+            }
+            for i in 0.. {
+                let mut name = [0u16; 256];
+                let mut n = name.len() as u32;
+                let r = RegEnumKeyExW(
+                    k,
+                    i,
+                    name.as_mut_ptr(),
+                    &mut n,
+                    std::ptr::null(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                );
+                if r != 0 {
+                    break;
+                }
+                out.push(String::from_utf16_lossy(&name[..n as usize]));
+            }
+            RegCloseKey(k);
+        }
+        out
+    }
+
     pub fn reg_str(sub: &str, val: &str) -> Option<String> {
         let (_, b) = reg_raw(sub, val)?;
         let u: Vec<u16> = b.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes([c[0], c[1]])).collect();

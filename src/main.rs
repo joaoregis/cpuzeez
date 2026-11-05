@@ -32,6 +32,7 @@ mod memtest;
 mod network;
 mod npu;
 mod pci;
+mod peripherals;
 mod sensors;
 mod settings;
 mod smbios;

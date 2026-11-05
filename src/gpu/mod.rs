@@ -145,6 +145,11 @@ impl Live {
 
 static PROBE: OnceLock<Probe> = OnceLock::new();
 
+/// Monitors' EDIDs (S1-G07: their refresh range shows VRR support).
+pub fn monitors(ctx: &Ctx) -> &'static [Monitor] {
+    &probe(ctx).monitors
+}
+
 fn probe(ctx: &Ctx) -> &'static Probe {
     PROBE.get_or_init(|| {
         if !ctx.cfg.display {

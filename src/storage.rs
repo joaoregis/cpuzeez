@@ -257,6 +257,7 @@ pub(crate) mod win {
     pub const KEY_LINK_WIDTH: PropKey = PropKey(PCI_PROPS, 10);
 
     pub const DRP_DEVICEDESC: u32 = 1;
+    pub const DRP_FRIENDLYNAME: u32 = 0xD;
     pub const DRP_COMPATIBLEIDS: u32 = 3;
     pub const DRP_BUSNUMBER: u32 = 0x16;
     pub const DRP_ADDRESS: u32 = 0x1D;
@@ -403,6 +404,14 @@ pub(crate) mod win {
 
     pub fn reg_u32(dn: u32, p: u32) -> Option<u32> {
         reg_prop(dn, p).filter(|b| b.len() >= 4).map(|b| le32(&b, 0))
+    }
+
+    /// A device property's raw bytes (any type up to 64 bytes).
+    pub fn prop_bytes(dn: u32, key: &PropKey) -> Option<Vec<u8>> {
+        let mut buf = [0u8; 64];
+        let (mut ty, mut len) = (0u32, 64u32);
+        let r = unsafe { CM_Get_DevNode_PropertyW(dn, key, &mut ty, buf.as_mut_ptr(), &mut len, 0) };
+        (r == 0).then(|| buf[..len as usize].to_vec())
     }
 
     pub fn prop_u32(dn: u32, key: &PropKey) -> Option<u32> {

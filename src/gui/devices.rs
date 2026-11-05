@@ -11,6 +11,18 @@ use eframe::egui::{self, RichText};
 use std::sync::{Arc, Mutex};
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Supported, off", "Suportado, desligado"),
+    ("Not supported", "Não suportado"),
+    ("Colour depth", "Profundidade de cor"),
+    ("{} bits per channel", "{} bits por canal"),
+    ("Refresh range", "Faixa de atualização"),
+    ("likely (variable refresh)", "provável (taxa variável)"),
+    ("fixed", "fixa"),
+    ("Thunderbolt / USB4", "Thunderbolt / USB4"),
+    ("Audio", "Áudio"),
+    ("idle", "ocioso"),
+    ("Bluetooth devices", "Dispositivos Bluetooth"),
+    ("HDR", "HDR"),
     ("Encryption", "Criptografia"),
     ("BitLocker on", "BitLocker ativado"),
     ("BitLocker (encrypting)", "BitLocker (criptografando)"),
@@ -106,6 +118,18 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Supported, off", "Compatible, apagado"),
+    ("Not supported", "No compatible"),
+    ("Colour depth", "Profundidad de color"),
+    ("{} bits per channel", "{} bits por canal"),
+    ("Refresh range", "Rango de refresco"),
+    ("likely (variable refresh)", "probable (frecuencia variable)"),
+    ("fixed", "fija"),
+    ("Thunderbolt / USB4", "Thunderbolt / USB4"),
+    ("Audio", "Audio"),
+    ("idle", "inactivo"),
+    ("Bluetooth devices", "Dispositivos Bluetooth"),
+    ("HDR", "HDR"),
     ("Encryption", "Cifrado"),
     ("BitLocker on", "BitLocker activado"),
     ("BitLocker (encrypting)", "BitLocker (cifrando)"),
@@ -207,6 +231,11 @@ struct Data {
     batteries: Vec<crate::battery::Battery>,
     usb: Vec<crate::usb::UsbDevice>,
     displays: Vec<cpuzeez_platform::display::Mode>,
+    audio: Vec<crate::peripherals::Audio>,
+    bluetooth: Vec<crate::peripherals::Peripheral>,
+    thunderbolt: Vec<crate::peripherals::Thunderbolt>,
+    /// (EDID name, refresh range) per monitor.
+    ranges: Vec<(String, (u32, u32))>,
 }
 
 #[derive(Default)]
@@ -301,6 +330,13 @@ impl State {
                 batteries: crate::battery::batteries(&ctx),
                 usb: crate::usb::devices(&ctx),
                 displays: cpuzeez_platform::display::modes(),
+                audio: crate::peripherals::audio(),
+                bluetooth: crate::peripherals::bluetooth_batteries(),
+                thunderbolt: crate::peripherals::thunderbolt(),
+                ranges: crate::gpu::monitors(&ctx)
+                    .iter()
+                    .filter_map(|m| Some((m.model.clone()?, m.v_range_hz?)))
+                    .collect(),
             };
             *slot.lock().unwrap() = Some(d);
         });
@@ -355,18 +391,37 @@ impl State {
                     } else {
                         (Tone::Success, tr("OK"))
                     };
-                    device_card(ui, icon::MONITOR, &m.monitor, tone, |ui| {
-                        widgets::kv_list(ui, &rows(vec![("Refresh rate", hz), ("Connected to", m.adapter.clone())]));
-                    });
+                    let name = m.name.clone().unwrap_or_else(|| m.monitor.clone());
+                    let mut r = vec![("Refresh rate", hz), ("Connected to", m.adapter.clone())];
+                    if let Some((sup, on)) = m.hdr {
+                        let t = match (sup, on) {
+                            (true, true) => tr("On"),
+                            (true, false) => tr("Supported, off"),
+                            _ => tr("Not supported"),
+                        };
+                        r.push(("HDR", t.to_string()));
+                    }
+                    if let Some(b) = m.bits {
+                        r.push(("Colour depth", trf("{} bits per channel", &[&b])));
+                    }
+                    // VRR: a wide refresh range in the EDID (FreeSync / G-SYNC Compatible / HDMI VRR).
+                    if let Some(&(_, (lo, hi))) = d.ranges.iter().find(|x| name.contains(&x.0) || x.0.contains(&name)) {
+                        let vrr = if hi > lo + 20 { tr("likely (variable refresh)") } else { tr("fixed") };
+                        r.push(("Refresh range", format!("{lo}–{hi} Hz, {vrr}")));
+                    }
+                    device_card(ui, icon::MONITOR, &name, tone, |ui| widgets::kv_list(ui, &rows(r)));
                 }
             }
             if !d.usb.is_empty() {
                 section(ui, icon::USB, "USB");
                 widgets::card(ui, "", "", |ui| {
                     let p = theme::palette(ui);
-                    for u in &d.usb {
+                    for (depth, i) in crate::usb::tree(&d.usb) {
+                        let u = &d.usb[i];
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new(&u.name).color(p.text));
+                            ui.add_space(depth as f32 * 18.0);
+                            let mark = if depth > 0 { "└ " } else { "" };
+                            ui.label(RichText::new(format!("{mark}{}", u.name)).color(p.text));
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 ui.label(
                                     RichText::new(format!("{:04X}:{:04X}", u.vendor, u.product))
@@ -392,6 +447,54 @@ impl State {
                             });
                         });
                     }
+                });
+                ui.add_space(theme::GAP);
+            }
+            if !d.thunderbolt.is_empty() {
+                section(ui, icon::LIGHTNING, "Thunderbolt / USB4");
+                widgets::card(ui, "", "", |ui| {
+                    let rows: Vec<(&str, String)> = d
+                        .thunderbolt
+                        .iter()
+                        .map(|t| {
+                            let extra = [t.generation.clone(), t.link.clone()]
+                                .into_iter()
+                                .flatten()
+                                .collect::<Vec<_>>()
+                                .join(" · ");
+                            (t.name.as_str(), extra)
+                        })
+                        .collect();
+                    widgets::kv_list(ui, &rows);
+                });
+                ui.add_space(theme::GAP);
+            }
+            if !d.audio.is_empty() {
+                section(ui, icon::SPEAKER_HIGH, "Audio");
+                widgets::card(ui, "", "", |ui| {
+                    let p = theme::palette(ui);
+                    for a in &d.audio {
+                        ui.horizontal(|ui| {
+                            let ic = if a.output { icon::SPEAKER_HIGH } else { icon::MICROPHONE };
+                            ui.label(RichText::new(format!("{ic}  {}", a.name)).color(p.text));
+                            if !a.device.is_empty() {
+                                ui.label(RichText::new(&a.device).color(p.text_muted));
+                            }
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                let f = a.format.clone().unwrap_or_else(|| tr("idle").to_string());
+                                ui.label(RichText::new(f).monospace().color(p.text_secondary));
+                            });
+                        });
+                    }
+                });
+                ui.add_space(theme::GAP);
+            }
+            if !d.bluetooth.is_empty() {
+                section(ui, icon::BLUETOOTH, "Bluetooth devices");
+                widgets::card(ui, "", "", |ui| {
+                    let rows: Vec<(&str, String)> =
+                        d.bluetooth.iter().map(|b| (b.name.as_str(), format!("{} %", b.battery))).collect();
+                    widgets::kv_list(ui, &rows);
                 });
                 ui.add_space(theme::GAP);
             }
