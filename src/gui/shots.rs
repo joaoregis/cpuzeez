@@ -74,6 +74,17 @@ impl App {
             Step::System(tab) => {
                 self.page = Page::System;
                 self.system.tab = tab;
+                if first && tab == system::SysTab::Services {
+                    // Show the inspector on a service every OS has.
+                    let name = if cfg!(windows) {
+                        "EventLog"
+                    } else if cfg!(target_os = "macos") {
+                        "com.apple.syslogd"
+                    } else {
+                        "systemd-journald.service"
+                    };
+                    self.system.services.selected_name = Some(name.into());
+                }
                 // Let the sampler and the background queries (services, startup) answer.
                 !first && self.auto.as_ref().is_some_and(|a| a.since.elapsed() > Duration::from_secs(3))
             }

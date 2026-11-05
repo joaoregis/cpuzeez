@@ -58,6 +58,147 @@ impl StartupType {
     }
 }
 
+/// What the service manager does when a service fails.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum RecoveryAction {
+    #[default]
+    None,
+    Restart,
+    Reboot,
+    /// Set in the OS's own tool (it needs a program path); shown, not edited here.
+    RunProgram,
+}
+
+impl RecoveryAction {
+    pub const EDITABLE: [RecoveryAction; 3] = [RecoveryAction::None, RecoveryAction::Restart, RecoveryAction::Reboot];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            RecoveryAction::None => "Take no action",
+            RecoveryAction::Restart => "Restart the service",
+            RecoveryAction::Reboot => "Restart the computer",
+            RecoveryAction::RunProgram => "Run a program",
+        }
+    }
+}
+
+/// Failure recovery. Windows keeps three steps; systemd one policy (`first`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct Recovery {
+    pub first: RecoveryAction,
+    pub second: RecoveryAction,
+    pub subsequent: RecoveryAction,
+    /// Reset the failure count after this many days without failures (Windows).
+    pub reset_days: u32,
+    /// Wait before restarting, seconds.
+    pub restart_delay_s: u32,
+}
+
+/// The built-in accounts a service can run as without a password. Accounts
+/// with a password are set in the OS's own tool: CpuZeeZ never handles
+/// passwords (they would cross the elevation boundary on a command line).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ServiceAccount {
+    LocalSystem,
+    LocalService,
+    NetworkService,
+}
+
+impl ServiceAccount {
+    pub const ALL: [ServiceAccount; 3] =
+        [ServiceAccount::LocalSystem, ServiceAccount::LocalService, ServiceAccount::NetworkService];
+
+    /// The name the Windows SCM stores.
+    pub fn windows_name(self) -> &'static str {
+        match self {
+            ServiceAccount::LocalSystem => "LocalSystem",
+            ServiceAccount::LocalService => r"NT AUTHORITY\LocalService",
+            ServiceAccount::NetworkService => r"NT AUTHORITY\NetworkService",
+        }
+    }
+
+    /// The account a stored name means (case-insensitive, with or without the domain).
+    pub fn from_name(n: &str) -> Option<ServiceAccount> {
+        let short = n.rsplit('\\').next().unwrap_or(n);
+        ServiceAccount::ALL.into_iter().find(|a| {
+            let w = a.windows_name();
+            w.eq_ignore_ascii_case(n) || w.rsplit('\\').next().is_some_and(|x| x.eq_ignore_ascii_case(short))
+        })
+    }
+}
+
+/// What the inspector shows beyond the list, read on demand for one service.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ServiceDetails {
+    /// "Start: Group policy change", "TriggeredBy: foo.socket"…
+    pub triggers: Vec<String>,
+    /// Windows service SID type ("None", "Unrestricted", "Restricted").
+    pub sid_type: String,
+    /// Windows required privileges; Linux capability bounding set.
+    pub privileges: Vec<String>,
+    pub recovery: Option<Recovery>,
+    /// Windows "run a program" command, when set.
+    pub recovery_command: String,
+}
+
+/// `systemctl show -p TriggeredBy,Restart,RestartUSec,FailureAction,CapabilityBoundingSet` → details.
+pub fn parse_systemd_show(text: &str) -> ServiceDetails {
+    let get = |k: &str| text.lines().find_map(|l| l.strip_prefix(k)?.strip_prefix('=')).unwrap_or("").trim();
+    let restart = !matches!(get("Restart"), "" | "no");
+    let reboot = get("FailureAction").contains("reboot");
+    let action = if reboot {
+        RecoveryAction::Reboot
+    } else if restart {
+        RecoveryAction::Restart
+    } else {
+        RecoveryAction::None
+    };
+    let delay = parse_systemd_secs(get("RestartUSec"));
+    let caps: Vec<String> = get("CapabilityBoundingSet").split_whitespace().map(str::to_string).collect();
+    ServiceDetails {
+        triggers: get("TriggeredBy").split_whitespace().map(|t| format!("TriggeredBy: {t}")).collect(),
+        privileges: if caps.len() >= 38 { vec!["all capabilities".into()] } else { caps },
+        recovery: Some(Recovery {
+            first: action,
+            second: action,
+            subsequent: action,
+            reset_days: 0,
+            restart_delay_s: delay,
+        }),
+        ..Default::default()
+    }
+}
+
+/// "100ms", "5s", "1min 30s" → whole seconds (rounded up).
+pub fn parse_systemd_secs(v: &str) -> u32 {
+    let mut ms = 0f64;
+    for part in v.split_whitespace() {
+        let n: String = part.chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect();
+        let unit = &part[n.len()..];
+        let x: f64 = n.parse().unwrap_or(0.0);
+        ms += x * match unit {
+            "us" => 0.001,
+            "ms" => 1.0,
+            "min" => 60_000.0,
+            "h" => 3_600_000.0,
+            _ => 1000.0,
+        };
+    }
+    (ms / 1000.0).ceil() as u32
+}
+
+/// The systemd drop-in CpuZeeZ writes for a recovery policy.
+pub fn systemd_recovery_dropin(r: &Recovery) -> String {
+    let restart = if r.first == RecoveryAction::Restart { "on-failure" } else { "no" };
+    let failure = if r.first == RecoveryAction::Reboot { "reboot" } else { "none" };
+    format!(
+        "# Written by CpuZeeZ (System > Services > Recovery). Delete this file to undo.\n[Unit]\nFailureAction={failure}\n\n[Service]\nRestart={restart}\nRestartSec={}s\n",
+        r.restart_delay_s
+    )
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ServiceRow {
     pub name: String,
@@ -300,5 +441,33 @@ mod tests {
         assert!(matches_filter(&rows[1], ServiceFilter::StoppedAuto, ""));
         assert!(!matches_filter(&rows[0], ServiceFilter::StoppedAuto, ""));
         assert!(matches_filter(&rows[2], ServiceFilter::Disabled, "service c"));
+    }
+
+    #[test]
+    fn recovery_and_accounts() {
+        let d = parse_systemd_show(
+            "TriggeredBy=foo.socket bar.timer\nRestart=on-failure\nRestartUSec=1min 30s\nFailureAction=none\nCapabilityBoundingSet=cap_net_bind_service cap_chown\n",
+        );
+        assert_eq!(d.triggers, ["TriggeredBy: foo.socket", "TriggeredBy: bar.timer"]);
+        let r = d.recovery.unwrap();
+        assert_eq!((r.first, r.restart_delay_s), (RecoveryAction::Restart, 90));
+        assert_eq!(d.privileges, ["cap_net_bind_service", "cap_chown"]);
+        assert_eq!(parse_systemd_secs("100ms"), 1);
+        assert_eq!(parse_systemd_secs("5s"), 5);
+        let none = parse_systemd_show("Restart=no\nFailureAction=reboot-force\n");
+        assert_eq!(none.recovery.unwrap().first, RecoveryAction::Reboot);
+        let drop = systemd_recovery_dropin(&Recovery {
+            first: RecoveryAction::Restart,
+            restart_delay_s: 10,
+            ..Default::default()
+        });
+        assert!(
+            drop.contains("Restart=on-failure")
+                && drop.contains("RestartSec=10s")
+                && drop.contains("FailureAction=none")
+        );
+        assert_eq!(ServiceAccount::from_name("NT AUTHORITY\\NetworkService"), Some(ServiceAccount::NetworkService));
+        assert_eq!(ServiceAccount::from_name("localsystem"), Some(ServiceAccount::LocalSystem));
+        assert_eq!(ServiceAccount::from_name(".\\bob"), None);
     }
 }

@@ -170,14 +170,28 @@ impl Action {
     pub fn validate(&self) -> Result<(), String> {
         match self {
             Action::Service { target, .. } => {
-                let name = match target {
-                    ServiceOp::Start { name }
-                    | ServiceOp::Stop { name }
-                    | ServiceOp::Pause { name, .. }
-                    | ServiceOp::Restart { name }
-                    | ServiceOp::SetStartup { name, .. } => name,
-                };
-                if valid_service_name(name) { Ok(()) } else { Err(format!("not a service name: {name:?}")) }
+                let name = target.name();
+                if !valid_service_name(name) {
+                    return Err(format!("not a service name: {name:?}"));
+                }
+                match target {
+                    ServiceOp::StartWithParams { params, .. } => {
+                        if params.len() > 32 || params.iter().any(|a| a.len() > 1024 || a.contains('\0')) {
+                            return Err("start parameters: at most 32, each under 1024 characters".into());
+                        }
+                    }
+                    ServiceOp::SetRecovery { recovery: r, .. } => {
+                        use crate::services::RecoveryAction::RunProgram;
+                        if [r.first, r.second, r.subsequent].contains(&RunProgram) {
+                            return Err("a recovery program is set in the OS's own service tool".into());
+                        }
+                        if r.reset_days > 3650 || r.restart_delay_s > 86_400 {
+                            return Err("recovery: reset within 10 years, restart delay within a day".into());
+                        }
+                    }
+                    _ => {}
+                }
+                Ok(())
             }
             Action::Startup { target: StartupOp::SetEnabled { id, .. }, .. } => {
                 if valid_startup_id(id) {
@@ -206,11 +220,52 @@ impl Action {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum ServiceOp {
-    Start { name: String },
-    Stop { name: String },
-    Pause { name: String, resume: bool },
-    Restart { name: String },
-    SetStartup { name: String, startup: crate::services::StartupType },
+    Start {
+        name: String,
+    },
+    Stop {
+        name: String,
+    },
+    Pause {
+        name: String,
+        resume: bool,
+    },
+    Restart {
+        name: String,
+    },
+    SetStartup {
+        name: String,
+        startup: crate::services::StartupType,
+    },
+    /// Start with parameters (Windows passes them to the service's main).
+    StartWithParams {
+        name: String,
+        params: Vec<String>,
+    },
+    /// Run as a built-in account (no password).
+    SetAccount {
+        name: String,
+        account: crate::services::ServiceAccount,
+    },
+    SetRecovery {
+        name: String,
+        recovery: crate::services::Recovery,
+    },
+}
+
+impl ServiceOp {
+    pub fn name(&self) -> &str {
+        match self {
+            ServiceOp::Start { name }
+            | ServiceOp::Stop { name }
+            | ServiceOp::Pause { name, .. }
+            | ServiceOp::Restart { name }
+            | ServiceOp::SetStartup { name, .. }
+            | ServiceOp::StartWithParams { name, .. }
+            | ServiceOp::SetAccount { name, .. }
+            | ServiceOp::SetRecovery { name, .. } => name,
+        }
+    }
 }
 
 /// Startup entry operations (S2a-08): reversible enable/disable via `StartupApproved` / XDG / launchctl.
@@ -298,13 +353,7 @@ impl Action {
             Action::Process { target: ProcessOp::Priority { priority: Priority::Realtime, .. }, .. } => Risk::Critical,
             Action::Process { .. } | Action::Startup { .. } => Risk::Normal,
             Action::Service { target, .. } => {
-                let name = match target {
-                    ServiceOp::Start { name }
-                    | ServiceOp::Stop { name }
-                    | ServiceOp::Pause { name, .. }
-                    | ServiceOp::Restart { name }
-                    | ServiceOp::SetStartup { name, .. } => name.as_str(),
-                };
+                let name = target.name();
                 if crate::services::is_protected(name) { Risk::Critical } else { Risk::Normal }
             }
         }
@@ -336,6 +385,18 @@ impl Action {
             },
             Action::Service { target, .. } => match target {
                 ServiceOp::Start { name } => format!("Start service {name}"),
+                ServiceOp::StartWithParams { name, params } => {
+                    format!("Start service {name} with parameters {}", params.join(" "))
+                }
+                ServiceOp::SetAccount { name, account } => {
+                    format!("Run service {name} as {}", account.windows_name())
+                }
+                ServiceOp::SetRecovery { name, recovery } => format!(
+                    "Set service {name} recovery to {} / {} / {}",
+                    recovery.first.label(),
+                    recovery.second.label(),
+                    recovery.subsequent.label()
+                ),
                 ServiceOp::Stop { name } => format!("Stop service {name}"),
                 ServiceOp::Pause { name, resume: false } => format!("Pause service {name}"),
                 ServiceOp::Pause { name, resume: true } => format!("Resume service {name}"),
@@ -512,5 +573,32 @@ mod tests {
         };
         assert_eq!(decode(&encode(&r)), Ok(r.clone()));
         assert_eq!(r.risk(), Risk::Irreversible);
+    }
+
+    #[test]
+    fn service_edits_are_validated() {
+        use crate::services::{Recovery, RecoveryAction, ServiceAccount};
+        let svc = |t| Action::Service { target: t, elevate: true };
+        let ok = svc(ServiceOp::SetRecovery {
+            name: "Spooler".into(),
+            recovery: Recovery {
+                first: RecoveryAction::Restart,
+                restart_delay_s: 60,
+                reset_days: 1,
+                ..Default::default()
+            },
+        });
+        assert_eq!(decode(&encode(&ok)), Ok(ok.clone()));
+        let prog = svc(ServiceOp::SetRecovery {
+            name: "Spooler".into(),
+            recovery: Recovery { first: RecoveryAction::RunProgram, ..Default::default() },
+        });
+        assert!(decode(&encode(&prog)).is_err(), "no program paths through the elevated helper");
+        let acc = svc(ServiceOp::SetAccount { name: "Spooler".into(), account: ServiceAccount::LocalService });
+        assert_eq!(decode(&encode(&acc)), Ok(acc.clone()));
+        let args = svc(ServiceOp::StartWithParams { name: "Spooler".into(), params: vec!["-v".into()] });
+        assert!(decode(&encode(&args)).is_ok(), "parameters go to the service, not to a command line");
+        let bad = svc(ServiceOp::StartWithParams { name: "--x".into(), params: vec![] });
+        assert!(decode(&encode(&bad)).is_err());
     }
 }

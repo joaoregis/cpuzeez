@@ -10,7 +10,8 @@ use super::widgets::{self, Tone};
 use crate::executor::{self, Done};
 use cpuzeez_core::actions::{Action, ServiceOp};
 use cpuzeez_core::services::{
-    ServiceFilter, ServiceRow, ServiceState, StartupType, matches_filter, transitive_dependents,
+    Recovery, RecoveryAction, ServiceAccount, ServiceDetails, ServiceFilter, ServiceRow, ServiceState, StartupType,
+    matches_filter, transitive_dependents,
 };
 use eframe::egui::{self, CornerRadius, Frame, Margin, RichText, ScrollArea, Stroke, Ui};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -30,6 +31,12 @@ pub struct State {
     pub table: table::State,
     pub selected_name: Option<String>,
     edit_startup: Option<(String, StartupType)>,
+    edit_account: Option<(String, ServiceAccount)>,
+    edit_recovery: Option<(String, Recovery)>,
+    start_params: String,
+    /// (service, its details) read in the background when the inspector opens it.
+    details: Arc<Mutex<Option<(String, ServiceDetails)>>>,
+    details_for: Option<String>,
     logs_for: Option<String>,
     logs_buf: Arc<Mutex<Vec<String>>>,
     busy_logs: Arc<AtomicBool>,
@@ -51,6 +58,11 @@ impl Default for State {
             table: t,
             selected_name: None,
             edit_startup: None,
+            edit_account: None,
+            edit_recovery: None,
+            start_params: String::new(),
+            details: Arc::new(Mutex::new(None)),
+            details_for: None,
             logs_for: None,
             logs_buf: Arc::new(Mutex::new(Vec::new())),
             busy_logs: Arc::new(AtomicBool::new(false)),
@@ -232,7 +244,11 @@ impl State {
                 && let Some(row) = all_rows.iter().find(|r| r.name == sel_name)
             {
                 ui.add_space(8.0);
-                self.render_inspector(ui, row, all_rows);
+                ui.allocate_ui_with_layout(
+                    egui::vec2(ui.available_width(), ui.available_height()),
+                    egui::Layout::top_down(egui::Align::Min),
+                    |ui| self.render_inspector(ui, row, all_rows),
+                );
             }
         });
 
@@ -407,6 +423,8 @@ impl State {
                         }
                     });
 
+                    self.render_config(ui, row);
+
                     ui.add_space(8.0);
                     if !row.description.is_empty() {
                         ui.label(RichText::new(&row.description).small().color(p.text_secondary));
@@ -446,7 +464,7 @@ impl State {
                         ui.label(RichText::new(tr("None")).small().color(p.text_muted));
                     } else {
                         for dep in &row.dependencies {
-                            if ui.small_button(format!("↳ {dep}")).clicked() {
+                            if ui.small_button(format!("{} {dep}", icon::ARROW_ELBOW_DOWN_RIGHT)).clicked() {
                                 self.selected_name = Some(dep.clone());
                                 self.table.selected.clear();
                             }
@@ -459,7 +477,7 @@ impl State {
                         ui.label(RichText::new(tr("No other services depend on this")).small().color(p.text_muted));
                     } else {
                         for dep in &trans {
-                            if ui.small_button(format!("⇢ {dep}")).clicked() {
+                            if ui.small_button(format!("{} {dep}", icon::ARROW_RIGHT)).clicked() {
                                 self.selected_name = Some(dep.clone());
                                 self.table.selected.clear();
                             }
@@ -498,6 +516,188 @@ impl State {
             });
     }
 
+    /// Details read on demand: triggers, SID type, privileges, recovery.
+    fn details_of(&mut self, name: &str) -> Option<ServiceDetails> {
+        if self.details_for.as_deref() != Some(name) {
+            self.details_for = Some(name.to_string());
+            *self.details.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            let slot = Arc::clone(&self.details);
+            let n = name.to_string();
+            std::thread::spawn(move || {
+                let d = cpuzeez_platform::services::details(&n);
+                *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some((n, d));
+            });
+        }
+        self.details.lock().unwrap_or_else(|e| e.into_inner()).as_ref().filter(|d| d.0 == name).map(|d| d.1.clone())
+    }
+
+    /// Start parameters, log-on account and failure recovery editors, plus
+    /// the read-only triggers, SID type and privileges.
+    fn render_config(&mut self, ui: &mut Ui, row: &ServiceRow) {
+        let p = theme::palette(ui);
+        let windows = cfg!(windows);
+        let editable = !row.protected;
+
+        if windows && row.state == ServiceState::Stopped && editable {
+            ui.add_space(8.0);
+            ui.label(RichText::new(tr("Start parameters")).small().color(p.text_secondary));
+            ui.horizontal(|ui| {
+                ui.add(egui::TextEdit::singleline(&mut self.start_params).desired_width(200.0).hint_text("-v /debug"));
+                if ui.button(tr("Start with parameters")).clicked() {
+                    let params: Vec<String> = self.start_params.split_whitespace().map(str::to_string).collect();
+                    self.dispatch_action(Action::Service {
+                        target: ServiceOp::StartWithParams { name: row.name.clone(), params },
+                        elevate: true,
+                    });
+                }
+            });
+        }
+
+        if windows {
+            ui.add_space(8.0);
+            let current = ServiceAccount::from_name(&row.account);
+            let picked = match &self.edit_account {
+                Some((n, a)) if n == &row.name => Some(*a),
+                _ => current,
+            };
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(tr("Log on as")).small().color(p.text_secondary));
+                let shown = picked.map_or_else(|| row.account.clone(), |a| a.windows_name().to_string());
+                ui.add_enabled_ui(editable, |ui| {
+                    egui::ComboBox::from_id_salt("svc_account_combo").selected_text(shown).show_ui(ui, |ui| {
+                        for a in ServiceAccount::ALL {
+                            if ui.selectable_label(picked == Some(a), a.windows_name()).clicked() {
+                                self.edit_account = Some((row.name.clone(), a));
+                            }
+                        }
+                    });
+                });
+                if editable
+                    && let Some(a) = picked
+                    && picked != current
+                    && widgets::primary_button(ui, tr("Apply")).clicked()
+                {
+                    if let Some(prev) = current {
+                        self.undo_stack.push((
+                            format!("{} -> {}", row.name, prev.windows_name()),
+                            Action::Service {
+                                target: ServiceOp::SetAccount { name: row.name.clone(), account: prev },
+                                elevate: true,
+                            },
+                        ));
+                    }
+                    self.dispatch_action(Action::Service {
+                        target: ServiceOp::SetAccount { name: row.name.clone(), account: a },
+                        elevate: true,
+                    });
+                    self.edit_account = None;
+                }
+            });
+            ui.label(
+                RichText::new(tr("Accounts with a password are set in Windows' Services tool (services.msc)."))
+                    .small()
+                    .color(p.text_muted),
+            );
+        }
+
+        let details = self.details_of(&row.name);
+        let Some(d) = details else {
+            ui.label(RichText::new(tr("Reading the service's configuration…")).small().color(p.text_muted));
+            return;
+        };
+
+        if let Some(saved) = d.recovery
+            && (windows || cfg!(target_os = "linux"))
+        {
+            ui.add_space(8.0);
+            ui.label(RichText::new(tr("Recovery")).strong().color(p.text));
+            let mut r = match &self.edit_recovery {
+                Some((n, r)) if n == &row.name => *r,
+                _ => saved,
+            };
+            let program = [r.first, r.second, r.subsequent].contains(&RecoveryAction::RunProgram);
+            let steps: Vec<(&str, &mut RecoveryAction)> = if windows {
+                vec![
+                    (tr("First failure"), &mut r.first),
+                    (tr("Second failure"), &mut r.second),
+                    (tr("Subsequent failures"), &mut r.subsequent),
+                ]
+            } else {
+                vec![(tr("On failure"), &mut r.first)]
+            };
+            egui::Grid::new(("svc_recovery", &row.name)).num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
+                for (i, (label, act)) in steps.into_iter().enumerate() {
+                    ui.label(RichText::new(label).small().color(p.text_secondary));
+                    ui.add_enabled_ui(editable && !program, |ui| {
+                        egui::ComboBox::from_id_salt(("svc_recovery_step", i)).selected_text(tr(act.label())).show_ui(
+                            ui,
+                            |ui| {
+                                for a in RecoveryAction::EDITABLE {
+                                    ui.selectable_value(act, a, tr(a.label()));
+                                }
+                            },
+                        );
+                    });
+                    ui.end_row();
+                }
+                ui.label(RichText::new(tr("Restart after (s)")).small().color(p.text_secondary));
+                ui.add_enabled(editable && !program, egui::DragValue::new(&mut r.restart_delay_s).range(0..=86_400));
+                ui.end_row();
+                if windows {
+                    ui.label(RichText::new(tr("Reset count after (days)")).small().color(p.text_secondary));
+                    ui.add_enabled(editable && !program, egui::DragValue::new(&mut r.reset_days).range(0..=3650));
+                    ui.end_row();
+                }
+            });
+            if !windows {
+                r.second = r.first;
+                r.subsequent = r.first;
+            }
+            if program {
+                let cmd =
+                    if d.recovery_command.is_empty() { String::new() } else { format!(": {}", d.recovery_command) };
+                ui.label(
+                    RichText::new(format!(
+                        "{}{cmd}",
+                        tr("Runs a program on failure; change it in Windows' Services tool.")
+                    ))
+                    .small()
+                    .color(p.text_muted),
+                );
+            }
+            if r != saved {
+                self.edit_recovery = Some((row.name.clone(), r));
+                if editable && widgets::primary_button(ui, tr("Apply")).clicked() {
+                    self.undo_stack.push((
+                        format!("{} recovery", row.name),
+                        Action::Service {
+                            target: ServiceOp::SetRecovery { name: row.name.clone(), recovery: saved },
+                            elevate: true,
+                        },
+                    ));
+                    self.dispatch_action(Action::Service {
+                        target: ServiceOp::SetRecovery { name: row.name.clone(), recovery: r },
+                        elevate: true,
+                    });
+                    self.edit_recovery = None;
+                    self.details_for = None; // read again after the change
+                }
+            }
+        }
+
+        let mut kvs: Vec<(&str, String)> = Vec::new();
+        if !d.sid_type.is_empty() {
+            kvs.push((tr("Service SID"), tr(&d.sid_type).to_string()));
+        }
+        kvs.push((tr("Triggers"), if d.triggers.is_empty() { tr("None").to_string() } else { d.triggers.join("\n") }));
+        kvs.push((
+            tr("Required privileges"),
+            if d.privileges.is_empty() { tr("None").to_string() } else { d.privileges.join("\n") },
+        ));
+        ui.add_space(8.0);
+        widgets::kv_list(ui, &kvs);
+    }
+
     fn render_modal(&mut self, ui: &mut Ui) {
         let Some(modal) = self.modal.clone() else { return };
         let Modal::ConfirmStop { name, restart, dependents } = modal;
@@ -511,7 +711,7 @@ impl State {
                 ui.label(tr("The following dependent services will also be affected:"));
                 ui.add_space(4.0);
                 for d in &dependents {
-                    ui.label(RichText::new(format!("• {d}")).monospace());
+                    ui.label(RichText::new(format!("{} {d}", icon::DOT_OUTLINE)).monospace());
                 }
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {

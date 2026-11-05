@@ -7,8 +7,10 @@
 //! - **macOS:** `launchd` (`launchctl list`, LaunchDaemons / LaunchAgents plists).
 
 use cpuzeez_core::actions::ServiceOp;
+#[cfg(windows)]
+use cpuzeez_core::services::{Recovery, RecoveryAction};
 use cpuzeez_core::services::{
-    ServiceRow, ServiceState, StartupType, is_protected, is_third_party, populate_dependents,
+    ServiceDetails, ServiceRow, ServiceState, StartupType, is_protected, is_third_party, populate_dependents,
 };
 
 pub fn list() -> Vec<ServiceRow> {
@@ -26,14 +28,17 @@ pub fn logs(name: &str, max_lines: usize) -> Vec<String> {
     imp::logs(name, max_lines)
 }
 
+/// Triggers, SID type, required privileges and recovery of one service
+/// (read when the inspector opens it, not for the whole list).
+pub fn details(name: &str) -> ServiceDetails {
+    if !cpuzeez_core::actions::valid_service_name(name) {
+        return ServiceDetails::default();
+    }
+    imp::details(name)
+}
+
 pub fn apply(op: &ServiceOp) -> Result<String, String> {
-    let name = match op {
-        ServiceOp::Start { name }
-        | ServiceOp::Stop { name }
-        | ServiceOp::Pause { name, .. }
-        | ServiceOp::Restart { name }
-        | ServiceOp::SetStartup { name, .. } => name.as_str(),
-    };
+    let name = op.name();
     if is_protected(name) {
         return Err(format!("Service '{name}' is protected by the operating system and cannot be modified"));
     }
@@ -52,16 +57,154 @@ mod imp {
     use windows_sys::Win32::System::Services::{
         ChangeServiceConfig2W, ChangeServiceConfigW, CloseServiceHandle, ControlService, ENUM_SERVICE_STATUS_PROCESSW,
         EnumServicesStatusExW, OpenSCManagerW, OpenServiceW, QUERY_SERVICE_CONFIGW, QueryServiceConfig2W,
-        QueryServiceConfigW, SC_ACTION, SC_ACTION_REBOOT, SC_ACTION_RESTART, SC_ACTION_RUN_COMMAND,
+        QueryServiceConfigW, SC_ACTION, SC_ACTION_NONE, SC_ACTION_REBOOT, SC_ACTION_RESTART, SC_ACTION_RUN_COMMAND,
         SC_ENUM_PROCESS_INFO, SC_HANDLE, SC_MANAGER_CONNECT, SC_MANAGER_ENUMERATE_SERVICE, SERVICE_AUTO_START,
         SERVICE_CHANGE_CONFIG, SERVICE_CONFIG_DELAYED_AUTO_START_INFO, SERVICE_CONFIG_DESCRIPTION,
-        SERVICE_CONFIG_FAILURE_ACTIONS, SERVICE_CONTINUE_PENDING, SERVICE_CONTROL_CONTINUE, SERVICE_CONTROL_PAUSE,
+        SERVICE_CONFIG_FAILURE_ACTIONS, SERVICE_CONFIG_REQUIRED_PRIVILEGES_INFO, SERVICE_CONFIG_SERVICE_SID_INFO,
+        SERVICE_CONFIG_TRIGGER_INFO, SERVICE_CONTINUE_PENDING, SERVICE_CONTROL_CONTINUE, SERVICE_CONTROL_PAUSE,
         SERVICE_CONTROL_STOP, SERVICE_DELAYED_AUTO_START_INFO, SERVICE_DEMAND_START, SERVICE_DESCRIPTIONW,
         SERVICE_DISABLED, SERVICE_FAILURE_ACTIONSW, SERVICE_NO_CHANGE, SERVICE_PAUSE_CONTINUE, SERVICE_PAUSE_PENDING,
-        SERVICE_PAUSED, SERVICE_QUERY_CONFIG, SERVICE_QUERY_STATUS, SERVICE_RUNNING, SERVICE_START,
-        SERVICE_START_PENDING, SERVICE_STATE_ALL, SERVICE_STATUS, SERVICE_STOP, SERVICE_STOP_PENDING, SERVICE_STOPPED,
-        SERVICE_WIN32, StartServiceW,
+        SERVICE_PAUSED, SERVICE_QUERY_CONFIG, SERVICE_QUERY_STATUS, SERVICE_REQUIRED_PRIVILEGES_INFOW, SERVICE_RUNNING,
+        SERVICE_SID_INFO, SERVICE_START, SERVICE_START_PENDING, SERVICE_STATE_ALL, SERVICE_STATUS, SERVICE_STOP,
+        SERVICE_STOP_PENDING, SERVICE_STOPPED, SERVICE_TRIGGER, SERVICE_TRIGGER_INFO, SERVICE_WIN32, StartServiceW,
     };
+
+    /// `QueryServiceConfig2W` into a buffer of the size it asks for.
+    unsafe fn config2(svc: SC_HANDLE, level: u32) -> Option<Vec<u64>> {
+        let mut req = 0u32;
+        unsafe {
+            let _ = QueryServiceConfig2W(svc, level, null_mut(), 0, &mut req);
+            if req == 0 || req > 1 << 20 {
+                return None;
+            }
+            let mut buf = vec![0u64; (req as usize).div_ceil(8)];
+            (QueryServiceConfig2W(svc, level, buf.as_mut_ptr().cast(), req, &mut req) != 0).then_some(buf)
+        }
+    }
+
+    fn trigger_name(t: u32) -> &'static str {
+        match t {
+            1 => "Device arrival",
+            2 => "IP address availability",
+            3 => "Domain join",
+            4 => "Firewall port event",
+            5 => "Group policy change",
+            6 => "Network endpoint",
+            7 => "System state change",
+            20 => "Custom event",
+            30 => "Aggregate event",
+            _ => "Other",
+        }
+    }
+
+    fn action_of(t: i32) -> RecoveryAction {
+        match t {
+            SC_ACTION_RESTART => RecoveryAction::Restart,
+            SC_ACTION_REBOOT => RecoveryAction::Reboot,
+            SC_ACTION_RUN_COMMAND => RecoveryAction::RunProgram,
+            _ => RecoveryAction::None,
+        }
+    }
+
+    pub fn details(name: &str) -> ServiceDetails {
+        let mut d = ServiceDetails::default();
+        // SAFETY: SCM handles closed by ScHandle; each buffer is sized by the API.
+        unsafe {
+            let scm = ScHandle(OpenSCManagerW(null(), null(), SC_MANAGER_CONNECT));
+            if scm.0.is_null() {
+                return d;
+            }
+            let w = to_wide(name);
+            let svc = ScHandle(OpenServiceW(scm.0, w.as_ptr(), SERVICE_QUERY_CONFIG));
+            if svc.0.is_null() {
+                return d;
+            }
+            if let Some(b) = config2(svc.0, SERVICE_CONFIG_TRIGGER_INFO) {
+                let info = &*(b.as_ptr() as *const SERVICE_TRIGGER_INFO);
+                if !info.pTriggers.is_null() {
+                    let ts = std::slice::from_raw_parts(
+                        info.pTriggers as *const SERVICE_TRIGGER,
+                        info.cTriggers.min(64) as usize,
+                    );
+                    d.triggers = ts
+                        .iter()
+                        .map(|t| {
+                            let verb = if t.dwAction == 2 { "Stop" } else { "Start" };
+                            format!("{verb}: {}", trigger_name(t.dwTriggerType))
+                        })
+                        .collect();
+                }
+            }
+            if let Some(b) = config2(svc.0, SERVICE_CONFIG_SERVICE_SID_INFO) {
+                d.sid_type = match (*(b.as_ptr() as *const SERVICE_SID_INFO)).dwServiceSidType {
+                    1 => "Unrestricted",
+                    3 => "Restricted",
+                    _ => "None",
+                }
+                .into();
+            }
+            if let Some(b) = config2(svc.0, SERVICE_CONFIG_REQUIRED_PRIVILEGES_INFO) {
+                d.privileges =
+                    multi_sz_to_vec((*(b.as_ptr() as *const SERVICE_REQUIRED_PRIVILEGES_INFOW)).pmszRequiredPrivileges);
+            }
+            if let Some(b) = config2(svc.0, SERVICE_CONFIG_FAILURE_ACTIONS) {
+                let fa = &*(b.as_ptr() as *const SERVICE_FAILURE_ACTIONSW);
+                let acts: &[SC_ACTION] = if fa.lpsaActions.is_null() {
+                    &[]
+                } else {
+                    std::slice::from_raw_parts(fa.lpsaActions, fa.cActions.min(16) as usize)
+                };
+                // Windows repeats the last action for later failures.
+                let at = |i: usize| acts.get(i).or(acts.last()).map_or(RecoveryAction::None, |a| action_of(a.Type));
+                let delay = acts.iter().find(|a| a.Type == SC_ACTION_RESTART).map_or(60_000, |a| a.Delay);
+                d.recovery = Some(Recovery {
+                    first: at(0),
+                    second: at(1),
+                    subsequent: at(2),
+                    reset_days: fa.dwResetPeriod / 86_400,
+                    restart_delay_s: delay / 1000,
+                });
+                d.recovery_command = pwstr_to_string(fa.lpCommand);
+            }
+        }
+        d
+    }
+
+    /// SeShutdownPrivilege, which a reboot recovery action needs the caller to hold.
+    fn enable_shutdown_privilege() {
+        use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, LUID};
+        use windows_sys::Win32::Security::{
+            AdjustTokenPrivileges, LUID_AND_ATTRIBUTES, LookupPrivilegeValueW, SE_PRIVILEGE_ENABLED,
+            TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES, TOKEN_QUERY,
+        };
+        use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+        // SAFETY: our own token; closed below.
+        unsafe {
+            let mut tok: HANDLE = null_mut();
+            if OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &mut tok) == 0 {
+                return;
+            }
+            let mut luid = LUID { LowPart: 0, HighPart: 0 };
+            let name = to_wide("SeShutdownPrivilege");
+            if LookupPrivilegeValueW(null(), name.as_ptr(), &mut luid) != 0 {
+                let tp = TOKEN_PRIVILEGES {
+                    PrivilegeCount: 1,
+                    Privileges: [LUID_AND_ATTRIBUTES { Luid: luid, Attributes: SE_PRIVILEGE_ENABLED }],
+                };
+                AdjustTokenPrivileges(tok, 0, &tp, 0, null_mut(), null_mut());
+            }
+            CloseHandle(tok);
+        }
+    }
+
+    fn sc_type(a: RecoveryAction) -> i32 {
+        match a {
+            RecoveryAction::Restart => SC_ACTION_RESTART,
+            RecoveryAction::Reboot => SC_ACTION_REBOOT,
+            RecoveryAction::RunProgram => SC_ACTION_RUN_COMMAND,
+            RecoveryAction::None => SC_ACTION_NONE,
+        }
+    }
 
     struct ScHandle(SC_HANDLE);
     impl Drop for ScHandle {
@@ -367,6 +510,78 @@ mod imp {
                     }
                     Ok(format!("Restarted service {name}"))
                 }
+                ServiceOp::StartWithParams { name, params } => {
+                    let wide = to_wide(name);
+                    let svc = ScHandle(OpenServiceW(scm.0, wide.as_ptr(), SERVICE_START));
+                    if svc.0.is_null() {
+                        return Err(format!("OpenServiceW({name}) failed (error {})", GetLastError()));
+                    }
+                    let owned: Vec<Vec<u16>> = params.iter().map(|a| to_wide(a)).collect();
+                    let argv: Vec<*const u16> = owned.iter().map(|a| a.as_ptr()).collect();
+                    if StartServiceW(svc.0, argv.len() as u32, argv.as_ptr()) == 0 {
+                        return Err(format!("StartServiceW({name}) failed (error {})", GetLastError()));
+                    }
+                    Ok(format!("Started service {name} with {} parameter(s)", params.len()))
+                }
+                ServiceOp::SetAccount { name, account } => {
+                    let wide = to_wide(name);
+                    let svc = ScHandle(OpenServiceW(scm.0, wide.as_ptr(), SERVICE_CHANGE_CONFIG));
+                    if svc.0.is_null() {
+                        return Err(format!("OpenServiceW({name}) failed (error {})", GetLastError()));
+                    }
+                    let acc = to_wide(account.windows_name());
+                    // The built-in service accounts take an empty password.
+                    let empty = to_wide("");
+                    if ChangeServiceConfigW(
+                        svc.0,
+                        SERVICE_NO_CHANGE,
+                        SERVICE_NO_CHANGE,
+                        SERVICE_NO_CHANGE,
+                        null(),
+                        null(),
+                        null_mut(),
+                        null(),
+                        acc.as_ptr(),
+                        empty.as_ptr(),
+                        null(),
+                    ) == 0
+                    {
+                        return Err(format!("ChangeServiceConfigW({name}) failed (error {})", GetLastError()));
+                    }
+                    Ok(format!("{name} now runs as {} (takes effect on the next start)", account.windows_name()))
+                }
+                ServiceOp::SetRecovery { name, recovery: r } => {
+                    let wide = to_wide(name);
+                    // Restart actions need SERVICE_START on the handle.
+                    let svc = ScHandle(OpenServiceW(scm.0, wide.as_ptr(), SERVICE_CHANGE_CONFIG | SERVICE_START));
+                    if svc.0.is_null() {
+                        return Err(format!("OpenServiceW({name}) failed (error {})", GetLastError()));
+                    }
+                    if [r.first, r.second, r.subsequent].contains(&RecoveryAction::Reboot) {
+                        enable_shutdown_privilege();
+                    }
+                    let delay = r.restart_delay_s.saturating_mul(1000);
+                    let mut acts = [r.first, r.second, r.subsequent].map(|a| SC_ACTION {
+                        Type: sc_type(a),
+                        Delay: if a == RecoveryAction::None { 0 } else { delay },
+                    });
+                    let mut fa = SERVICE_FAILURE_ACTIONSW {
+                        dwResetPeriod: r.reset_days.saturating_mul(86_400),
+                        lpRebootMsg: null_mut(),
+                        lpCommand: null_mut(),
+                        cActions: 3,
+                        lpsaActions: acts.as_mut_ptr(),
+                    };
+                    if ChangeServiceConfig2W(
+                        svc.0,
+                        SERVICE_CONFIG_FAILURE_ACTIONS,
+                        (&mut fa as *mut SERVICE_FAILURE_ACTIONSW).cast(),
+                    ) == 0
+                    {
+                        return Err(format!("ChangeServiceConfig2W({name}) failed (error {})", GetLastError()));
+                    }
+                    Ok(format!("Recovery of {name} updated"))
+                }
                 ServiceOp::SetStartup { name, startup } => {
                     let wide = to_wide(name);
                     let svc = ScHandle(OpenServiceW(scm.0, wide.as_ptr(), SERVICE_CHANGE_CONFIG));
@@ -484,8 +699,45 @@ mod imp {
         text.lines().map(|l| l.to_string()).collect()
     }
 
+    pub fn details(name: &str) -> ServiceDetails {
+        crate::os::cmd(
+            "systemctl",
+            &[
+                "show",
+                "--no-pager",
+                "-p",
+                "TriggeredBy,Restart,RestartUSec,FailureAction,CapabilityBoundingSet",
+                "--",
+                name,
+            ],
+        )
+        .map(|t| cpuzeez_core::services::parse_systemd_show(&t))
+        .unwrap_or_default()
+    }
+
     pub fn apply(op: &ServiceOp) -> Result<String, String> {
         let (verb, unit): (&str, &str) = match op {
+            ServiceOp::StartWithParams { .. } => return Err("systemd units take no start parameters".into()),
+            ServiceOp::SetAccount { .. } => {
+                return Err("The log-on account is a Windows service setting (systemd: User= in the unit)".into());
+            }
+            ServiceOp::SetRecovery { name, recovery } => {
+                // A drop-in next to the unit: the vendor file stays untouched, deleting ours undoes it.
+                let dir = std::path::Path::new("/etc/systemd/system").join(format!("{name}.d"));
+                std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+                std::fs::write(
+                    dir.join("50-cpuzeez-recovery.conf"),
+                    cpuzeez_core::services::systemd_recovery_dropin(recovery),
+                )
+                .map_err(|e| e.to_string())?;
+                let out =
+                    std::process::Command::new("systemctl").arg("daemon-reload").output().map_err(|e| e.to_string())?;
+                return if out.status.success() {
+                    Ok(format!("Recovery of {name} updated"))
+                } else {
+                    Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+                };
+            }
             ServiceOp::Start { name } => ("start", name),
             ServiceOp::Stop { name } => ("stop", name),
             // systemd has no pause; "stop" here would look like a pause that worked.
@@ -557,23 +809,37 @@ mod imp {
         text.lines().take(max_lines).map(|l| l.to_string()).collect()
     }
 
+    pub fn details(_name: &str) -> ServiceDetails {
+        ServiceDetails::default()
+    }
+
+    /// launchd's domain for what `launchctl list` showed: the system's as
+    /// root, the logged-in user's GUI domain otherwise.
+    fn target(label: &str) -> String {
+        // SAFETY: getuid has no preconditions.
+        let uid = unsafe { libc::getuid() };
+        if uid == 0 { format!("system/{label}") } else { format!("gui/{uid}/{label}") }
+    }
+
     pub fn apply(op: &ServiceOp) -> Result<String, String> {
-        let (verb, name): (&str, &str) = match op {
+        // launchctl(1): start/stop take a label; kickstart, enable and disable
+        // take a service target (domain/label).
+        let args: Vec<String> = match op {
             ServiceOp::Pause { .. } => return Err("launchd services can't be paused".into()),
-            ServiceOp::Start { name } => ("start", name),
-            ServiceOp::Stop { name } => ("stop", name),
-            ServiceOp::Restart { name } => ("kickstart", name),
+            ServiceOp::StartWithParams { .. } | ServiceOp::SetAccount { .. } | ServiceOp::SetRecovery { .. } => {
+                return Err("launchd keeps this in the job's plist; edit it there".into());
+            }
+            ServiceOp::Start { name } => vec!["start".into(), name.clone()],
+            ServiceOp::Stop { name } => vec!["stop".into(), name.clone()],
+            ServiceOp::Restart { name } => vec!["kickstart".into(), "-k".into(), target(name)],
             ServiceOp::SetStartup { name, startup } => {
-                let v = match startup {
-                    StartupType::Disabled => "disable",
-                    _ => "enable",
-                };
-                (v, name.as_str())
+                let v = if *startup == StartupType::Disabled { "disable" } else { "enable" };
+                vec![v.into(), target(name)]
             }
         };
-        let out = std::process::Command::new("launchctl").args([verb, name]).output().map_err(|e| e.to_string())?;
+        let out = std::process::Command::new("launchctl").args(&args).output().map_err(|e| e.to_string())?;
         if out.status.success() {
-            Ok(format!("launchctl {verb} {name}"))
+            Ok(format!("launchctl {}", args.join(" ")))
         } else {
             Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
         }
@@ -591,6 +857,9 @@ mod imp {
     }
     pub fn apply(_op: &ServiceOp) -> Result<String, String> {
         Err("Not supported on this platform".into())
+    }
+    pub fn details(_name: &str) -> ServiceDetails {
+        ServiceDetails::default()
     }
 }
 
@@ -614,6 +883,18 @@ mod tests {
         if let Some(p) = all.iter().find(|s| super::is_protected(&s.name)) {
             let op = cpuzeez_core::actions::ServiceOp::Stop { name: p.name.clone() };
             assert!(super::apply(&op).is_err());
+        }
+    }
+
+    /// Contract: the inspector's details answer for a real service; on
+    /// Windows the event log has a SID type and a recovery policy.
+    #[test]
+    fn details_of_a_real_service() {
+        assert_eq!(super::details("--bad"), Default::default(), "names are checked first");
+        if cfg!(windows) {
+            let d = super::details("EventLog");
+            assert!(!d.sid_type.is_empty() && d.recovery.is_some(), "{d:?}");
+            assert!(!d.privileges.is_empty(), "the event log requires privileges: {d:?}");
         }
     }
 }
