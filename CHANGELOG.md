@@ -7,22 +7,50 @@ generated from its section below.
 
 ## [Unreleased]
 
-### Fixed
+## [1.0.0-beta.5] - 2026-11-05
 
-- System › Services listed nothing: the table was laid out sideways and its rows got no height.
-- System › Performance: the device tiles sat in one overlapping row and the detail pane was empty.
-- The right-click menu of every table opened as a narrow column with one word per line.
-- System › Users: the session line and the usage figures overlapped.
+The System hub finished: what beta.3 left out, and the UI problems found testing beta.4.
+
+### Added
+
+- **More process columns** (right-click the header to pick them):
+  - *Network*, per process. Windows needs CpuZeeZ running as administrator for it (it reads the kernel's network events); Linux counts TCP only (UDP has no per-socket counters), and other users' processes need root; macOS reads it from `nettop`.
+  - *Power usage* and *Power usage trend*: an estimate from CPU, GPU, disk and network use (the OS has no per-process watts outside Windows' own estimator).
+  - *Command line*, *Architecture*, *Elevated*, *Integrity* and *UAC virtualization* (the last two are Windows-only).
+  - *CPU time*, *I/O reads* and *I/O writes*.
+  - *GDI objects* and *USER objects* (Windows only).
+- The *Essential* and *Gaming* presets now show *Network* and *Power usage*; *Security* shows elevation, integrity, architecture and the command line. The details panel's *Security* tab shows them too.
+- **Restart** on Explorer's right-click menu restarts the Windows shell. **Close window** in the *Window* submenu closes the app's window as its X button would, so the app can ask to save.
+- **Services**: change the log-on account to Local System, Local Service or Network Service; set what happens on the first, second and later failures (restart the service, restart the computer, nothing), the restart delay and the reset period; start a stopped service with parameters. The inspector also shows the service's triggers, its SID type and the privileges it requires. Accounts with a password are left to Windows' own Services tool: CpuZeeZ never handles passwords.
+- On Linux, recovery is written as a systemd drop-in (`/etc/systemd/system/<unit>.d/50-cpuzeez-recovery.conf`); delete it to undo.
+- **Tables**:
+  - drag a column's edge to resize it, double-click the edge to fit the content;
+  - drag a column's header to move the column;
+  - widths and order are kept; the header's right-click menu resets them.
+  - Tables scroll sideways when the columns are wider than the window, and the header scrolls with them.
+  - Cut-off text ends in "…" and shows in full on hover.
+- Processes: double-click a row, or press Enter, to open the details panel.
+- Users: each user's processes are a table you can sort and filter.
 
 ### Changed
 
-- Tables (processes, services, startup, users, app history, sensors): drag a column's edge to resize it,
-  double-click the edge to fit its content, "Reset column widths" in the header menu. Widths are kept.
-- Tables scroll sideways when the columns are wider than the window; the header follows.
-- Cut-off text ends with "…" and shows in full on hover.
-- Processes: double-click a row, or press Enter, to open the details panel.
-- Users: a user's processes are a sortable, filterable table.
-- `-screenshots` also captures the six System tabs.
+- **App history** is kept in a SQLite file (`app_history.sqlite`, next to the settings). The beta.3/beta.4 JSON file is imported once, then deleted.
+- The retention setting is now applied: days older than it are deleted.
+- History is recorded whenever CpuZeeZ is running and recording is on, whatever page is open. Before, it only recorded with *System* on screen.
+- *Delete usage history* asks first.
+- A Windows recovery action that restarts the computer is set with the shutdown privilege the service manager requires.
+- Ending a process that the OS can't live without is flagged as critical by name in the elevated helper too, not only by PID.
+
+### Fixed
+
+- **System › Services listed nothing**: the table was laid out sideways and its rows had no height.
+- **System › Performance**: the device tiles were drawn in one overlapping row and the detail pane was empty.
+- **The right-click menu of every table** opened as a narrow column with one word per line.
+- System › Users: the session line and the usage figures overlapped.
+- App history counted an app's run time once per process: an app with 25 processes got 25 seconds per second.
+- Computing a file's SHA-256 in the details panel froze the window on large executables; it runs in the background now.
+- macOS: restarting, enabling and disabling a service now passes the `domain/label` target that `launchctl` requires for those commands. Not yet tried on a Mac.
+- Some new System texts were missing their pt-BR and es translations. A test now fails when a text has no translation.
 
 ## [1.0.0-beta.4] - 2026-11-05
 
@@ -219,7 +247,8 @@ features.
 - GUI with CPU-Z's tabs.
 - Installers for Windows (MSI), macOS (DMG/PKG), Debian/Ubuntu (DEB) and Arch.
 
-[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.4...HEAD
+[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.5...HEAD
+[1.0.0-beta.5]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.4...v1.0.0-beta.5
 [1.0.0-beta.4]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.3...v1.0.0-beta.4
 [1.0.0-beta.3]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.2...v1.0.0-beta.3
 [1.0.0-beta.2]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.1...v1.0.0-beta.2

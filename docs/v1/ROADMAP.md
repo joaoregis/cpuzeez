@@ -1,7 +1,7 @@
 # CpuZeeZ 1.0: detailed roadmap
 
 > Part of the [1.0 plan](README.md). This document is the **work list**: every fix, foundation piece, improvement, new feature, spike, packaging task and doc change that came out of the planning, with an ID, its source, its dependencies and a testable "done when".
-> **Status:** S0, S1 (`1.0.0-beta.1` / `beta.2`) and S2a (`1.0.0-beta.3`, fixes in `beta.4`) closed, S2b next · **Baseline:** 0.3.0 (`26d9f0e`) · **Date:** 2026-11-05.
+> **Status:** S0, S1 (`1.0.0-beta.1` / `beta.2`) and S2a (`1.0.0-beta.3`, fixes in `beta.4`, finished in `beta.5`) closed, S2b next · **Baseline:** 0.3.0 (`26d9f0e`) · **Date:** 2026-11-05.
 
 ## How to read this
 
@@ -30,7 +30,7 @@
 
 ```
 S0 Foundation ──► S1 Existing features ──► S2a System ──► S2b ZeeZ Live ──► S2c Bottleneck ──► S3 Hardening ──► 1.0.0
-   │                 │ beta.1 (+ beta.2 fix)    │ beta.3 (+ beta.4 fix) │ beta.5   │ beta.6          rc.N
+   │                 │ beta.1 (+ beta.2 fix)    │ beta.3–beta.5   │ next beta │ next beta      rc.N
    └─ spikes ────────┴──────────────────────────┴───────────────┴─── feed S2 ─────┘
 ```
 
@@ -236,11 +236,26 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
   - the details panel's thread/connection refresh and the Performance memory counters moved off the UI thread;
   - contract tests for `platform::services`, `startup` and `users` (they had none);
   - Linux/macOS "pause" no longer stops a service; Windows *RunOnce* entries can't be "disabled" silently; the unused *Show kernel times* option was removed.
-- **Still open, not claimed by the ✅ above:**
-  - S2a-02: Task Manager columns not yet present or marked per OS: **per-process network** (ETW / `sock_diag` / `nettop`, task-manager §3.1), power usage and trend, command line, architecture, elevated, integrity level, UAC virtualization state, CPU time, I/O operation counts, GDI/USER objects.
-  - S2a-03: *Restart* (Explorer/shell) and *Close window* aren't there; `Action::risk()` only sees PIDs, so it can't name critical processes (the GUI's own warning does).
-  - S2a-07: log-on account, recovery actions and start parameters are read-only; triggers, service SID and required privileges aren't shown; macOS `launchctl` verbs are untested on a Mac.
-  - S2a-10: the recorder writes JSON per day, not SQLite as planned (enough for the data it keeps; revisit if queries need it).
+- **Closed in `1.0.0-beta.5` (2026-11-05)**, the items the review had left open:
+  - S2a-02:
+    - per-process network: Windows through a private ETW session on `Microsoft-Windows-Kernel-Network` (needs an administrator); Linux through `sock_diag` `tcp_info` (TCP only; other users' sockets need root); macOS through `nettop` (`platform::proc_net`, parser fixtures).
+    - Power usage and its trend: an estimate (`core::procs::power_score`, tested).
+    - Command line (macOS through `KERN_PROCARGS2`), architecture, elevated, integrity level and UAC virtualization (`platform::procs::token`, limited handle only).
+    - CPU time, I/O operation counts, GDI/USER objects.
+    - Per OS: integrity, UAC virtualization and GDI/USER are Windows-only; elevated means root on Unix.
+  - S2a-03: *Restart* for Explorer (`ProcessOp::RestartShell`; the executor checks the target is `explorer.exe`); *Close window* (`WM_CLOSE`); `Action::Process` carries the target names, so `risk()` flags critical processes by name (tested).
+  - S2a-07:
+    - The log-on account can be set to a built-in account. Accounts with a password are left to `services.msc`, so no password crosses the elevation boundary.
+    - Recovery can be edited: SCM failure actions on Windows, a systemd drop-in on Linux, with `RunProgram` refused by `Action::validate`. Start parameters can be set (Windows).
+    - Triggers, SID type and required privileges are shown (contract test on `EventLog`).
+    - macOS `launchctl` now gets `domain/label` targets for `kickstart`/`enable`/`disable`; still **not run on a Mac** (X04/X07/X11 hardware).
+  - S2a-10:
+    - SQLite store (`rusqlite` bundled, Q6a): UPSERT per (day, app), period queries, retention applied, beta.3/beta.4 JSON imported once.
+    - The recorder runs on its own thread whatever page is shown.
+    - Run time is counted per app, not per process. Tested on an in-memory database.
+  - Tables: resizable, movable, sideways-scrolling columns; ellipsis with full-text tooltips; the right-click menu fixed. A GUI test drives resize, move and sort with real mouse events.
+  - Layout: Services and Performance were laid out sideways (`allocate_ui` inherits the parent's direction) and showed nothing; fixed, and all six System tabs are now in `-screenshots`.
+  - i18n: `every_literal_is_translated` fails on any `tr()`/`trf()` literal without a pt-BR/es entry.
 
 ## S2b. ZeeZ Live
 
@@ -259,7 +274,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 | S2b-11 | **Per-game profiles** and automation | 🆕 | zeez-live §5.4 | 03 | Same |
 | S2b-12 | **Anti-cheat safety**: "no PawnIO" mode where needed, the compatibility list from X08 | 🆕 | zeez-live §7 | X08 | Documented |
 
-**S2b gate → pre-release `1.0.0-beta.5`** (ZeeZ Live).
+**S2b gate → the next pre-release** (ZeeZ Live; betas are numbered in delivery order).
 
 ## S2c. Bottleneck detector
 
@@ -272,7 +287,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 | S2c-05 | Integrations: overlay pill, report section, Overview shortcut | 🆕 | bottleneck §5 | S2b | Same |
 | S2c-06 | *(Conditional)* static hardware balance from our own benchmarks | 🆕 | bottleneck §4 | S1-K02, K05 | Calibration passes, or the ADR cuts it |
 
-**S2c gate → pre-release `1.0.0-beta.6`** (Bottleneck detector). (`1.0.0-beta.2` and `1.0.0-beta.4` were fix releases: beta.1's UI frame time, beta.3's review.)
+**S2c gate → the pre-release after it** (Bottleneck detector). (`1.0.0-beta.2`, `beta.4` and `beta.5` were S1/S2a fix and completion releases.)
 
 ---
 
