@@ -295,6 +295,56 @@ pub(crate) mod win {
             len: *mut u32,
             fl: u32,
         ) -> u32;
+        fn CM_Get_First_Log_Conf(lc: *mut usize, dn: u32, fl: u32) -> u32;
+        fn CM_Get_Next_Res_Des(rd: *mut usize, cur: usize, ty: u32, got: *mut u32, fl: u32) -> u32;
+        fn CM_Get_Res_Des_Data_Size(size: *mut u32, rd: usize, fl: u32) -> u32;
+        fn CM_Get_Res_Des_Data(rd: usize, buf: *mut u8, len: u32, fl: u32) -> u32;
+        fn CM_Free_Res_Des_Handle(rd: usize) -> u32;
+        fn CM_Free_Log_Conf_Handle(lc: usize) -> u32;
+    }
+
+    /// (base, size) of every memory range the device was given (its BARs, as
+    /// Device Manager's Resources tab lists them). No admin.
+    pub fn memory_ranges(dn: u32) -> Vec<(u64, u64)> {
+        const ALLOC_LOG_CONF: u32 = 2;
+        // ResType_Mem (1) and ResType_MemLarge (7, ranges above 4 GiB).
+        let mut out = Vec::new();
+        unsafe {
+            let mut lc = 0usize;
+            if CM_Get_First_Log_Conf(&mut lc, dn, ALLOC_LOG_CONF) != 0 {
+                return out;
+            }
+            for ty in [1u32, 7] {
+                let mut cur = lc;
+                loop {
+                    let (mut rd, mut got) = (0usize, 0u32);
+                    if CM_Get_Next_Res_Des(&mut rd, cur, ty, &mut got, 0) != 0 {
+                        break;
+                    }
+                    let mut size = 0u32;
+                    if CM_Get_Res_Des_Data_Size(&mut size, rd, 0) == 0 && size >= 24 {
+                        let mut b = vec![0u8; size as usize];
+                        if CM_Get_Res_Des_Data(rd, b.as_mut_ptr(), size, 0) == 0 {
+                            // MEM_DES / MEM_LARGE_DES: Count(4), Type(4), Alloc_Base(8), Alloc_End(8).
+                            let base = u64::from_le_bytes(b[8..16].try_into().unwrap_or_default());
+                            let end = u64::from_le_bytes(b[16..24].try_into().unwrap_or_default());
+                            if end > base {
+                                out.push((base, end - base + 1));
+                            }
+                        }
+                    }
+                    if cur != lc {
+                        CM_Free_Res_Des_Handle(cur);
+                    }
+                    cur = rd;
+                }
+                if cur != lc {
+                    CM_Free_Res_Des_Handle(cur);
+                }
+            }
+            CM_Free_Log_Conf_Handle(lc);
+        }
+        out
     }
 
     #[link(name = "kernel32")]

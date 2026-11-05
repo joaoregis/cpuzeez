@@ -9,6 +9,8 @@ use cpuzeez_core::detail::Level;
 use cpuzeez_core::pci::Device;
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Resizable BAR", "Resizable BAR"),
+    ("Above 4G decoding", "Decodificação acima de 4G"),
     ("Firmware", "Firmware"),
     ("Boot mode", "Modo de inicialização"),
     ("UEFI", "UEFI"),
@@ -34,6 +36,8 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Resizable BAR", "Resizable BAR"),
+    ("Above 4G decoding", "Decodificación por encima de 4G"),
     ("Firmware", "Firmware"),
     ("Boot mode", "Modo de arranque"),
     ("UEFI", "UEFI"),
@@ -82,6 +86,10 @@ impl App {
     pub(crate) fn mainboard_more(&mut self, ui: &mut egui::Ui, r: &[Section]) {
         let level = detail::get(ui.ctx());
         let fw = cpuzeez_platform::firmware::read();
+        // The discrete GPU's windows (the iGPU's are fixed by the platform).
+        let gpu_bars = crate::gpu::adapters(&self.ctx).iter().filter(|a| !crate::health::integrated(a)).find_map(|a| {
+            crate::peripherals::bars().iter().find(|b| b.vendor == a.vendor_id && b.device == a.device_id)
+        });
         let onoff = |b: Option<bool>| b.map(|b| tr(if b { "On" } else { "Off" }).to_string()).unwrap_or_default();
         boxed(
             ui,
@@ -93,6 +101,9 @@ impl App {
                 ),
                 ("Secure Boot", onoff(fw.secure_boot)),
                 ("TPM", fw.tpm.clone().unwrap_or_else(|| tr("Not found").to_string())),
+                // From the graphics card's BARs (Above 4G: a window above 4 GiB).
+                ("Resizable BAR", gpu_bars.map(|b| onoff(Some(b.rebar()))).unwrap_or_default()),
+                ("Above 4G decoding", gpu_bars.map(|b| onoff(Some(b.above_4g))).unwrap_or_default()),
             ],
         );
         if level < Level::Advanced {

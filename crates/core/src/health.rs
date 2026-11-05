@@ -20,6 +20,8 @@ pub struct GpuLink {
     pub max_width: u8,
     /// A dedicated card (integrated GPUs share the CPU's link).
     pub discrete: bool,
+    /// Resizable BAR on (None: unknown here).
+    pub rebar: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -108,6 +110,15 @@ pub fn check(f: &Facts) -> Vec<Finding> {
             vec![g.name.clone(), g.width.to_string(), g.max_width.to_string()],
         ));
     }
+    for g in f.gpus.iter().filter(|g| g.discrete && g.rebar == Some(false)) {
+        v.push(finding(
+            "rebar-off",
+            Severity::Info,
+            "Resizable BAR is off for {}",
+            "With Resizable BAR (Smart Access Memory on AMD) the CPU can reach all of the graphics memory at once, which helps many games. Turn on \"Above 4G Decoding\" and \"Re-Size BAR Support\" in the BIOS; it needs UEFI boot (CSM off).",
+            vec![g.name.clone()],
+        ));
+    }
     if f.power_saver == Some(true) {
         v.push(finding(
             "power-saver",
@@ -153,7 +164,7 @@ mod tests {
             modules: Some(2),
             mem_mhz: Some(2999.9),
             best_profile: Some(Profile { name: "EXPO".into(), mhz: 3000.0 }),
-            gpus: vec![GpuLink { name: "RTX 4060".into(), width: 8, max_width: 8, discrete: true }],
+            gpus: vec![GpuLink { name: "RTX 4060".into(), width: 8, max_width: 8, discrete: true, rebar: None }],
             power_saver: Some(false),
             displays: vec![Display { name: "DELL".into(), hz: 165, max_hz: 165, on_integrated: false }],
         }
@@ -174,8 +185,12 @@ mod tests {
         assert!(ids(&Facts { mem_mhz: Some(2900.0), ..good() }).is_empty(), "a mild manual tune isn't 'off'");
         let narrow = GpuLink { width: 4, max_width: 16, ..good().gpus[0].clone() };
         assert_eq!(ids(&Facts { gpus: vec![narrow], ..good() }), ["gpu-link-narrow"]);
-        let igpu = GpuLink { name: "Radeon".into(), width: 0, max_width: 0, discrete: false };
+        let igpu = GpuLink { name: "Radeon".into(), width: 0, max_width: 0, discrete: false, rebar: None };
         assert!(ids(&Facts { gpus: vec![igpu.clone()], ..good() }).is_empty());
+        let no_rebar = GpuLink { rebar: Some(false), ..good().gpus[0].clone() };
+        assert_eq!(ids(&Facts { gpus: vec![no_rebar], ..good() }), ["rebar-off"]);
+        let igpu_small = GpuLink { rebar: Some(false), ..igpu.clone() };
+        assert!(ids(&Facts { gpus: vec![igpu_small], ..good() }).is_empty(), "iGPU windows are fixed by the platform");
         assert_eq!(ids(&Facts { power_saver: Some(true), ..good() }), ["power-saver"]);
         let slow = Display { hz: 60, ..good().displays[0].clone() };
         assert_eq!(ids(&Facts { displays: vec![slow], ..good() }), ["refresh-below-max"]);

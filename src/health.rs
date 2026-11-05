@@ -69,6 +69,10 @@ pub fn facts(ctx: &Ctx, r: &[Section]) -> Facts {
             width: a.link.width.unwrap_or(0).min(64) as u8,
             max_width: a.link_max.width.unwrap_or(0).min(64) as u8,
             discrete: !integrated(a),
+            rebar: crate::peripherals::bars()
+                .iter()
+                .find(|b| b.vendor == a.vendor_id && b.device == a.device_id)
+                .map(crate::peripherals::Bars::rebar),
         })
         .collect();
     let displays = cpuzeez_platform::display::modes()

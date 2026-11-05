@@ -38,6 +38,41 @@ pub fn audio() -> Vec<Audio> {
     imp::audio()
 }
 
+/// A display adapter's BARs (S1-G02/G04): the memory windows the CPU sees it through.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Bars {
+    pub vendor: u16,
+    pub device: u16,
+    /// Largest window, bytes.
+    pub largest: u64,
+    /// Some window sits above 4 GiB (Above 4G decoding on).
+    pub above_4g: bool,
+}
+
+impl Bars {
+    /// Resizable BAR / Smart Access Memory: a window larger than the classic 256 MiB.
+    pub fn rebar(&self) -> bool {
+        self.largest > 256 << 20
+    }
+}
+
+/// From (base, size) ranges.
+pub fn bars_of(vendor: u16, device: u16, ranges: &[(u64, u64)]) -> Bars {
+    Bars {
+        vendor,
+        device,
+        largest: ranges.iter().map(|r| r.1).max().unwrap_or(0),
+        above_4g: ranges.iter().any(|r| r.0 >= 1 << 32),
+    }
+}
+
+/// Every display adapter's BARs: Windows from the resources it was given
+/// (no admin), Linux from sysfs `resource`; read once.
+pub fn bars() -> &'static [Bars] {
+    static V: std::sync::OnceLock<Vec<Bars>> = std::sync::OnceLock::new();
+    V.get_or_init(imp::bars)
+}
+
 pub fn bluetooth_batteries() -> Vec<Peripheral> {
     imp::batteries()
 }
@@ -110,6 +145,22 @@ mod imp {
         v
     }
 
+    pub fn bars() -> Vec<super::Bars> {
+        use crate::storage::win::memory_ranges;
+        id_list("PCI")
+            .into_iter()
+            .filter_map(|id| {
+                let dn = locate(&id)?;
+                reg_strs(dn, DRP_COMPATIBLEIDS)
+                    .iter()
+                    .any(|c| c.to_ascii_uppercase().contains("CC_03"))
+                    .then_some(())?;
+                let (v, d) = (crate::usb::id_field(&id, "VEN_")?, crate::usb::id_field(&id, "DEV_")?);
+                Some(super::bars_of(v as u16, d as u16, &memory_ranges(dn)))
+            })
+            .collect()
+    }
+
     /// USB4 host routers (PCI class 0C0340) and Thunderbolt controllers.
     pub fn thunderbolt() -> Vec<Thunderbolt> {
         id_list("PCI")
@@ -175,6 +226,28 @@ mod imp {
                 let name =
                     read_trim(p.join("model_name")).unwrap_or_else(|| e.file_name().to_string_lossy().into_owned());
                 Some(Peripheral { name, battery })
+            })
+            .collect()
+    }
+
+    pub fn bars() -> Vec<super::Bars> {
+        let Ok(rd) = std::fs::read_dir("/sys/bus/pci/devices") else { return Vec::new() };
+        let hex = |s: &str| u64::from_str_radix(s.trim_start_matches("0x"), 16).ok();
+        rd.flatten()
+            .filter_map(|e| {
+                let p = e.path();
+                read_trim(p.join("class")).filter(|c| c.starts_with("0x03"))?;
+                let (v, d) = (hex(&read_trim(p.join("vendor"))?)?, hex(&read_trim(p.join("device"))?)?);
+                let res = std::fs::read_to_string(p.join("resource")).ok()?;
+                // "start end flags" per BAR; IORESOURCE_MEM = 0x200.
+                let ranges: Vec<(u64, u64)> = res
+                    .lines()
+                    .filter_map(|l| {
+                        let f: Vec<u64> = l.split_whitespace().filter_map(hex).collect();
+                        (f.len() == 3 && f[2] & 0x200 != 0 && f[1] > f[0]).then(|| (f[0], f[1] - f[0] + 1))
+                    })
+                    .collect();
+                Some(super::bars_of(v as u16, d as u16, &ranges))
             })
             .collect()
     }
@@ -251,10 +324,17 @@ mod imp {
     pub fn thunderbolt() -> Vec<Thunderbolt> {
         Vec::new()
     }
+
+    pub fn bars() -> Vec<super::Bars> {
+        Vec::new()
+    }
 }
 
 #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 mod imp {
+    pub fn bars() -> Vec<super::Bars> {
+        Vec::new()
+    }
     pub fn audio() -> Vec<super::Audio> {
         Vec::new()
     }
@@ -280,6 +360,14 @@ mod tests {
         f[24] = 3;
         assert_eq!(super::wave_format(&f).as_deref(), Some("24-bit float, 48 kHz, 2 ch"));
         assert_eq!(super::wave_format(&[1, 0]), None);
+        // RTX 4060 here: 16 MiB, 32 MiB and an 8 GiB window above 4 GiB = ReBAR on.
+        let b = super::bars_of(
+            0x10DE,
+            0x2882,
+            &[(0xDD00_0000, 16 << 20), (0xFA_0000_0000, 32 << 20), (0xF8_0000_0000, 8 << 30)],
+        );
+        assert!(b.rebar() && b.above_4g);
+        assert!(!super::bars_of(1, 2, &[(0xE000_0000, 256 << 20)]).rebar(), "the classic 256 MiB window");
         let _ = (super::audio(), super::bluetooth_batteries(), super::thunderbolt());
     }
 }

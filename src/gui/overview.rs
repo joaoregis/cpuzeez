@@ -12,6 +12,11 @@ use cpuzeez_core::layout::{Widget, presets};
 use eframe::egui::{self, RichText, Ui};
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Resizable BAR is off for {}", "Resizable BAR está desligado para {}"),
+    (
+        "With Resizable BAR (Smart Access Memory on AMD) the CPU can reach all of the graphics memory at once, which helps many games. Turn on \"Above 4G Decoding\" and \"Re-Size BAR Support\" in the BIOS; it needs UEFI boot (CSM off).",
+        "Com o Resizable BAR (Smart Access Memory na AMD) a CPU alcança toda a memória de vídeo de uma vez, o que ajuda muitos jogos. Ative \"Above 4G Decoding\" e \"Re-Size BAR Support\" na BIOS; requer boot UEFI (CSM desligado).",
+    ),
     ("Overview", "Visão geral"),
     ("All good", "Tudo normal"),
     ("Thermal throttling", "Limitação térmica"),
@@ -112,6 +117,11 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Resizable BAR is off for {}", "Resizable BAR está desactivado para {}"),
+    (
+        "With Resizable BAR (Smart Access Memory on AMD) the CPU can reach all of the graphics memory at once, which helps many games. Turn on \"Above 4G Decoding\" and \"Re-Size BAR Support\" in the BIOS; it needs UEFI boot (CSM off).",
+        "Con Resizable BAR (Smart Access Memory en AMD) la CPU alcanza toda la memoria de vídeo a la vez, lo que ayuda a muchos juegos. Active \"Above 4G Decoding\" y \"Re-Size BAR Support\" en la BIOS; requiere arranque UEFI (CSM desactivado).",
+    ),
     ("Overview", "Resumen"),
     ("All good", "Todo normal"),
     ("Thermal throttling", "Limitación térmica"),
