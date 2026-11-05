@@ -387,6 +387,15 @@ pub fn run(index: usize, ctl: &Ctl, notes: &mut Vec<String>) -> Result<(Vec<Sub>
     Ok((out, name))
 }
 
+/// GPU stress (S1-K07): the FP32 shader in a loop until cancelled.
+pub fn stress(index: usize, ctl: &Ctl) -> Result<(), String> {
+    let (g, _) = Gpu::open(index)?;
+    while !ctl.cancelled() {
+        flops(&g, "f32", ctl).or_else(|e| if ctl.cancelled() { Ok(0.0) } else { Err(e) })?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -400,5 +409,16 @@ mod tests {
         let ctl = crate::benchkit::Ctl::default();
         let (subs, name) = super::run(0, &ctl, &mut notes).expect("benchmark ran");
         assert!(subs.iter().all(|s| s.value > 0.0), "{name}: {subs:?}");
+    }
+
+    #[test]
+    fn gpu_stress_stops_when_cancelled() {
+        if super::adapters().is_empty() {
+            return;
+        }
+        let j = crate::benchkit::Job::spawn(|ctl| super::stress(0, ctl));
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+        j.cancel();
+        assert_eq!(j.wait(), Ok(()));
     }
 }

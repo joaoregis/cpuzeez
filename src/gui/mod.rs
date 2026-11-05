@@ -650,7 +650,10 @@ impl App {
                         let t0 = benchkit_view::cpu_temp(&mut self.mon);
                         self.diskbench.page(ui, &self.ctx, t0)
                     }
-                    BenchView::Stress => stress::page(ui, &mut self.mon, true),
+                    BenchView::Stress => {
+                        let gpus = self.gpubench.adapters().to_vec();
+                        stress::page(ui, &mut self.mon, true, &gpus)
+                    }
                     BenchView::History => {
                         if self.history_dirty {
                             self.history.reload();

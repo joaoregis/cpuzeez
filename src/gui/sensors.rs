@@ -343,7 +343,7 @@ impl Monitor {
             egui::Window::new(tr("Stress test")).open(&mut open).default_size(default).default_pos([8.0, 32.0]).show(
                 ectx,
                 |ui| {
-                    egui::ScrollArea::vertical().show(ui, |ui| stress::page(ui, self, true));
+                    egui::ScrollArea::vertical().show(ui, |ui| stress::page(ui, self, true, &[]));
                 },
             );
             self.show_stress = open;

@@ -167,6 +167,13 @@ impl<T: Send + 'static> Job<T> {
         self.ctl.cancel.store(true, Ordering::Relaxed);
     }
 
+    /// Blocks until the thread ends (after `cancel`), ignoring the result.
+    pub fn wait_quietly(&self) {
+        while self.result.lock().unwrap_or_else(|e| e.into_inner()).is_none() {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
+
     /// Blocks until done (tests).
     #[cfg(test)]
     pub fn wait(self) -> Result<T, String> {

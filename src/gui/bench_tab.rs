@@ -272,7 +272,7 @@ impl State {
             }
         });
         if mon.stress.running() {
-            super::stress::page(ui, mon, false);
+            super::stress::page(ui, mon, false, &[]);
         }
         // ---- end monitored stress ----
         let have = idle && (self.st.is_some() || self.mt.is_some());

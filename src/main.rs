@@ -27,6 +27,7 @@ mod history;
 mod latency;
 mod membench;
 mod memplus;
+mod memtest;
 mod network;
 mod npu;
 mod pci;

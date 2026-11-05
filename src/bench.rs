@@ -398,21 +398,40 @@ impl Drop for Bench {
     }
 }
 
-/// Stress CPU: workers run the widest variant until stopped (or dropped).
+/// CPU stress load (S1-K07).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Load {
+    /// Scalar code: heat without the SIMD units.
+    Light,
+    /// The widest SIMD variant (AVX-512 / AVX2 / NEON): the most heat and power.
+    #[default]
+    Heavy,
+    /// Alternates the two every ~50 ms: load steps that catch unstable voltage
+    /// transitions.
+    Mixed,
+}
+
+/// Stress CPU: workers run `load` until stopped (or dropped).
 pub struct StressHandle {
     stop: Arc<AtomicBool>,
     threads: Vec<std::thread::JoinHandle<()>>,
 }
 
-pub fn stress(threads: usize) -> StressHandle {
+pub fn stress(threads: usize, load: Load) -> StressHandle {
     let stop = Arc::new(AtomicBool::new(false));
-    let v = Variant::best();
     let threads = (0..threads.max(1))
         .map(|i| {
             let stop = stop.clone();
             std::thread::spawn(move || {
                 let mut s = State::new(i as u32);
+                let t0 = Instant::now();
                 while !stop.load(Ordering::Relaxed) {
+                    let heavy = match load {
+                        Load::Light => false,
+                        Load::Heavy => true,
+                        Load::Mixed => t0.elapsed().as_millis() / 50 % 2 == 0,
+                    };
+                    let v = if heavy { Variant::best() } else { Variant::Scalar };
                     steps(v, &mut s, table(), CHUNK);
                 }
                 std::hint::black_box(s.checksum());
@@ -531,6 +550,8 @@ mod tests {
         let b = Bench::spawn(vec![None], Variant::Scalar, Duration::from_secs(10));
         b.cancel();
         assert!(b.wait().is_none());
-        stress(2).stop();
+        for load in [Load::Light, Load::Heavy, Load::Mixed] {
+            stress(2, load).stop();
+        }
     }
 }
