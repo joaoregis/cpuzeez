@@ -198,7 +198,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 
 | ID | Item | Type | Source | Done when |
 |---|---|---|---|---|
-| S1-M01 | **Tray**: several icons (one per metric), styles (number, bar, mini graph, ring), DPI-sized text, colour + shape thresholds, rich tooltip, dynamic re-translatable menu, configurable click, macOS multi-metric menu-bar text, honest limits shown | ✨ | core-pages §8 | Win/mac/Linux SNI; kittest for the settings UI |
+| S1-M01 | **Tray**: several icons (one per metric), styles (number, bar, mini graph, ring), DPI-sized text, colour + shape thresholds, rich tooltip, dynamic re-translatable menu, configurable click, macOS multi-metric menu-bar text, honest limits shown | ✨ | core-pages §8 | Win/mac/Linux SNI; kittest for the settings UI. ✅ `gui/trayicon.rs` (4 styles at `SM_CXSMICON` size, text from egui's glyph atlas, warning notch / danger frame; tested at 16–32 px) + `gui/tray.rs` (N icons on tray-icon/ksni, menu rebuilt on state or language change, tooltip clipped to Windows' 127 chars, click action; tested) + `core::layout::tray` model + *Settings › Tray icons* (kittest `tray_icons_settings`). Menu items for the overlay, capture, bottleneck detector and System hub arrive with S2a–S2c |
 | S1-M02 | **Mini monitor** on the Widget Engine: layouts, resizable, appearance, lock (click-through), snap and remember, several instances, hide on fullscreen, expand on hover, context menu, persistence | ✨ | core-pages §9 | Shares layouts with the overlay editor |
 
 **S1 gate → pre-release `1.0.0-beta.1`.**

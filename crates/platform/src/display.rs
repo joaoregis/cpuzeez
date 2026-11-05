@@ -150,3 +150,17 @@ mod tests {
         let _ = super::power_saver();
     }
 }
+
+/// The shell's small-icon size in pixels (the tray's), DPI-aware on Windows:
+/// 16 at 100 %, 20 at 125 %, 24 at 150 %, 32 at 200 %.
+pub fn small_icon_px() -> Option<usize> {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSMICON};
+        // SAFETY: no arguments.
+        let px = unsafe { GetSystemMetrics(SM_CXSMICON) };
+        (px >= 16).then_some(px as usize)
+    }
+    #[cfg(not(windows))]
+    None
+}

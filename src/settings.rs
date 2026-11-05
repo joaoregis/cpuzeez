@@ -61,6 +61,9 @@ pub struct Settings {
     pub alerts: Vec<cpuzeez_core::alerts::Rule>,
     /// Rated endurance (TB written) per drive serial, typed by the user.
     pub tbw: std::collections::BTreeMap<String, f64>,
+    /// Tray icons, one per metric (S1-M01).
+    pub tray_items: Vec<cpuzeez_core::layout::tray::Item>,
+    pub tray_click: cpuzeez_core::layout::tray::Click,
 }
 
 /// A row pinned to the Overview (S1-U03).
@@ -99,6 +102,8 @@ impl Default for Settings {
             alerts_on: false,
             alerts: cpuzeez_core::alerts::defaults(),
             tbw: Default::default(),
+            tray_items: vec![Default::default()],
+            tray_click: Default::default(),
         }
     }
 }

@@ -330,3 +330,54 @@ mod tests {
         assert!(Layout::from_json("not json").is_err());
     }
 }
+
+/// Tray icons (S1-M01): each one is a Widget Engine widget (metric,
+/// thresholds, range) drawn in one of four styles.
+pub mod tray {
+    use super::{Kind, Widget};
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+    #[serde(rename_all = "kebab-case")]
+    pub enum Style {
+        #[default]
+        Number,
+        Bar,
+        Graph,
+        Ring,
+    }
+
+    impl Style {
+        pub const ALL: [Style; 4] = [Style::Number, Style::Bar, Style::Graph, Style::Ring];
+        pub fn label(self) -> &'static str {
+            match self {
+                Style::Number => "Number",
+                Style::Bar => "Bar",
+                Style::Graph => "Mini graph",
+                Style::Ring => "Ring",
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[serde(default)]
+    pub struct Item {
+        pub widget: Widget,
+        pub style: Style,
+    }
+
+    impl Default for Item {
+        fn default() -> Self {
+            Item { widget: Widget::metric(Kind::Value, "@cpu_temp", "CPU"), style: Style::Number }
+        }
+    }
+
+    /// What a left click on an icon does.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+    #[serde(rename_all = "kebab-case")]
+    pub enum Click {
+        #[default]
+        App,
+        Mini,
+    }
+}

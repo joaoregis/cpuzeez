@@ -31,6 +31,7 @@ pub mod sensors;
 pub mod stress;
 pub mod table;
 mod tray;
+mod trayicon;
 pub mod units;
 mod welcome;
 // ---- end monitoring ----

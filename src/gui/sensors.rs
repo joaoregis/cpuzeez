@@ -146,6 +146,12 @@ pub struct Monitor {
     view: View,
     quitting: bool,
     started: bool,
+    /// The main window is hidden in the tray.
+    pub hidden: bool,
+    /// Sampling paused from the tray menu.
+    pub paused: bool,
+    /// (icons, click) the tray was built with, to rebuild when they change.
+    tray_shape: (usize, tray::Click),
 }
 
 impl Monitor {
@@ -165,13 +171,18 @@ impl Monitor {
             view: View::default(),
             quitting: false,
             started: false,
+            hidden: false,
+            paused: false,
+            tray_shape: (0, tray::Click::App),
         }
     }
 
     /// Sampling period and graph history from the settings.
     fn sampling(&self) -> (Duration, Duration) {
         let s = &self.settings;
-        (Duration::from_millis(s.sample_ms.max(100)), Duration::from_secs(s.graph_seconds.max(60)))
+        // Paused: one read an hour keeps the engine alive without working.
+        let period = if self.paused { Duration::from_secs(3600) } else { Duration::from_millis(s.sample_ms.max(100)) };
+        (period, Duration::from_secs(s.graph_seconds.max(60)))
     }
 
     /// The shared sampler, started on first use.
@@ -232,7 +243,12 @@ impl Monitor {
     }
 
     pub(super) fn set_tray(&mut self, on: bool, ectx: &egui::Context) {
-        self.tray.set_enabled(on, ectx);
+        let shape = (self.settings.tray_items.len().max(1), self.settings.tray_click);
+        if on && self.tray.active() && shape != self.tray_shape {
+            self.tray.set_enabled(false, 0, shape.1, ectx);
+        }
+        self.tray_shape = shape;
+        self.tray.set_enabled(on, shape.0, shape.1, ectx);
         if on && !self.tray.active() {
             self.show_mini = true; // no tray host: fall back to the mini window
         }
@@ -266,13 +282,33 @@ impl Monitor {
                 self.set_tray(true, ectx);
             }
         }
+        if self.tray.active() && (self.settings.tray_items.len().max(1), self.settings.tray_click) != self.tray_shape {
+            self.set_tray(true, ectx);
+        }
         for a in self.tray.poll() {
             match a {
-                tray::Action::Show | tray::Action::Sensors => {
+                tray::Action::Toggle if !self.hidden => {
+                    ectx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+                    self.hidden = true;
+                }
+                tray::Action::Toggle | tray::Action::Sensors => {
                     self.show_sensors |= a == tray::Action::Sensors;
+                    self.hidden = false;
                     ectx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
                     ectx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
                     ectx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                }
+                tray::Action::Mini => {
+                    let on = !self.show_mini;
+                    self.set_mini(on);
+                }
+                tray::Action::Pause => {
+                    self.paused = !self.paused;
+                    self.apply_sampling();
+                }
+                tray::Action::Speed(ms) => {
+                    self.set_setting(|s| s.sample_ms = ms);
+                    self.apply_sampling();
                 }
                 tray::Action::Quit => self.quit(ectx),
             }
@@ -284,6 +320,7 @@ impl Monitor {
         {
             ectx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             ectx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+            self.hidden = true;
         }
         if let Some((tel, _)) = &self.tel {
             // Leases for what runs without its page open; current values only.
@@ -292,7 +329,11 @@ impl Monitor {
                 tel.want("stress", &shown);
             }
             if self.tray.active() {
-                tel.want("tray", &shown);
+                let ws: Vec<cpuzeez_core::layout::Widget> =
+                    self.settings.tray_items.iter().map(|i| i.widget.clone()).collect();
+                let mut lease = super::layout_view::prefixes(&ws);
+                lease.extend(shown.iter().map(|s| s.to_string()));
+                tel.want("tray", &lease.iter().map(String::as_str).collect::<Vec<_>>());
             }
             if self.show_mini {
                 tel.want("mini", &shown);
@@ -313,15 +354,17 @@ impl Monitor {
             self.stress.tick(&series, limit);
             self.alerts =
                 if self.settings.alerts_on { firing_alerts(&self.settings.alerts, &series, tel) } else { Vec::new() };
-            let mut tip = summary(&series)
-                .iter()
-                .filter_map(|(n, t)| t.map(|t| format!("{n} {}", fmt0(t))))
-                .collect::<Vec<_>>()
-                .join(" · ");
-            for a in &self.alerts {
-                tip = format!("{} {a}\n{tip}", icon::WARNING);
+            if self.tray.active() {
+                let shown = tray_pictures(&self.settings.tray_items, &series, tel, tjmax, ectx);
+                let extra: Vec<String> = self.alerts.iter().map(|a| format!("{} {a}", icon::WARNING)).collect();
+                let state = tray::MenuState {
+                    visible: !self.hidden,
+                    mini: self.show_mini,
+                    paused: self.paused,
+                    speed_ms: self.settings.sample_ms,
+                };
+                self.tray.update(&shown, &extra, &state);
             }
-            self.tray.update(cpu_temp(&series).map(|s| s.current), tjmax, &tip);
             if self.stress.running() || self.tray.active() || self.show_mini {
                 ectx.request_repaint_after(Duration::from_secs(1));
             }
@@ -398,6 +441,70 @@ impl Monitor {
 // ---- series helpers (shared with the stress monitor and tray) ----
 
 /// A telemetry value in the units chosen in Settings.
+/// Each tray icon's picture and tooltip line from the current values.
+fn tray_pictures(
+    items: &[tray::Item],
+    series: &[Series],
+    tel: &Telemetry,
+    tjmax: f64,
+    ectx: &egui::Context,
+) -> Vec<tray::Shown> {
+    use super::trayicon::{self, Picture, Style};
+    use cpuzeez_core::layout::{Tone, temp_thresholds};
+    let n = trayicon::size();
+    items
+        .iter()
+        .map(|it| {
+            let w = &it.widget;
+            let s = w.metric.as_deref().and_then(|m| super::layout_view::resolve(m, series));
+            let label = w.label.clone().unwrap_or_else(|| s.map_or(String::new(), |s| s.label.clone()));
+            let Some(s) = s else {
+                let p = Picture { style: it.style, text: None, fill: 0.0, tone: None, history: &[] };
+                return tray::Shown {
+                    rgba: trayicon::draw(Some(ectx), &p, n),
+                    line: format!("{label} –"),
+                    short: "–".into(),
+                };
+            };
+            // Thresholds: the widget's own, else sensible ones for the unit.
+            let limit = if w.metric.as_deref() == Some("@cpu_temp") { tjmax } else { GPU_LIMIT };
+            let w = if w.thresholds.is_empty() {
+                match s.unit {
+                    Unit::Celsius => w.clone().with_thresholds(&temp_thresholds(limit)),
+                    Unit::Percent => w.clone().with_thresholds(&[(90.0, Tone::Warning)]),
+                    _ => w.clone(),
+                }
+            } else {
+                w.clone()
+            };
+            let text = super::layout_view::value_text(&w, s);
+            let number = text.split_whitespace().next().unwrap_or("").to_string();
+            let fill = if s.unit == Unit::Celsius { (s.current / limit) as f32 } else { w.fill(s.current) };
+            let hist: Vec<f64> = if it.style == Style::Graph {
+                tel.series_with(|id| id == s.id)
+                    .first()
+                    .map(|x| x.points.iter().map(|p| p.1).collect())
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            let p = Picture {
+                style: it.style,
+                text: Some(number.clone()),
+                fill,
+                tone: Some(w.tone(s.current)),
+                history: &hist,
+            };
+            let degree = if s.unit == Unit::Celsius { "°" } else { "" };
+            tray::Shown {
+                rgba: trayicon::draw(Some(ectx), &p, n),
+                line: format!("{label} {text}"),
+                short: format!("{label} {number}{degree}"),
+            }
+        })
+        .collect()
+}
+
 pub fn fmt(v: f64, u: Unit) -> String {
     super::units::get().format(v, u)
 }

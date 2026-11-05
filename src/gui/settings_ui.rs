@@ -9,6 +9,28 @@ use crate::settings::{Settings, Theme};
 use eframe::egui::{self, RichText};
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Tray icons", "Ícones da bandeja"),
+    ("Add icon", "Adicionar ícone"),
+    ("Remove", "Remover"),
+    ("Left click opens", "Clique esquerdo abre"),
+    ("The app", "O app"),
+    ("Number", "Número"),
+    ("Bar", "Barra"),
+    ("Mini graph", "Minigráfico"),
+    ("Ring", "Anel"),
+    ("Label", "Rótulo"),
+    (
+        "Windows 11 puts new tray icons in the overflow menu (^). Drag them to the taskbar, or turn them on in Settings › Personalization › Taskbar › Other system tray icons. Apps can't do it for you.",
+        "O Windows 11 coloca ícones novos no menu de excedentes (^). Arraste-os para a barra de tarefas, ou ative em Configurações › Personalização › Barra de tarefas › Outros ícones da bandeja do sistema. Apps não podem fazer isso por você.",
+    ),
+    (
+        "GNOME shows tray icons only with the AppIndicator extension; without it, the mini monitor opens instead.",
+        "O GNOME só mostra ícones da bandeja com a extensão AppIndicator; sem ela, o mini monitor abre no lugar.",
+    ),
+    (
+        "macOS shows one menu-bar item with every metric as text.",
+        "O macOS mostra um item na barra de menus com todas as métricas em texto.",
+    ),
     ("Alerts", "Alertas"),
     ("Show local alerts on the Overview and in the tray", "Mostrar alertas locais na Visão geral e na bandeja"),
     (
@@ -98,6 +120,28 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Tray icons", "Iconos de la bandeja"),
+    ("Add icon", "Añadir icono"),
+    ("Remove", "Quitar"),
+    ("Left click opens", "El clic izquierdo abre"),
+    ("The app", "La app"),
+    ("Number", "Número"),
+    ("Bar", "Barra"),
+    ("Mini graph", "Minigráfico"),
+    ("Ring", "Anillo"),
+    ("Label", "Etiqueta"),
+    (
+        "Windows 11 puts new tray icons in the overflow menu (^). Drag them to the taskbar, or turn them on in Settings › Personalization › Taskbar › Other system tray icons. Apps can't do it for you.",
+        "Windows 11 pone los iconos nuevos en el menú de desbordamiento (^). Arrástrelos a la barra de tareas o actívelos en Configuración › Personalización › Barra de tareas › Otros iconos de la bandeja del sistema. Las apps no pueden hacerlo por usted.",
+    ),
+    (
+        "GNOME shows tray icons only with the AppIndicator extension; without it, the mini monitor opens instead.",
+        "GNOME solo muestra iconos de la bandeja con la extensión AppIndicator; sin ella, se abre el minimonitor.",
+    ),
+    (
+        "macOS shows one menu-bar item with every metric as text.",
+        "macOS muestra un elemento en la barra de menús con todas las métricas como texto.",
+    ),
     ("Alerts", "Alertas"),
     ("Show local alerts on the Overview and in the tray", "Mostrar alertas locales en el Resumen y en la bandeja"),
     (
@@ -299,6 +343,59 @@ fn privacy(ui: &mut egui::Ui, s: &mut Settings, dir: &std::path::Path, report: O
     });
 }
 
+/// Tray icons (S1-M01): one row per icon (metric, style, label), add/remove,
+/// the left-click action and the platform's honest limits.
+pub(super) fn tray_items(ui: &mut egui::Ui, s: &mut Settings) {
+    use cpuzeez_core::layout::tray::{Click, Item, Style};
+    let p = theme::palette(ui);
+    let mut remove = None;
+    for (i, it) in s.tray_items.iter_mut().enumerate() {
+        ui.horizontal_wrapped(|ui| {
+            let metric = it.widget.metric.clone().unwrap_or_default();
+            let shown = super::layout_view::ALIASES
+                .iter()
+                .find(|a| a.0 == metric)
+                .map_or(metric.clone(), |a| tr(a.1).to_string());
+            egui::ComboBox::from_id_salt(("tray-metric", i)).selected_text(shown).width(220.0).show_ui(ui, |ui| {
+                for (alias, what) in super::layout_view::ALIASES {
+                    ui.selectable_value(&mut it.widget.metric, Some(alias.to_string()), tr(what));
+                }
+            });
+            for st in Style::ALL {
+                ui.selectable_value(&mut it.style, st, tr(st.label()));
+            }
+            let mut label = it.widget.label.clone().unwrap_or_default();
+            if ui.add(egui::TextEdit::singleline(&mut label).hint_text(tr("Label")).desired_width(70.0)).changed() {
+                it.widget.label = (!label.is_empty()).then_some(label);
+            }
+            if ui.small_button(icon::TRASH).on_hover_text(tr("Remove")).clicked() {
+                remove = Some(i);
+            }
+        });
+    }
+    if let Some(i) = remove.filter(|_| s.tray_items.len() > 1) {
+        s.tray_items.remove(i);
+    }
+    if s.tray_items.len() < 8 && ui.button(format!("{}  {}", icon::PLUS, tr("Add icon"))).clicked() {
+        let mut it = Item::default();
+        it.widget.metric = Some("@gpu_temp".into());
+        it.widget.label = Some("GPU".into());
+        s.tray_items.push(it);
+    }
+    row(ui, tr("Left click opens"), |ui| {
+        ui.selectable_value(&mut s.tray_click, Click::App, tr("The app"));
+        ui.selectable_value(&mut s.tray_click, Click::Mini, tr("Mini monitor"));
+    });
+    let limit = if cfg!(windows) {
+        "Windows 11 puts new tray icons in the overflow menu (^). Drag them to the taskbar, or turn them on in Settings › Personalization › Taskbar › Other system tray icons. Apps can't do it for you."
+    } else if cfg!(target_os = "macos") {
+        "macOS shows one menu-bar item with every metric as text."
+    } else {
+        "GNOME shows tray icons only with the AppIndicator extension; without it, the mini monitor opens instead."
+    };
+    ui.label(RichText::new(tr(limit)).small().color(p.text_muted));
+}
+
 fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
     ui.horizontal(|ui| {
         let p = theme::palette(ui);
@@ -443,6 +540,11 @@ pub fn page(ui: &mut egui::Ui, s: &mut Settings, updates_allowed: bool, persist:
     });
     ui.add_space(theme::GAP);
 
+    if s.tray {
+        widgets::card(ui, icon::TRAY, tr("Tray icons"), |ui| tray_items(ui, s));
+        ui.add_space(theme::GAP);
+    }
+
     widgets::card(ui, icon::BELL, tr("Alerts"), |ui| alerts(ui, s));
     ui.add_space(theme::GAP);
 
@@ -476,5 +578,38 @@ pub fn page(ui: &mut egui::Ui, s: &mut Settings, updates_allowed: bool, persist:
         if persist {
             s.save();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use eframe::egui;
+    use egui_kittest::{Harness, kittest::Queryable};
+
+    /// S1-M01: icons are added, restyled and removed from the settings card.
+    #[test]
+    fn tray_icons_settings() {
+        use cpuzeez_core::layout::tray::Style;
+        let mut h = Harness::builder().with_size(egui::vec2(900.0, 500.0)).build_ui_state(
+            |ui, s: &mut crate::settings::Settings| {
+                if !ui.style().text_styles.contains_key(&egui::TextStyle::Name("title".into())) {
+                    super::super::theme::install(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                super::tray_items(ui, s);
+            },
+            crate::settings::Settings::default(),
+        );
+        h.run();
+        h.get_by_label_contains("Add icon").click();
+        h.run();
+        assert_eq!(h.state().tray_items.len(), 2);
+        h.get_all_by_label("Ring").next().expect("style buttons").click();
+        h.run();
+        assert_eq!(h.state().tray_items[0].style, Style::Ring);
+        h.get_by_label("Mini monitor").click();
+        h.run();
+        assert_eq!(h.state().tray_click, cpuzeez_core::layout::tray::Click::Mini);
     }
 }
