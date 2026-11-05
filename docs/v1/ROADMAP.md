@@ -72,7 +72,7 @@ Goal: fix what's broken, build the shared building blocks, and set up the tests 
 
 | ID | Item | Type | Done when |
 |---|---|---|---|
-| S0-T01 | CI matrix: Windows, Ubuntu X11 + Wayland (headless compositor), macOS Intel + ARM | 🧪 | Every job is required for merge |
+| S0-T01 | CI matrix: Windows, Ubuntu X11 + Wayland (headless compositor), macOS Intel + ARM | 🧪 | Every job is required for merge. ✅ Wayland: headless Weston 13 renders all 17 screens on x64 and arm64 |
 | S0-T02 | `rustfmt`, `clippy -D warnings` (agreed pedantic subset), MSRV, **`cargo-deny`** (licenses, advisories, duplicates) | 🧪 | Required checks |
 | S0-T03 | **Fakes** for every source trait + the **contract test** harness | 🧪 | Every trait has a suite; every platform runs it |
 | S0-T04 | **Fixture** framework (recorded `/proc`, SMART/NVMe dumps, SMU tables, PresentMon/MangoHud CSV) | 🧪 | Fixture tests in CI on every OS |

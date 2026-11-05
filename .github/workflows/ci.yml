@@ -72,7 +72,6 @@ jobs:
           fi
       - name: GUI on Wayland (headless Weston)
         if: runner.os == 'Linux'
-        continue-on-error: true  # S0-T01: made required once it's proven stable
         timeout-minutes: 5
         shell: bash
         run: |
