@@ -5,6 +5,7 @@ mod graphics;
 mod mainboard;
 mod memory;
 mod processor;
+pub(crate) mod processor_more;
 mod tools;
 pub(crate) use mainboard::mainboard_tab;
 pub(crate) use memory::memory_tab;

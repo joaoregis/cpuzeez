@@ -176,6 +176,8 @@ struct App {
     /// Ctrl+K search (S1-U02).
     palette: palette::Palette,
     overview: overview::State,
+    /// Processor › Cores table (sort, columns).
+    cores_table: table::State,
 }
 
 pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
@@ -240,6 +242,7 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         mon,
         palette: Default::default(),
         overview: Default::default(),
+        cores_table: Default::default(),
     };
     if app.auto.is_none() {
         crate::data::expire_logs(app.mon.settings.log_retention_days);
@@ -550,6 +553,7 @@ impl App {
                 self.cpu_tab(ui, r);
                 heading(ui, tr("Caches"));
                 self.caches_tab(ui);
+                self.processor_more(ui);
                 if detail::get(ui.ctx()) == cpuzeez_core::detail::Level::Expert {
                     cpuid_dump(ui, r);
                 }
