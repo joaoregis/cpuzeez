@@ -67,6 +67,8 @@ fn tables() -> &'static [(Table, Table)] {
         (super::pages::memory_more::PT_BR, super::pages::memory_more::ES),
         (super::latency_view::PT_BR, super::latency_view::ES),
         (super::diskbench_view::PT_BR, super::diskbench_view::ES),
+        (super::benchkit_view::PT_BR, super::benchkit_view::ES),
+        (super::cpusuite_view::PT_BR, super::cpusuite_view::ES),
     ]
 }
 

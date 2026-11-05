@@ -28,6 +28,9 @@ generated from its section below.
 - **Per-adapter network traffic** the same way: download/upload in Mbps, packets per second, errors and drops.
 - **GPU engine load**: 3D, copy, video encode and decode, compute and the rest per GPU on Windows (as the Task Manager counts them); the busy figure on Linux (AMD) and Device/Renderer/Tiler on macOS.
 - **Storage benchmark** (*Benchmarks › Storage*): sequential and 4K random read/write with 1 and 8 requests in flight, bypassing the OS cache, on a temporary file that is always deleted.
+- **CPU suite** (*Benchmarks › Processor*): eight workloads (compression, n-body physics, SIMD matrix math, AES with and without the CPU's AES instructions, SHA-256, a ray tracer and sorting), each on one core and on every thread, scored so that 1000 = the reference Ryzen 9 7900X. Also: thread scaling from 1 thread to all, P-core vs E-core on hybrid CPUs, and a sustained run (1, 10 or 30 minutes) that shows how much the score drops when the CPU throttles.
+- **Benchmarks are reproducible**: each result records the app version, power plan and starting CPU temperature; the suite can run 3 or 5 times and report the median and the spread.
+- **History for every benchmark**: the CPU suite, storage and core-to-core latency results can be saved too, and comparing two results lists every sub-test side by side.
 - **Core-to-core latency** (*Benchmarks › Latency*): a heat map of how long each core takes to see another core's writes, which shows the CCD/CCX layout at a glance.
 - **Devices page**: USB devices with the speed they run at and the USB version they support (with a warning when a USB 3 device runs at USB 2 speed), and each display's refresh rate against what it supports.
 - **Drives**: partition alignment, the OS's TRIM setting and NVMe thermal throttling (how often and for how long) on each drive's card.

@@ -18,6 +18,8 @@ mod settings_ui;
 mod shots;
 mod update_ui;
 // ---- monitoring (sensors / stress / tray) ----
+mod benchkit_view;
+mod cpusuite_view;
 mod diskbench_view;
 mod latency_view;
 pub mod layout_view;
@@ -184,6 +186,7 @@ struct App {
     cores_table: table::State,
     pcie_table: table::State,
     latency: latency_view::State,
+    cpusuite: cpusuite_view::State,
     diskbench: diskbench_view::State,
 }
 
@@ -252,6 +255,7 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         cores_table: Default::default(),
         pcie_table: Default::default(),
         latency: Default::default(),
+        cpusuite: Default::default(),
         diskbench: Default::default(),
     };
     if app.auto.is_none() {
@@ -614,10 +618,24 @@ impl App {
                     ],
                 );
                 match self.bench_view {
-                    BenchView::Cpu => self.bench.cpu_page(ui, &self.ctx, &mut self.mon),
-                    BenchView::Memory => self.bench.memory_page(ui, &self.ctx),
-                    BenchView::Latency => self.latency.page(ui, &self.ctx),
-                    BenchView::Storage => self.diskbench.page(ui, &self.ctx),
+                    BenchView::Cpu => {
+                        self.bench.cpu_page(ui, &self.ctx, &mut self.mon);
+                        ui.add_space(theme::GAP);
+                        let t0 = benchkit_view::cpu_temp(&mut self.mon);
+                        self.cpusuite.page(ui, &self.ctx, t0);
+                    }
+                    BenchView::Memory => {
+                        let t0 = benchkit_view::cpu_temp(&mut self.mon);
+                        self.bench.memory_page(ui, &self.ctx, t0)
+                    }
+                    BenchView::Latency => {
+                        let t0 = benchkit_view::cpu_temp(&mut self.mon);
+                        self.latency.page(ui, &self.ctx, t0)
+                    }
+                    BenchView::Storage => {
+                        let t0 = benchkit_view::cpu_temp(&mut self.mon);
+                        self.diskbench.page(ui, &self.ctx, t0)
+                    }
                     BenchView::Stress => stress::page(ui, &mut self.mon, true),
                     BenchView::History => {
                         if self.history_dirty {

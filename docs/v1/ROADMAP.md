@@ -184,15 +184,15 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 
 | ID | Item | Type | Source | Done when |
 |---|---|---|---|---|
-| S1-K01 | Benchmark principles: test-file only, reproducibility (conditions recorded, N runs + median), documented score (1000 = reference machine) | ✨ | core-pages §7.1 | Every benchmark follows them |
-| S1-K02 | **CPU suite**: integer, FP, SIMD GEMM, crypto, ray tracer, branchy, thread scaling, P × E, 10-min sustained | ✨ | core-pages §7.2 | Scores stable within tolerance across 3 runs on the reference machine |
+| S1-K01 | Benchmark principles: test-file only, reproducibility (conditions recorded, N runs + median), documented score (1000 = reference machine) | ✨ | core-pages §7.1 | Every benchmark follows them. ✅ `src/benchkit.rs` (tested): conditions saved with every result (version, power plan/governor, starting CPU temperature, runs), N runs → median + spread, sub-test points (1000 = the 7900X), total = geometric mean; one `Job` (progress/cancel) for every background run |
+| S1-K02 | **CPU suite**: integer, FP, SIMD GEMM, crypto, ray tracer, branchy, thread scaling, P × E, 10-min sustained | ✨ | core-pages §7.2 | Scores stable within tolerance across 3 runs on the reference machine. ✅ `src/cpusuite.rs`: 8 workloads × ST/MT (AES checked against FIPS-197, hardware = software; GEMM checked A×I = A), thread scaling, P × E (hybrids), 1/10/30-min sustained with first/last-minute drop. Reference run: totals 1012 / 1007 / 992 (±1 %). Single-thread runs on CPU 2 (CPU 0 takes the interrupts: up to 45 % spread) and GEMM buffers are 64-byte aligned (split lines cost ~40 %) |
 | S1-K03 | **Core-to-core latency** heat map | 🆕 | core-pages §7.2 | Win/Linux; macOS statistical. ✅ *Benchmarks › Latency*: pinned ping-pong per core pair (`src/latency.rs`, tested), heat map with min/median/max. 7900X: ~20 ns within a CCD, ~165 ns across, 0.3 s total. 🟡 macOS (no pinning) says so; statistical mode later |
 | S1-K04 | **Memory** additions: GUPS, STREAM triad, huge pages, per-CCD/NUMA latency | ✨ | core-pages §7.2 | Same |
 | S1-K05 | **GPU benchmark** (`wgpu`, feature `gpu-bench`): FP32/FP16, VRAM bandwidth, PCIe host↔GPU, raster scene | 🆕 | core-pages §7.2 | DX12/Vulkan/Metal |
 | S1-K06 | **Storage benchmark** (CrystalDiskMark-style + sustained write with a warning) | 🆕 | core-pages §7.2 | Uncached I/O verified; cleans up its test file. ✅ *Benchmarks › Storage*: SEQ1M/RND4K × T1/T8, write then read, uncached (`platform::direct_io`: NO_BUFFERING/O_DIRECT/F_NOCACHE, aligned buffers), test file deleted on every exit path (tested); drive or app-data folder, 256 MiB–4 GiB. 🟡 Sustained-write (SLC cache) run next |
 | S1-K07 | **Stability**: CPU stress variants, user-mode memory test, GPU stress, combined | ✨ | core-pages §7.2 | Auto-stop limits tested |
 | S1-K08 | **SSD/HDD health**: SMART self-tests, health panel (life, TBW, temperature history, alerts), read-only surface scan | 🆕 | core-pages §7.3 | Per-OS availability declared |
-| S1-K09 | History and compare for every benchmark type | ✨ | core-pages §7.2 | Same UI as today's history |
+| S1-K09 | History and compare for every benchmark type | ✨ | core-pages §7.2 | Same UI as today's history. ✅ CPU suite/scaling/P×E/sustained, storage and core-to-core latency save to the history; kinds come from the file; Compare lists every sub-test with its % (tested) |
 
 ### S1.5 Tray and mini monitor
 

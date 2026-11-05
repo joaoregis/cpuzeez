@@ -8,6 +8,7 @@ use cpuzeez_platform::direct_io::{self, Buffer, write_at};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy)]
@@ -35,10 +36,24 @@ pub struct Score {
 }
 
 /// A run in progress; poll it from the GUI.
-pub struct Run {
-    pub stage: Arc<Mutex<(String, f32)>>,
-    pub cancel: Arc<AtomicBool>,
-    pub result: Arc<Mutex<Option<Result<Vec<Score>, String>>>>,
+pub type Run = crate::benchkit::Job<Vec<Score>>;
+
+impl Score {
+    /// As benchmark sub-tests (history and compare).
+    pub fn subs(scores: &[Score]) -> Vec<crate::benchkit::Sub> {
+        use crate::benchkit::Sub;
+        let mut v = Vec::new();
+        for s in scores {
+            let random = TESTS.iter().find(|t| t.name == s.name).is_some_and(|t| t.random);
+            for (dir, mbps, iops) in [("read", s.read_mbps, s.read_iops), ("write", s.write_mbps, s.write_iops)] {
+                v.push(Sub::new(&format!("{} {dir}", s.name), mbps, "MB/s", true));
+                if random {
+                    v.push(Sub::new(&format!("{} {dir} IOPS", s.name), iops, "IOPS", true));
+                }
+            }
+        }
+        v
+    }
 }
 
 /// Deletes the test file however the run ends.
@@ -65,32 +80,17 @@ fn next(x: &mut u64) -> u64 {
 /// Starts the benchmark in `dir` with a `size`-byte file, each test phase
 /// running `secs` seconds.
 pub fn start(dir: &Path, size: u64, secs: f64) -> Run {
-    let run = Run {
-        stage: Arc::new(Mutex::new((String::new(), 0.0))),
-        cancel: Arc::new(AtomicBool::new(false)),
-        result: Arc::new(Mutex::new(None)),
-    };
-    let (stage, cancel, result) = (run.stage.clone(), run.cancel.clone(), run.result.clone());
     let path = dir.join("cpuzeez-bench.tmp");
-    std::thread::spawn(move || {
-        let r = bench(&path, size, secs, &stage, &cancel);
-        *result.lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
-    });
-    run
+    crate::benchkit::Job::spawn(move |ctl| bench(&path, size, secs, ctl))
 }
 
-fn bench(
-    path: &Path,
-    size: u64,
-    secs: f64,
-    stage: &Mutex<(String, f32)>,
-    cancel: &AtomicBool,
-) -> Result<Vec<Score>, String> {
+fn bench(path: &Path, size: u64, secs: f64, ctl: &crate::benchkit::Ctl) -> Result<Vec<Score>, String> {
+    let cancel = ctl.cancelled_flag();
     let size = size / (1 << 20) * (1 << 20);
     // Dropped last: the file closes first, then it's deleted.
     let _guard = TempFile(path.to_path_buf());
     let file = Arc::new(direct_io::open(path).map_err(|e| format!("{}: {e}", path.display()))?);
-    let set = |s: &str, f: f32| *stage.lock().unwrap_or_else(|e| e.into_inner()) = (s.to_string(), f);
+    let set = |s: &str, f: f32| ctl.set(s, f);
     // Fill the file so reads hit real data (and the drive can't skip it).
     let mut buf = Buffer::new(1 << 20);
     let mut seed = 0x9E37_79B9_7F4A_7C15u64;
@@ -196,14 +196,7 @@ mod tests {
     fn a_tiny_run_measures_and_cleans_up() {
         let dir = std::env::temp_dir().join(format!("cz-diskbench-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let run = start(&dir, 16 << 20, 0.15);
-        let r = loop {
-            if let Some(r) = run.result.lock().unwrap().take() {
-                break r;
-            }
-            std::thread::sleep(Duration::from_millis(20));
-        };
-        let scores = r.expect("benchmark ran");
+        let scores = start(&dir, 16 << 20, 0.15).wait().expect("benchmark ran");
         assert_eq!(scores.len(), TESTS.len());
         assert!(scores.iter().all(|s| s.read_mbps > 0.0 && s.write_mbps > 0.0), "{scores:?}");
         assert!(!dir.join("cpuzeez-bench.tmp").exists(), "the test file is deleted");

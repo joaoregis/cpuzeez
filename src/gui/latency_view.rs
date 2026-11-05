@@ -43,10 +43,13 @@ type Matrix = Vec<Vec<Option<f64>>>;
 pub struct State {
     running: Option<(Arc<AtomicUsize>, usize, Arc<Mutex<Option<Matrix>>>)>,
     result: Option<Matrix>,
+    conditions: crate::benchkit::Conditions,
+    label: String,
+    status: String,
 }
 
 impl State {
-    pub fn page(&mut self, ui: &mut egui::Ui, ctx: &Ctx) {
+    pub fn page(&mut self, ui: &mut egui::Ui, ctx: &Ctx, start_temp: Option<f64>) {
         let p = theme::palette(ui);
         let c = crate::cpu::get(ctx);
         // One thread per physical core: SMT siblings share the core's caches.
@@ -87,6 +90,8 @@ impl State {
                             *s.lock().unwrap_or_else(|e| e.into_inner()) = Some(m);
                         });
                         self.running = Some((done, cpus.len() * (cpus.len() - 1) / 2, slot));
+                        self.conditions = crate::benchkit::conditions(start_temp, 1);
+                        self.status.clear();
                     }
                 }
             }
@@ -94,6 +99,25 @@ impl State {
         ui.add_space(theme::GAP);
         if let Some(m) = &self.result {
             heat_map(ui, m);
+            if let Some((lo, mid, hi)) = crate::latency::summary(m) {
+                use crate::benchkit::Sub;
+                let saved = super::benchkit_view::Saved {
+                    kind: "Core-to-core latency",
+                    score: mid,
+                    unit: "ns",
+                    variant: String::new(),
+                    threads: m.len(),
+                    subs: vec![
+                        Sub::new("Min", lo, "ns", false),
+                        Sub::new("Median", mid, "ns", false),
+                        Sub::new("Max", hi, "ns", false),
+                    ],
+                    conditions: self.conditions.clone(),
+                    series: Vec::new(),
+                };
+                ui.add_space(theme::GAP);
+                super::benchkit_view::save(ui, ctx, &saved, &mut self.label, &mut self.status);
+            }
         }
     }
 }

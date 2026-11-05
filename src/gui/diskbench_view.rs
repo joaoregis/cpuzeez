@@ -1,5 +1,6 @@
 //! Benchmarks › Storage (S1-K06).
 
+use super::benchkit_view as kit;
 use super::i18n::{tr, trf};
 use super::theme::{self, icon};
 use super::widgets;
@@ -7,7 +8,6 @@ use crate::Ctx;
 use crate::diskbench::{Run, Score, TESTS};
 use eframe::egui::{self, RichText};
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
 
 pub const PT_BR: &[(&str, &str)] = &[
     ("Storage", "Armazenamento"),
@@ -15,7 +15,6 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("App data folder", "Pasta de dados do app"),
     ("Test file", "Arquivo de teste"),
     ("Run", "Executar"),
-    ("Cancel", "Cancelar"),
     ("Read", "Leitura"),
     ("Write", "Gravação"),
     (
@@ -31,7 +30,6 @@ pub const ES: &[(&str, &str)] = &[
     ("App data folder", "Carpeta de datos de la app"),
     ("Test file", "Archivo de prueba"),
     ("Run", "Ejecutar"),
-    ("Cancel", "Cancelar"),
     ("Read", "Lectura"),
     ("Write", "Escritura"),
     (
@@ -49,25 +47,31 @@ pub struct State {
     run: Option<Run>,
     scores: Vec<Score>,
     error: Option<String>,
+    conditions: Option<crate::benchkit::Conditions>,
+    saved: Option<kit::Saved>,
+    label: String,
+    status: String,
 }
 
 impl Default for State {
     fn default() -> Self {
-        State { dir: None, size: 1 << 30, run: None, scores: Vec::new(), error: None }
+        State {
+            dir: None,
+            size: 1 << 30,
+            run: None,
+            scores: Vec::new(),
+            error: None,
+            conditions: None,
+            saved: None,
+            label: String::new(),
+            status: String::new(),
+        }
     }
 }
 
 impl State {
-    pub fn page(&mut self, ui: &mut egui::Ui, ctx: &Ctx) {
+    pub fn page(&mut self, ui: &mut egui::Ui, ctx: &Ctx, start_temp: Option<f64>) {
         let p = theme::palette(ui);
-        let finished = self.run.as_ref().and_then(|run| run.result.lock().unwrap_or_else(|e| e.into_inner()).take());
-        if let Some(r) = finished {
-            match r {
-                Ok(s) => self.scores = s,
-                Err(e) => self.error = Some(e),
-            }
-            self.run = None;
-        }
         // The system drive's root needs admin: there, use the app's data folder.
         let data = crate::settings::dir();
         let mut places: Vec<(Option<PathBuf>, String)> = vec![(None, tr("App data folder").to_string())];
@@ -98,25 +102,33 @@ impl State {
                 });
             });
             ui.add_space(4.0);
-            match &self.run {
-                Some(run) => {
-                    ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
-                    let (stage, f) = run.stage.lock().unwrap_or_else(|e| e.into_inner()).clone();
-                    ui.horizontal(|ui| {
-                        widgets::progress(ui, f, &stage);
-                        if ui.button(tr("Cancel")).clicked() {
-                            run.cancel.store(true, Ordering::Relaxed);
-                        }
-                    });
-                }
-                None => {
-                    if widgets::primary_button(ui, &format!("{}  {}", icon::PLAY, tr("Run"))).clicked()
-                        && let Some(dir) = self.dir.clone().or(data.clone())
-                    {
-                        self.error = None;
-                        self.run = Some(crate::diskbench::start(&dir, self.size, 5.0));
+            if let Some(r) = kit::poll(ui, &mut self.run) {
+                match r {
+                    Ok(s) => {
+                        let subs = Score::subs(&s);
+                        self.saved = Some(kit::Saved {
+                            kind: "Storage",
+                            score: subs.first().map_or(0.0, |x| x.value),
+                            unit: "MB/s",
+                            variant: format!("{} MiB", self.size >> 20),
+                            threads: 8,
+                            subs,
+                            conditions: self.conditions.take().unwrap_or_default(),
+                            series: Vec::new(),
+                        });
+                        self.scores = s;
+                        self.status.clear();
                     }
+                    Err(e) => self.error = Some(e),
                 }
+            }
+            if self.run.is_none()
+                && widgets::primary_button(ui, &format!("{}  {}", icon::PLAY, tr("Run"))).clicked()
+                && let Some(dir) = self.dir.clone().or(data.clone())
+            {
+                self.error = None;
+                self.conditions = Some(crate::benchkit::conditions(start_temp, 1));
+                self.run = Some(crate::diskbench::start(&dir, self.size, 5.0));
             }
             if let Some(e) = &self.error {
                 ui.label(RichText::new(trf("Stopped: {}", &[e])).color(p.danger));
@@ -145,6 +157,10 @@ impl State {
                     }
                 });
             });
+            ui.add_space(theme::GAP);
+            if let Some(r) = &self.saved {
+                kit::save(ui, ctx, r, &mut self.label, &mut self.status);
+            }
         }
     }
 }
