@@ -78,6 +78,84 @@ pub fn version_info(path: &str) -> Option<(String, String)> {
     imp::version_info(path)
 }
 
+/// What a process runs as, beyond the account: read once per process.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Token {
+    /// "x64", "x86", "ARM64", "x86_64", "aarch64"… (empty when unknown).
+    pub arch: String,
+    /// Windows: the token is elevated. Unix: runs as root.
+    pub elevated: Option<bool>,
+    /// Windows integrity level ("Low", "Medium", "High", "System", "AppContainer"…).
+    pub integrity: String,
+    /// Windows UAC file/registry virtualization is on.
+    pub virtualization: Option<bool>,
+}
+
+/// Architecture, elevation, integrity and UAC virtualization, from a handle
+/// with the limited right (Windows), the executable's ELF header (Linux) or
+/// the kernel's process flags (macOS). `uid`: the snapshot's, for Unix.
+pub fn token(pid: u32, uid: Option<u32>) -> Token {
+    imp::token(pid, uid)
+}
+
+/// (GDI objects, USER objects) a process holds (Windows only).
+pub fn gui_objects(pid: u32) -> Option<(u32, u32)> {
+    imp::gui_objects(pid)
+}
+
+/// Architecture name of a Windows `IMAGE_FILE_MACHINE_*` value.
+pub fn machine_name(m: u16) -> &'static str {
+    match m {
+        0x8664 => "x64",
+        0x014c => "x86",
+        0xAA64 => "ARM64",
+        0x01c4 => "ARM",
+        _ => "",
+    }
+}
+
+/// Architecture from an ELF header (Linux executables).
+pub fn elf_arch(h: &[u8]) -> &'static str {
+    if h.len() < 20 || &h[..4] != b"\x7fELF" {
+        return "";
+    }
+    match u16::from_le_bytes([h[18], h[19]]) {
+        0x3E => "x86_64",
+        0x03 => "x86",
+        0xB7 => "aarch64",
+        0x28 => "arm",
+        0xF3 => "riscv64",
+        0x15 => "ppc64",
+        _ => "",
+    }
+}
+
+/// Windows mandatory label RID → name.
+pub fn integrity_name(rid: u32) -> &'static str {
+    match rid {
+        0..0x1000 => "Untrusted",
+        0x1000..0x2000 => "Low",
+        0x2000..0x2100 => "Medium",
+        0x2100..0x3000 => "Medium Plus",
+        0x3000..0x4000 => "High",
+        0x4000..0x5000 => "System",
+        _ => "Protected",
+    }
+}
+
+/// The arguments in a macOS `KERN_PROCARGS2` buffer: argc, the exec path,
+/// padding, then argc NUL-terminated strings.
+pub fn parse_procargs2(b: &[u8]) -> Option<String> {
+    let argc = u32::from_ne_bytes(b.get(..4)?.try_into().ok()?) as usize;
+    let mut rest = &b[4..];
+    let path_end = rest.iter().position(|&c| c == 0)?;
+    rest = &rest[path_end..];
+    let start = rest.iter().position(|&c| c != 0)?;
+    let args: Vec<String> =
+        rest[start..].split(|&c| c == 0).take(argc).map(|a| String::from_utf8_lossy(a).into_owned()).collect();
+    (!args.is_empty()).then(|| args.join(" "))
+}
+
 /// Unix ms from a Windows FILETIME (100 ns since 1601).
 pub fn filetime_ms(ft: u64) -> u64 {
     (ft / 10_000).saturating_sub(11_644_473_600_000)
@@ -296,6 +374,74 @@ mod imp {
         }
     }
 
+    pub fn token(pid: u32, _uid: Option<u32>) -> super::Token {
+        use windows_sys::Win32::Security::{
+            GetSidSubAuthority, GetSidSubAuthorityCount, TOKEN_MANDATORY_LABEL, TokenElevation, TokenIntegrityLevel,
+            TokenIsAppContainer, TokenVirtualizationEnabled,
+        };
+        use windows_sys::Win32::System::Threading::{
+            GetProcessInformation, IsWow64Process2, PROCESS_MACHINE_INFORMATION, ProcessMachineTypeInfo,
+        };
+        let mut t = super::Token::default();
+        let Some(h) = open(pid) else { return t };
+        // SAFETY: our handle, tokens and buffers; every handle is closed here.
+        unsafe {
+            let mut info: PROCESS_MACHINE_INFORMATION = std::mem::zeroed();
+            let size = std::mem::size_of::<PROCESS_MACHINE_INFORMATION>() as u32;
+            if GetProcessInformation(
+                h,
+                ProcessMachineTypeInfo,
+                (&mut info as *mut PROCESS_MACHINE_INFORMATION).cast(),
+                size,
+            ) != 0
+            {
+                t.arch = super::machine_name(info.ProcessMachine).into();
+            } else {
+                // Windows 10: WOW64 tells x86 on x64; otherwise the native machine.
+                let (mut process, mut native) = (0u16, 0u16);
+                if IsWow64Process2(h, &mut process, &mut native) != 0 {
+                    t.arch = super::machine_name(if process != 0 { process } else { native }).into();
+                }
+            }
+            let mut tok: HANDLE = std::ptr::null_mut();
+            let ok = OpenProcessToken(h, TOKEN_QUERY, &mut tok) != 0;
+            CloseHandle(h);
+            if !ok {
+                return t;
+            }
+            let dword = |class| {
+                let (mut v, mut n) = (0u32, 0u32);
+                (GetTokenInformation(tok, class, (&mut v as *mut u32).cast(), 4, &mut n) != 0).then_some(v)
+            };
+            t.elevated = dword(TokenElevation).map(|v| v != 0);
+            t.virtualization = dword(TokenVirtualizationEnabled).map(|v| v != 0);
+            let app_container = dword(TokenIsAppContainer).is_some_and(|v| v != 0);
+            let mut buf = [0u64; 16];
+            let mut n = 0u32;
+            if app_container {
+                t.integrity = "AppContainer".into();
+            } else if GetTokenInformation(tok, TokenIntegrityLevel, buf.as_mut_ptr().cast(), 128, &mut n) != 0 {
+                let sid = (*(buf.as_ptr() as *const TOKEN_MANDATORY_LABEL)).Label.Sid;
+                let count = *GetSidSubAuthorityCount(sid);
+                if count > 0 {
+                    t.integrity = super::integrity_name(*GetSidSubAuthority(sid, count as u32 - 1)).into();
+                }
+            }
+            CloseHandle(tok);
+        }
+        t
+    }
+
+    pub fn gui_objects(pid: u32) -> Option<(u32, u32)> {
+        use windows_sys::Win32::System::Threading::{GR_GDIOBJECTS, GR_USEROBJECTS, GetGuiResources};
+        let h = open(pid)?;
+        // SAFETY: our handle, closed below.
+        let (g, u) = unsafe { (GetGuiResources(h, GR_GDIOBJECTS), GetGuiResources(h, GR_USEROBJECTS)) };
+        // SAFETY: our handle.
+        unsafe { CloseHandle(h) };
+        Some((g, u))
+    }
+
     pub fn command_line(pid: u32) -> Option<String> {
         const PROCESS_COMMAND_LINE_INFORMATION: u32 = 60;
         let h = open(pid)?;
@@ -434,6 +580,19 @@ mod imp {
         None
     }
 
+    pub fn token(pid: u32, uid: Option<u32>) -> super::Token {
+        use std::io::Read;
+        let mut head = [0u8; 20];
+        let arch = std::fs::File::open(format!("/proc/{pid}/exe"))
+            .and_then(|mut f| f.read_exact(&mut head))
+            .map_or("", |_| super::elf_arch(&head));
+        super::Token { arch: arch.into(), elevated: uid.map(|u| u == 0), ..Default::default() }
+    }
+
+    pub fn gui_objects(_: u32) -> Option<(u32, u32)> {
+        None
+    }
+
     pub fn command_line(pid: u32) -> Option<String> {
         let b = std::fs::read(format!("/proc/{pid}/cmdline")).ok()?;
         let s: Vec<String> =
@@ -550,7 +709,47 @@ mod imp {
         Some(unsafe { std::ffi::CStr::from_ptr((*pw).pw_name) }.to_string_lossy().into_owned())
     }
 
-    pub fn command_line(_pid: u32) -> Option<String> {
+    /// Through `sysctl(KERN_PROCARGS2)`: the kernel copies the arguments out;
+    /// nothing reads the process's memory. Other users' processes need root.
+    pub fn command_line(pid: u32) -> Option<String> {
+        let mut mib = [libc::CTL_KERN, libc::KERN_PROCARGS2, pid as i32];
+        let mut size: libc::size_t = 0;
+        // SAFETY: a size query, then a fill of a buffer that size.
+        unsafe {
+            if libc::sysctl(mib.as_mut_ptr(), 3, std::ptr::null_mut(), &mut size, std::ptr::null_mut(), 0) != 0 {
+                return None;
+            }
+            let mut buf = vec![0u8; size];
+            if libc::sysctl(mib.as_mut_ptr(), 3, buf.as_mut_ptr().cast(), &mut size, std::ptr::null_mut(), 0) != 0 {
+                return None;
+            }
+            buf.truncate(size);
+            super::parse_procargs2(&buf)
+        }
+    }
+
+    pub fn token(pid: u32, uid: Option<u32>) -> super::Token {
+        // SAFETY: plain struct filled by the kernel.
+        let mut b: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
+        let size = std::mem::size_of::<libc::proc_bsdinfo>() as i32;
+        // SAFETY: the buffer is exactly `size` bytes.
+        let got = unsafe {
+            libc::proc_pidinfo(pid as i32, libc::PROC_PIDTBSDINFO, 0, (&mut b as *mut libc::proc_bsdinfo).cast(), size)
+        };
+        const PROC_FLAG_LP64: u32 = 0x10;
+        let arch = if got != size {
+            ""
+        } else if b.pbi_flags & PROC_FLAG_LP64 == 0 {
+            "32-bit"
+        } else if cfg!(target_arch = "aarch64") {
+            "arm64"
+        } else {
+            "x86_64"
+        };
+        super::Token { arch: arch.into(), elevated: uid.map(|u| u == 0), ..Default::default() }
+    }
+
+    pub fn gui_objects(_: u32) -> Option<(u32, u32)> {
         None
     }
 
@@ -576,6 +775,12 @@ mod imp {
         None
     }
     pub fn version_info(_: &str) -> Option<(String, String)> {
+        None
+    }
+    pub fn token(_: u32, _: Option<u32>) -> super::Token {
+        super::Token::default()
+    }
+    pub fn gui_objects(_: u32) -> Option<(u32, u32)> {
         None
     }
 }
@@ -625,6 +830,34 @@ mod tests {
         }
         assert_eq!(body.matches("OpenProcess(").count(), 1, "one OpenProcess call, with the limited right");
         assert!(body.contains("OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION"));
+    }
+
+    #[test]
+    fn our_token_and_gui_objects() {
+        let me = std::process::id();
+        let t = token(me, None);
+        assert!(!t.arch.is_empty(), "the test binary's architecture: {t:?}");
+        if cfg!(windows) {
+            assert!(t.elevated.is_some() && !t.integrity.is_empty(), "{t:?}");
+            assert!(gui_objects(me).is_some());
+        }
+    }
+
+    #[test]
+    fn decoders() {
+        assert_eq!(machine_name(0x8664), "x64");
+        assert_eq!(machine_name(0xAA64), "ARM64");
+        let mut elf = vec![0x7f, b'E', b'L', b'F'];
+        elf.resize(20, 0);
+        elf[18] = 0xB7;
+        assert_eq!(elf_arch(&elf), "aarch64");
+        assert_eq!(elf_arch(b"MZ not an elf header"), "");
+        assert_eq!(integrity_name(0x2000), "Medium");
+        assert_eq!(integrity_name(0x3000), "High");
+        assert_eq!(integrity_name(0x4000), "System");
+        let mut a = 2u32.to_ne_bytes().to_vec();
+        a.extend(b"/bin/sleep\0\0\0sleep\x0010\0FOO=bar\0");
+        assert_eq!(parse_procargs2(&a).as_deref(), Some("sleep 10"));
     }
 
     #[test]

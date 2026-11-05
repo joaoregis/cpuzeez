@@ -100,13 +100,37 @@ impl Priority {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum ProcessOp {
-    End { pids: Vec<u32>, force: bool },
-    Suspend { pid: u32, on: bool },
-    Priority { pid: u32, priority: Priority },
-    Affinity { pid: u32, mask: u64 },
-    Eco { pid: u32, on: bool },
-    Virtualization { pid: u32, on: bool },
-    Dump { pid: u32 },
+    End {
+        pids: Vec<u32>,
+        force: bool,
+    },
+    Suspend {
+        pid: u32,
+        on: bool,
+    },
+    Priority {
+        pid: u32,
+        priority: Priority,
+    },
+    Affinity {
+        pid: u32,
+        mask: u64,
+    },
+    Eco {
+        pid: u32,
+        on: bool,
+    },
+    Virtualization {
+        pid: u32,
+        on: bool,
+    },
+    Dump {
+        pid: u32,
+    },
+    /// End the Windows shell (Explorer) and start it again.
+    RestartShell {
+        pid: u32,
+    },
 }
 
 impl ProcessOp {
@@ -119,7 +143,8 @@ impl ProcessOp {
             | ProcessOp::Affinity { pid, .. }
             | ProcessOp::Eco { pid, .. }
             | ProcessOp::Virtualization { pid, .. }
-            | ProcessOp::Dump { pid } => vec![*pid],
+            | ProcessOp::Dump { pid }
+            | ProcessOp::RestartShell { pid } => vec![*pid],
         }
     }
 }
@@ -214,6 +239,10 @@ pub enum Action {
         elevate: bool,
         #[serde(default)]
         identity: Vec<(u32, u64)>,
+        /// Each target's (PID, image name), so [`Action::risk`] can name the
+        /// processes the OS can't live without.
+        #[serde(default)]
+        names: Vec<(u32, String)>,
     },
     /// Act on a system service (S2a-07).
     Service { target: ServiceOp, elevate: bool },
@@ -256,9 +285,16 @@ impl Action {
             Action::LoadKernelModule { .. } => Risk::Normal,
             // Installs a kernel driver for the whole machine.
             Action::InstallPawnIo => Risk::Critical,
-            Action::Process { target: ProcessOp::End { pids, .. }, .. } => {
-                if pids.iter().any(|&p| crate::procs::critical("", p)) { Risk::Critical } else { Risk::Irreversible }
+            Action::Process { target: ProcessOp::End { pids, .. }, names, .. } => {
+                let name = |p: u32| names.iter().find(|n| n.0 == p).map_or("", |n| n.1.as_str());
+                if pids.iter().any(|&p| crate::procs::critical(name(p), p)) {
+                    Risk::Critical
+                } else {
+                    Risk::Irreversible
+                }
             }
+            // Open folder windows close and the taskbar blinks.
+            Action::Process { target: ProcessOp::RestartShell { .. }, .. } => Risk::Irreversible,
             Action::Process { target: ProcessOp::Priority { priority: Priority::Realtime, .. }, .. } => Risk::Critical,
             Action::Process { .. } | Action::Startup { .. } => Risk::Normal,
             Action::Service { target, .. } => {
@@ -296,6 +332,7 @@ impl Action {
                 ProcessOp::Eco { pid, on: false } => format!("Disable Efficiency mode for process {pid}"),
                 ProcessOp::Virtualization { pid, on } => format!("Set UAC virtualization for process {pid} to {on}"),
                 ProcessOp::Dump { pid } => format!("Create memory dump for process {pid}"),
+                ProcessOp::RestartShell { pid } => format!("Restart the Windows shell (process {pid})"),
             },
             Action::Service { target, .. } => match target {
                 ServiceOp::Start { name } => format!("Start service {name}"),
@@ -383,6 +420,7 @@ mod tests {
             target: ProcessOp::End { pids: vec![1234, 5678], force: false },
             elevate: true,
             identity: vec![(1234, 1), (5678, 2)],
+            names: vec![(1234, "a.exe".into()), (5678, "b.exe".into())],
         };
         assert_eq!(decode(&encode(&p)), Ok(p.clone()));
         assert_eq!(p.privilege(), Privilege::Admin);
@@ -450,8 +488,29 @@ mod tests {
             assert!(decode(&encode(&st(bad))).is_err(), "accepted startup id {bad:?}");
         }
         // A process action must carry every target's start time.
-        let p = Action::Process { target: ProcessOp::Dump { pid: 9 }, elevate: true, identity: vec![] };
+        let p = Action::Process { target: ProcessOp::Dump { pid: 9 }, elevate: true, identity: vec![], names: vec![] };
         assert!(decode(&encode(&p)).is_err());
         let _ = StartupType::Manual;
+    }
+
+    #[test]
+    fn risk_names_critical_processes() {
+        let end = |pid, name: &str| Action::Process {
+            target: ProcessOp::End { pids: vec![pid], force: false },
+            elevate: true,
+            identity: vec![(pid, 1)],
+            names: vec![(pid, name.into())],
+        };
+        assert_eq!(end(712, "csrss.exe").risk(), Risk::Critical, "a critical name, any PID");
+        assert_eq!(end(9000, "notepad.exe").risk(), Risk::Irreversible);
+        assert_eq!(end(4, "").risk(), Risk::Critical, "the System PID without a name");
+        let r = Action::Process {
+            target: ProcessOp::RestartShell { pid: 50 },
+            elevate: false,
+            identity: vec![(50, 1)],
+            names: vec![],
+        };
+        assert_eq!(decode(&encode(&r)), Ok(r.clone()));
+        assert_eq!(r.risk(), Risk::Irreversible);
     }
 }

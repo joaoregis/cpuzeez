@@ -68,6 +68,27 @@ pub struct Row {
     pub mem_history: VecDeque<u64>,
     /// The heaviest thread's CPU % and id (for the bottleneck detector).
     pub top_thread: Option<(u32, f64)>,
+    pub command_line: String,
+    /// "x64", "x86", "ARM64", "x86_64"… (empty when unknown).
+    pub arch: String,
+    /// Windows: elevated token. Unix: root.
+    pub elevated: Option<bool>,
+    /// Windows integrity level (empty elsewhere).
+    pub integrity: String,
+    /// Windows UAC virtualization (None elsewhere).
+    pub virtualization: Option<bool>,
+    /// I/O operations since the process started (Linux: read/write syscalls).
+    pub io_reads: u64,
+    pub io_writes: u64,
+    /// GDI and USER objects (Windows).
+    pub gdi_objects: Option<u32>,
+    pub user_objects: Option<u32>,
+    /// Network bytes/s; None when the OS gives no per-process counters (or needs admin).
+    pub net_send_bps: Option<f64>,
+    pub net_recv_bps: Option<f64>,
+    /// [`power_score`] now and averaged over the history window.
+    pub power: f64,
+    pub power_trend: f64,
 }
 
 impl Row {
@@ -87,6 +108,25 @@ pub fn cpu_percent(cpu_ns_delta: u64, wall_s: f64, logical_cpus: usize) -> f64 {
         return 0.0;
     }
     (cpu_ns_delta as f64 / 1e9 / wall_s / logical_cpus as f64 * 100.0).clamp(0.0, 100.0)
+}
+
+/// An energy-impact estimate, 0–100, from what the process makes the machine
+/// do (the OS has no per-process watts outside Windows' internal estimator):
+/// CPU dominates, then GPU, disk and network.
+pub fn power_score(cpu_pct: f64, gpu_pct: f64, disk_bps: f64, net_bps: f64) -> f64 {
+    const MB: f64 = 1024.0 * 1024.0;
+    (cpu_pct + 0.6 * gpu_pct + 10.0 * disk_bps / (50.0 * MB) + 5.0 * net_bps / (10.0 * MB)).clamp(0.0, 100.0)
+}
+
+/// Task Manager's power-usage words for a [`power_score`].
+pub fn power_label(score: f64) -> &'static str {
+    match score {
+        s if s < 0.5 => "Very low",
+        s if s < 5.0 => "Low",
+        s if s < 15.0 => "Moderate",
+        s if s < 35.0 => "High",
+        _ => "Very high",
+    }
 }
 
 /// Bytes per second from two counters.
@@ -277,6 +317,16 @@ mod tests {
 
     fn row(pid: u32, ppid: u32, start: u64) -> Row {
         Row { pid, ppid, start_ms: start, name: format!("p{pid}"), ..Default::default() }
+    }
+
+    #[test]
+    fn power_estimate() {
+        assert_eq!(power_label(power_score(0.0, 0.0, 0.0, 0.0)), "Very low");
+        assert_eq!(power_label(power_score(2.0, 0.0, 0.0, 0.0)), "Low");
+        assert_eq!(power_label(power_score(10.0, 5.0, 0.0, 0.0)), "Moderate");
+        assert_eq!(power_label(power_score(30.0, 50.0, 0.0, 0.0)), "Very high");
+        assert_eq!(power_score(500.0, 0.0, 0.0, 0.0), 100.0, "clamped");
+        assert!(power_score(0.0, 0.0, 50.0 * 1048576.0, 0.0) > 5.0, "a busy disk counts");
     }
 
     #[test]

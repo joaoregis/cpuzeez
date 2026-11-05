@@ -53,6 +53,24 @@ pub fn set_virtualization(pid: u32, on: bool) -> Result<(), String> {
 }
 
 /// "Open file location": the file manager with the file selected.
+/// End Explorer and get the shell back: Windows restarts it by itself
+/// (Winlogon's AutoRestartShell); if it hasn't within 4 s, start it.
+pub fn restart_shell(pid: u32) -> Result<(), String> {
+    if !cfg!(windows) {
+        return Err("Restart is for the Windows shell (Explorer)".into());
+    }
+    end(pid)?;
+    let back =
+        || crate::procs::snapshot(false).iter().any(|p| p.pid != pid && p.name.eq_ignore_ascii_case("explorer.exe"));
+    for _ in 0..40 {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        if back() {
+            return Ok(());
+        }
+    }
+    run_task("explorer.exe", false)
+}
+
 pub fn reveal(path: &str) -> Result<(), String> {
     imp::reveal(path)
 }

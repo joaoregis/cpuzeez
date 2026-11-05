@@ -356,6 +356,11 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
 }
 
 impl eframe::App for App {
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        // The ETW session behind the Network column outlives the process otherwise.
+        cpuzeez_platform::proc_net::stop();
+    }
+
     /// Transparent, so the mini monitors' rounded, see-through cards show the
     /// desktop behind them (the main window's panels cover it).
     fn clear_color(&self, _: &egui::Visuals) -> [f32; 4] {

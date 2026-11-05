@@ -19,6 +19,8 @@ pub struct Snapshot {
     pub rows: Vec<Row>,
     pub totals: Totals,
     pub windows: Vec<desktop::Window>,
+    /// Whether per-process network counters are available.
+    pub net: cpuzeez_platform::proc_net::Status,
 }
 
 /// Background process sampler. Cheap to clone; stops when dropped.
@@ -104,6 +106,9 @@ struct Prev {
     threads: HashMap<u32, u64>,
     cpu_history: std::collections::VecDeque<f32>,
     mem_history: std::collections::VecDeque<u64>,
+    power_history: std::collections::VecDeque<f32>,
+    net: Option<(u64, u64)>,
+    gui: Option<(u32, u32)>,
 }
 
 #[derive(Default)]
@@ -112,6 +117,8 @@ struct Meta {
     user: String,
     publisher: String,
     description: String,
+    command_line: String,
+    token: os::Token,
 }
 
 pub(crate) struct Collector {
@@ -123,6 +130,8 @@ pub(crate) struct Collector {
     gpu_mem: pdh::Array,
     logical_cpus: usize,
     windows_dir: String,
+    net: cpuzeez_platform::proc_net::Status,
+    tick: u64,
 }
 
 impl Default for Collector {
@@ -144,6 +153,8 @@ impl Collector {
             gpu_mem: pdh::Array::new(r"\GPU Process Memory(*)\Dedicated Usage"),
             logical_cpus,
             windows_dir,
+            net: cpuzeez_platform::proc_net::start(),
+            tick: 0,
         }
     }
 
@@ -168,6 +179,12 @@ impl Collector {
         let vram_raw = self.gpu_mem.read();
         let vram_by_pid = engines::per_process_memory(vram_raw.iter().map(|(k, v)| (k.as_str(), *v)));
 
+        let net_on = self.net == cpuzeez_platform::proc_net::Status::Running;
+        let net_now = if net_on { cpuzeez_platform::proc_net::totals() } else { HashMap::new() };
+        // GDI/USER counts need a handle per process: every 5th tick is plenty.
+        self.tick += 1;
+        let gui_now = cfg!(windows) && self.tick % 5 == 1;
+
         let mut next_prev = HashMap::with_capacity(raw.len());
         // Budget new metadata lookups per tick so the first snapshot stays fast.
         let mut meta_budget = 40usize;
@@ -181,6 +198,17 @@ impl Collector {
             let key = (p.pid as u64) << 32 ^ (p.start_ms & 0xFFFF_FFFF);
             let total_ns = p.user_ns.saturating_add(p.kernel_ns);
             let old = self.prev.remove(&key);
+
+            let net_total = net_on.then(|| net_now.get(&p.pid).copied().unwrap_or_default());
+            let (send_bps, recv_bps) = match (net_total, old.as_ref().and_then(|o| o.net)) {
+                (Some(n), Some(o)) if wall_s > 0.0 => {
+                    (Some(procs::rate(o.0, n.0, wall_s)), Some(procs::rate(o.1, n.1, wall_s)))
+                }
+                (Some(_), _) => (Some(0.0), Some(0.0)),
+                _ => (None, None),
+            };
+            let gui = if gui_now { os::gui_objects(p.pid) } else { old.as_ref().and_then(|o| o.gui) };
+            let mut power_hist = old.as_ref().map(|o| o.power_history.clone()).unwrap_or_default();
 
             let (cpu, r_bps, w_bps, top_thread, cpu_hist, mem_hist) = match old {
                 Some(mut o) if wall_s > 0.0 => {
@@ -225,6 +253,9 @@ impl Collector {
                     threads: threads_map,
                     cpu_history: cpu_hist.clone(),
                     mem_history: mem_hist.clone(),
+                    power_history: Default::default(),
+                    net: net_total,
+                    gui,
                 },
             );
 
@@ -241,18 +272,32 @@ impl Collector {
                     self.ver_cache.insert(path.clone(), v.clone());
                     v
                 };
-                self.meta.insert(key, Meta { path, user, publisher, description });
+                let command_line = os::command_line(p.pid).unwrap_or_default();
+                let token = os::token(p.pid, p.uid);
+                self.meta.insert(key, Meta { path, user, publisher, description, command_line, token });
             }
             let m = self.meta.get(&key);
             let path = m.map(|m| m.path.clone()).unwrap_or_default();
             let user = m.map(|m| m.user.clone()).unwrap_or_default();
             let publisher = m.map(|m| m.publisher.clone()).unwrap_or_default();
             let description = m.map(|m| m.description.clone()).unwrap_or_default();
+            let command_line = m.map(|m| m.command_line.clone()).unwrap_or_default();
+            let token = m.map(|m| m.token.clone()).unwrap_or_default();
 
             let win = win_by_pid.get(&p.pid).copied();
             let kind = Some(procs::classify(p.pid, &path, win.is_some(), &self.windows_dir));
             let (gpu, gpu_engine) = gpu_by_pid.get(&p.pid).cloned().unwrap_or((0.0, String::new()));
             let vram = vram_by_pid.get(&p.pid).copied().unwrap_or(0);
+            let net_bps = send_bps.unwrap_or(0.0) + recv_bps.unwrap_or(0.0);
+            let power = procs::power_score(cpu, gpu, r_bps + w_bps, net_bps);
+            if power_hist.len() >= HISTORY {
+                power_hist.pop_front();
+            }
+            power_hist.push_back(power as f32);
+            let power_trend = power_hist.iter().map(|&v| v as f64).sum::<f64>() / power_hist.len() as f64;
+            if let Some(pv) = next_prev.get_mut(&key) {
+                pv.power_history = power_hist;
+            }
 
             rows.push(Row {
                 pid: p.pid,
@@ -289,13 +334,26 @@ impl Collector {
                 cpu_history: cpu_hist,
                 mem_history: mem_hist,
                 top_thread,
+                command_line,
+                arch: token.arch,
+                elevated: token.elevated,
+                integrity: token.integrity,
+                virtualization: token.virtualization,
+                io_reads: p.read_ops,
+                io_writes: p.write_ops,
+                gdi_objects: gui.map(|g| g.0),
+                user_objects: gui.map(|g| g.1),
+                net_send_bps: send_bps,
+                net_recv_bps: recv_bps,
+                power,
+                power_trend,
             });
         }
 
         self.prev = next_prev;
         self.meta.retain(|k, _| self.prev.contains_key(k));
         let totals = procs::totals(&rows);
-        Snapshot { rows, totals, windows: wins }
+        Snapshot { rows, totals, windows: wins, net: self.net }
     }
 }
 

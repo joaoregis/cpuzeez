@@ -59,10 +59,14 @@ impl Preset {
 
     pub fn hidden(self) -> BTreeSet<String> {
         let keep: &[&str] = match self {
-            Preset::Essential => &["name", "pid", "status", "cpu", "trend", "mem", "disk", "gpu"],
-            Preset::Gaming => &["name", "pid", "cpu", "trend", "gpu", "vram", "top_thread", "priority", "mem"],
+            Preset::Essential => &["name", "pid", "status", "cpu", "trend", "mem", "disk", "net", "gpu", "power"],
+            Preset::Gaming => {
+                &["name", "pid", "cpu", "trend", "gpu", "vram", "top_thread", "priority", "mem", "net", "power"]
+            }
             Preset::LeakHunting => &["name", "pid", "private", "mem", "peak_mem", "faults", "handles", "threads"],
-            Preset::Security => &["name", "pid", "publisher", "user", "session", "path"],
+            Preset::Security => {
+                &["name", "pid", "publisher", "user", "elevated", "integrity", "arch", "session", "path", "cmdline"]
+            }
             Preset::Everything => return BTreeSet::new(),
         };
         ALL_COL_IDS.iter().filter(|id| !keep.contains(id)).map(|s| (*s).to_string()).collect()
@@ -79,17 +83,30 @@ const ALL_COL_IDS: &[&str] = &[
     "private",
     "peak_mem",
     "disk",
+    "net",
     "gpu",
     "vram",
     "top_thread",
     "threads",
     "handles",
     "faults",
+    "io_reads",
+    "io_writes",
+    "gdi",
+    "user_obj",
+    "cpu_time",
+    "power",
+    "power_trend",
     "priority",
     "user",
     "session",
     "publisher",
     "path",
+    "cmdline",
+    "arch",
+    "elevated",
+    "integrity",
+    "virtualization",
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -315,13 +332,12 @@ impl Default for State {
 impl State {
     fn dispatch(&mut self, mut a: Action) {
         // Pin each target to the process the user saw (PID + start time).
-        if let Action::Process { target, identity, .. } = &mut a {
+        if let Action::Process { target, identity, names, .. } = &mut a {
             let snap = self.sampler.snapshot();
-            *identity = target
-                .pids()
-                .into_iter()
-                .filter_map(|pid| snap.rows.iter().find(|r| r.pid == pid).map(|r| (pid, r.start_ms)))
-                .collect();
+            let rows: Vec<&Row> =
+                target.pids().into_iter().filter_map(|pid| snap.rows.iter().find(|r| r.pid == pid)).collect();
+            *identity = rows.iter().map(|r| (r.pid, r.start_ms)).collect();
+            *names = rows.iter().map(|r| (r.pid, r.name.clone())).collect();
         }
         let slot = Arc::new(Mutex::new(None));
         let s = slot.clone();
@@ -563,6 +579,16 @@ impl State {
                     self.problem_filter = if self.problem_filter == Some(prob) { None } else { Some(prob) };
                 }
             }
+            let net_shown = !self.table.hidden.contains("net");
+            if net_shown && snap.net != cpuzeez_platform::proc_net::Status::Running {
+                let why = if snap.net == cpuzeez_platform::proc_net::Status::NeedsAdmin {
+                    tr("Network per process needs administrator rights.")
+                } else {
+                    tr("This system gives no network counters per process.")
+                };
+                ui.separator();
+                ui.label(RichText::new(format!("{} {why}", icon::INFO)).small().color(theme::palette(ui).text_muted));
+            }
         });
 
         if self.show_diff
@@ -730,6 +756,17 @@ impl State {
                 .tinted(move |r: &Row| heat(r.disk_bps() / (50.0 * 1024.0 * 1024.0))),
             )
             .col(
+                Column::new("net", tr("Network"), 90.0, |r: &Row| match (r.net_send_bps, r.net_recv_bps) {
+                    (Some(s), Some(rx)) => {
+                        let mbps = (s + rx) * 8.0 / 1e6;
+                        Cell::num(s + rx, format!("{mbps:.1} Mbps"))
+                    }
+                    _ => Cell::num(-1.0, "–"),
+                })
+                .right()
+                .tinted(move |r: &Row| heat((r.net_send_bps.unwrap_or(0.0) + r.net_recv_bps.unwrap_or(0.0)) / 12.5e6)),
+            )
+            .col(
                 Column::new("gpu", "GPU", 70.0, |r: &Row| Cell::num(r.gpu, format!("{:.1} %", r.gpu)))
                     .right()
                     .tinted(move |r: &Row| heat(r.gpu / 80.0)),
@@ -766,6 +803,38 @@ impl State {
                 })
                 .right(),
             )
+            .col(
+                Column::new("io_reads", tr("I/O reads"), 90.0, |r: &Row| {
+                    Cell::num(r.io_reads as f64, r.io_reads.to_string())
+                })
+                .right(),
+            )
+            .col(
+                Column::new("io_writes", tr("I/O writes"), 90.0, |r: &Row| {
+                    Cell::num(r.io_writes as f64, r.io_writes.to_string())
+                })
+                .right(),
+            )
+            .col(Column::new("gdi", tr("GDI objects"), 90.0, |r: &Row| opt_count(r.gdi_objects)).right())
+            .col(Column::new("user_obj", tr("USER objects"), 96.0, |r: &Row| opt_count(r.user_objects)).right())
+            .col(
+                Column::new("cpu_time", tr("CPU time"), 90.0, |r: &Row| {
+                    Cell::num(r.cpu_time_s, super::system_perf::format_uptime(r.cpu_time_s as u64))
+                })
+                .right(),
+            )
+            .col(
+                Column::new("power", tr("Power usage"), 110.0, |r: &Row| {
+                    Cell::num(r.power, tr(procs::power_label(r.power)))
+                })
+                .colored(move |r: &Row| power_color(p, r.power)),
+            )
+            .col(
+                Column::new("power_trend", tr("Power usage trend"), 130.0, |r: &Row| {
+                    Cell::num(r.power_trend, tr(procs::power_label(r.power_trend)))
+                })
+                .colored(move |r: &Row| power_color(p, r.power_trend)),
+            )
             .col(Column::new("priority", tr("Priority"), 95.0, |r: &Row| {
                 let pr = Priority::from_base(r.priority, cfg!(unix));
                 Cell::Text(tr(pr.label()).into())
@@ -779,7 +848,20 @@ impl State {
                 .right(),
             )
             .col(Column::new("publisher", tr("Publisher"), 150.0, |r: &Row| Cell::Text(r.publisher.clone())))
-            .col(Column::new("path", tr("Path"), 260.0, |r: &Row| Cell::Text(r.path.clone())));
+            .col(Column::new("path", tr("Path"), 260.0, |r: &Row| Cell::Text(r.path.clone())))
+            .col(Column::new("cmdline", tr("Command line"), 320.0, |r: &Row| Cell::Text(r.command_line.clone())))
+            .col(Column::new("arch", tr("Architecture"), 90.0, |r: &Row| Cell::Text(r.arch.clone())))
+            .col(Column::new("elevated", tr("Elevated"), 80.0, |r: &Row| yes_no(r.elevated)))
+            .col(Column::new("integrity", tr("Integrity"), 100.0, |r: &Row| {
+                Cell::Text(if r.integrity.is_empty() { String::new() } else { tr(&r.integrity).to_string() })
+            }))
+            .col(Column::new("virtualization", tr("UAC virtualization"), 120.0, |r: &Row| {
+                Cell::Text(match r.virtualization {
+                    Some(true) => tr("Enabled").into(),
+                    Some(false) => tr("Disabled").into(),
+                    None => String::new(),
+                })
+            }));
 
         if self.mode == ProcMode::Grouped && !self.tree {
             let pinned_set = self.pinned.clone();
@@ -881,7 +963,16 @@ impl State {
                             ctx_action = Some(CtxCmd::Window(first.pid, desktop::WindowOp::Maximize));
                             ui.close();
                         }
+                        ui.separator();
+                        if ui.button(tr("Close window")).clicked() {
+                            ctx_action = Some(CtxCmd::Window(first.pid, desktop::WindowOp::Close));
+                            ui.close();
+                        }
                     });
+                }
+                if !multi && first.name.eq_ignore_ascii_case("explorer.exe") && ui.button(tr("Restart")).clicked() {
+                    ctx_action = Some(CtxCmd::RestartShell(first.pid));
+                    ui.close();
                 }
                 if ui.button(tr("Inspect details")).clicked() {
                     ctx_action = Some(CtxCmd::Inspect);
@@ -903,6 +994,7 @@ impl State {
                         target: ProcessOp::Suspend { pid, on },
                         elevate: false,
                         identity: Vec::new(),
+                        names: Vec::new(),
                     });
                 }
                 CtxCmd::Eco(pid, on) => {
@@ -910,6 +1002,7 @@ impl State {
                         target: ProcessOp::Eco { pid, on },
                         elevate: false,
                         identity: Vec::new(),
+                        names: Vec::new(),
                     });
                 }
                 CtxCmd::Priority(pid, priority) => {
@@ -917,6 +1010,7 @@ impl State {
                         target: ProcessOp::Priority { pid, priority },
                         elevate: false,
                         identity: Vec::new(),
+                        names: Vec::new(),
                     });
                 }
                 CtxCmd::Affinity(pid, name) => {
@@ -938,6 +1032,7 @@ impl State {
                         target: ProcessOp::Dump { pid },
                         elevate: false,
                         identity: Vec::new(),
+                        names: Vec::new(),
                     });
                 }
                 CtxCmd::Virtualization(pid) => {
@@ -945,6 +1040,7 @@ impl State {
                         target: ProcessOp::Virtualization { pid, on: true },
                         elevate: false,
                         identity: Vec::new(),
+                        names: Vec::new(),
                     });
                 }
                 CtxCmd::TogglePin(name) => {
@@ -963,6 +1059,14 @@ impl State {
                     {
                         self.message = Some((tr("Window operation failed.").into(), Tone::Danger));
                     }
+                }
+                CtxCmd::RestartShell(pid) => {
+                    self.dispatch(Action::Process {
+                        target: ProcessOp::RestartShell { pid },
+                        elevate: false,
+                        identity: Vec::new(),
+                        names: Vec::new(),
+                    });
                 }
                 CtxCmd::Inspect => {
                     self.show_details = true;
@@ -1197,6 +1301,7 @@ impl State {
                             target: ProcessOp::End { pids: c.pids.clone(), force: c.force },
                             elevate: c.elevate,
                             identity: Vec::new(),
+                            names: Vec::new(),
                         });
                         keep = false;
                     }
@@ -1240,6 +1345,7 @@ impl State {
                             target: ProcessOp::Affinity { pid: a.pid, mask: a.mask },
                             elevate: a.elevate,
                             identity: Vec::new(),
+                            names: Vec::new(),
                         });
                         keep = false;
                     }
@@ -1326,7 +1432,31 @@ enum CtxCmd {
     TogglePin(String),
     Reveal(String),
     Window(u32, desktop::WindowOp),
+    RestartShell(u32),
     Inspect,
+}
+
+fn opt_count(v: Option<u32>) -> Cell {
+    match v {
+        Some(n) => Cell::num(n as f64, n.to_string()),
+        None => Cell::num(-1.0, "–"),
+    }
+}
+
+fn yes_no(v: Option<bool>) -> Cell {
+    Cell::Text(match v {
+        Some(true) => tr("Yes").into(),
+        Some(false) => tr("No").into(),
+        None => String::new(),
+    })
+}
+
+fn power_color(p: &theme::Palette, score: f64) -> Option<Color32> {
+    match score {
+        s if s >= 35.0 => Some(p.danger),
+        s if s >= 15.0 => Some(p.warning),
+        _ => None,
+    }
 }
 
 pub const PT_BR: &[(&str, &str)] = &[
@@ -1714,8 +1844,12 @@ mod tests {
     fn processes_table_renders_and_filters_problems() {
         use egui_kittest::{Harness, kittest::Queryable};
         let rows = sample_rows();
-        let snap =
-            Snapshot { totals: Totals { processes: rows.len(), threads: 12, handles: 300 }, rows, windows: Vec::new() };
+        let snap = Snapshot {
+            totals: Totals { processes: rows.len(), threads: 12, handles: 300 },
+            rows,
+            windows: Vec::new(),
+            net: Default::default(),
+        };
         let mut h = Harness::builder().with_size(egui::vec2(1080.0, 680.0)).build_ui_state(
             move |ui, st: &mut State| {
                 if !ui.style().text_styles.contains_key(&egui::TextStyle::Name("title".into())) {

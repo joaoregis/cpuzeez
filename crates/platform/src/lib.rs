@@ -22,6 +22,7 @@ pub mod net_io;
 pub mod os;
 pub mod partitions;
 pub mod pdh;
+pub mod proc_net;
 pub mod proc_ops;
 pub mod procs;
 pub mod services;

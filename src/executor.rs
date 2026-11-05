@@ -137,6 +137,14 @@ fn perform_process(op: &actions::ProcessOp) -> Result<String, String> {
             proc_ops::set_virtualization(*pid, *on)?;
             Ok(format!("UAC virtualization of {pid} set to {on}"))
         }
+        ProcessOp::RestartShell { pid } => {
+            let name = cpuzeez_platform::procs::snapshot(false).into_iter().find(|p| p.pid == *pid).map(|p| p.name);
+            if !name.is_some_and(|n| n.eq_ignore_ascii_case("explorer.exe")) {
+                return Err(format!("process {pid} is not Explorer"));
+            }
+            proc_ops::restart_shell(*pid)?;
+            Ok("Explorer restarted".into())
+        }
         ProcessOp::Dump { pid } => {
             let dir = std::env::temp_dir();
             let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());

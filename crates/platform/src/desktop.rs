@@ -1,6 +1,6 @@
 //! Top-level windows per process (S2a): what makes a process an "App" in the
 //! Task Manager's sense, whether it's "Not responding", and the window
-//! actions (switch to, minimize, maximize). Windows only; Linux/macOS have
+//! actions (switch to, minimize, maximize, close). Windows only; Linux/macOS have
 //! no portable way to see other apps' windows (Wayland forbids it).
 
 #[derive(Debug, Clone, PartialEq)]
@@ -23,6 +23,9 @@ pub enum WindowOp {
     SwitchTo,
     Minimize,
     Maximize,
+    /// Ask the window to close (`WM_CLOSE`), like its X button: the app may
+    /// ask to save first.
+    Close,
 }
 
 /// A window action (no privilege: windows of this desktop).
@@ -36,7 +39,8 @@ mod imp {
     use windows_sys::Win32::Foundation::{HWND, LPARAM};
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         EnumWindows, GW_OWNER, GetWindow, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId,
-        IsHungAppWindow, IsWindowVisible, SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SetForegroundWindow, ShowWindow,
+        IsHungAppWindow, IsWindowVisible, PostMessageW, SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SetForegroundWindow,
+        ShowWindow, WM_CLOSE,
     };
 
     unsafe extern "system" fn each(h: HWND, l: LPARAM) -> i32 {
@@ -83,6 +87,7 @@ mod imp {
                 }
                 WindowOp::Minimize => ShowWindow(h, SW_MINIMIZE) != 0,
                 WindowOp::Maximize => ShowWindow(h, SW_MAXIMIZE) != 0,
+                WindowOp::Close => PostMessageW(h, WM_CLOSE, 0, 0) != 0,
             }
         }
     }
