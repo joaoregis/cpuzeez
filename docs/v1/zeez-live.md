@@ -84,7 +84,18 @@ Mixing them confuses comparisons. We use the **percentile** by default, offer th
 - **Q3, decided:**
   1. For 1.0, bundle PresentMon's console executable as a *sidecar* (MIT, Intel-maintained and Intel-signed, read through `stdout`; see [dependencies.md](dependencies.md)). The user installs nothing.
   2. Later, evaluate a native Rust ETW consumer (`ferrisetw`) to drop the extra binary.
-- 🔬 **SP1:** measure PresentMon's overhead; validate capture on DX11, DX12, Vulkan and OpenGL, with and without Frame Generation.
+- 🟡 **SP1:** measure PresentMon's overhead; validate capture on DX11, DX12, Vulkan and OpenGL, with and without Frame Generation.
+  - **Measured (S0-X02, 2026-11-05).** Official PresentMon **2.6.0** console (`PresentMon-2.6.0-x64.exe`, 980,320 bytes, sha256 `b2a706bc6ad475749e3b7e3409263aa1e6906d45bdcf993f6dbc0f660188f1af`). Ryzen 9 7900X + RTX 4060, Windows 11 26200. Own session (`--session_name`), `--output_stdout --no_console_stats`, 20 s per run:
+
+    | Tracking | CPU (one core) | CPU (whole machine, 24 threads) | Memory | Frames seen |
+    |---|---|---|---|---|
+    | every process | 0.98 % | 0.04 % | 15 MB | VALORANT 598 (DXGI, *Hardware Composed: Independent Flip*), dwm 132 |
+    | `--process_name dwm.exe` | 0.70 % | 0.03 % | 16 MB | dwm 114 |
+    | every process, `--no_track_input --no_track_display` | 0.91 % | 0.04 % | 15 MB | same |
+
+    ✅ Under the 0.5 % budget measured against the whole machine, and about 1 % of one core. Filtering to the game's process is the cheapest; tracking options barely matter. The cost grows with the frame rate: this game ran at ~30 FPS (menu cap), so **re-measure at 240+ FPS**. CSV columns include `MsCPUBusy`, `MsGPUBusy`, `MsGPUWait`, `MsAllInputToPhotonLatency` and the present mode, which feed the bottleneck detector (here: CPUBusy 33 ms vs GPUBusy 2.7 ms, as expected when the menu is frame-capped).
+  - ⚠ **Seen on the same machine:** the `PresentMon_x64.exe` that **NVIDIA FrameView SDK** (the NVIDIA App) runs used **~99 % of a core nonstop**, 8 h of CPU in one day. An older build plus a never-ending session can cost far more than the tool itself. Our sidecar runs only while ZeeZ Live is on, is pinned to a release we've measured, and its own CPU shows in *Settings › Diagnostics* (`Engine::costs`).
+  - Still to do: DX12, Vulkan, OpenGL and Frame Generation (a game with DLSS FG / FSR FG), and 240+ FPS.
 
 **Linux: there is no "ETW".**
 - Neither X11 nor Wayland exposes another process's frame timing. That's why the reference tool, **MangoHud** (MIT), runs as a **Vulkan layer** plus an **OpenGL preload**, enabled with `mangohud %command%` in Steam or with `MANGOHUD=1`.
@@ -268,7 +279,8 @@ Mixing them confuses comparisons. We use the **percentile** by default, offer th
     | Anti-cheat | Version / game | PawnIO loaded | Result | Date |
     |---|---|---|---|---|
     | Riot Vanguard (`vgk`, boot-start) | League of Legends client open, not in a match | 2.2.0.0, CpuZeeZ elevated with AMDFamily17, LpcIO, SmbusPIIX4, RyzenSMU | ✅ Both drivers running together; CpuZeeZ read every sensor; the client kept running | 2026-11-04 |
-    | Riot Vanguard | in a League or Valorant match | | 🔬 To test: a match with CpuZeeZ elevated | |
+    | Riot Vanguard | VALORANT running (DX11) | PawnIO 2.2.0 driver loaded; PresentMon ETW session alongside | ✅ The game kept running and PresentMon saw its frames. CpuZeeZ wasn't reading sensors during this run | 2026-11-05 |
+    | Riot Vanguard | in a match with CpuZeeZ elevated, reading sensors through PawnIO | | 🔬 To test, **by the account owner**: an anti-cheat could act against the account | |
     | FACEIT, EasyAntiCheat, BattlEye | | | 🔬 To test | |
 - Nothing is recorded without opt-in, and ● REC is always visible on the overlay while capturing.
 

@@ -114,7 +114,7 @@ Goal: fix what's broken, build the shared building blocks, and set up the tests 
 | ID | Question | For | Done when |
 |---|---|---|---|
 | S0-X01 | **eframe on wgpu** instead of glow: transparency, overlay, startup cost, VM/RDP (WARP) | Q6c, ZeeZ Live | ADR: switch or stay on glow. ✅ [ADR 0013](../adr/0013-gui-renders-with-glow-and-falls-back-to-wgpu.md): glow stays, automatic wgpu fallback (WARP verified) |
-| S0-X02 | **SP1** PresentMon sidecar: overhead and API coverage, FG | ZeeZ Live | < 0.5% CPU; DX11/DX12/Vulkan/OpenGL covered |
+| S0-X02 | **SP1** PresentMon sidecar: overhead and API coverage, FG | ZeeZ Live | < 0.5% CPU; DX11/DX12/Vulkan/OpenGL covered. 🟡 2.6.0: 0.04 % of the machine (~1 % of one core), 15 MB, DX11 ✅; DX12/Vulkan/OpenGL/FG and 240+ FPS still to do (zeez-live §3) |
 | S0-X03 | **SP2** external overlay over games on Windows (display modes × latency) | ZeeZ Live | Matrix documented |
 | S0-X04 | **SP3** macOS overlay over fullscreen Spaces | ZeeZ Live | Proof of concept or documented limit |
 | S0-X05 | **SP4** Wayland layer-shell with winit/eframe | ZeeZ Live | PoC on KDE/Hyprland, or a "MangoHud only" ADR |
