@@ -52,6 +52,21 @@ pub struct Settings {
     pub units: cpuzeez_core::units::Units,
     /// Detail level per page ("Processor" → Basic/Advanced/Expert).
     pub detail: std::collections::BTreeMap<String, cpuzeez_core::detail::Level>,
+    /// Rows pinned to the Overview, in pin order.
+    pub pins: Vec<Pin>,
+}
+
+/// A row pinned to the Overview (S1-U03).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct Pin {
+    /// Card and row as shown when pinned.
+    pub card: String,
+    pub label: String,
+    /// Its text when pinned; shown until its page draws it again.
+    pub value: String,
+    /// A sensor's metric id: then the Overview shows it live.
+    pub metric: Option<String>,
 }
 
 impl Default for Settings {
@@ -72,6 +87,7 @@ impl Default for Settings {
             log_retention_days: 0,
             units: Default::default(),
             detail: Default::default(),
+            pins: Vec::new(),
         }
     }
 }

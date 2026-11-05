@@ -81,26 +81,34 @@ pub fn card<R>(ui: &mut Ui, icon: &str, title: &str, add: impl FnOnce(&mut Ui) -
                 });
                 ui.add_space(6.0);
             }
-            add(ui)
+            // Rows copy and pin under this card's title (S1-U03).
+            let prev = super::pins::enter_card(ui.ctx(), title);
+            let r = add(ui);
+            super::pins::leave_card(ui.ctx(), prev);
+            r
         })
         .inner
 }
 
 /// Label on the left, value on the right; wraps long values. Empty values show "–".
-pub fn kv(ui: &mut Ui, label: &str, value: &str) {
+/// The row's response answers right-clicks (see `kv_list`).
+pub fn kv(ui: &mut Ui, label: &str, value: &str) -> Response {
     let p = theme::palette(ui);
     let w = ui.available_width();
     ui.horizontal_top(|ui| {
         let lw = (w * 0.42).clamp(90.0, 220.0);
         ui.allocate_ui_with_layout(egui::vec2(lw, 20.0), Layout::left_to_right(Align::Center), |ui| {
             ui.set_width(lw);
-            ui.add(egui::Label::new(RichText::new(label).color(p.text_secondary)).truncate());
+            // Not selectable: a right-click must reach the row's copy/pin menu.
+            ui.add(egui::Label::new(RichText::new(label).color(p.text_secondary)).truncate().selectable(false));
         });
         let v = if value.is_empty() { "–" } else { value };
         ui.with_layout(Layout::right_to_left(Align::Min).with_main_wrap(true), |ui| {
-            ui.add(egui::Label::new(RichText::new(v).color(p.text)).wrap());
+            ui.add(egui::Label::new(RichText::new(v).color(p.text)).wrap().selectable(false));
         });
-    });
+    })
+    .response
+    .interact(egui::Sense::click())
 }
 
 /// `kv` rows separated by hairlines.
@@ -112,7 +120,8 @@ pub fn kv_list(ui: &mut Ui, rows: &[(&str, String)]) {
             let x = ui.max_rect().x_range();
             ui.painter().hline(x, y, Stroke::new(1.0, p.border.gamma_multiply(0.6)));
         }
-        kv(ui, k, v);
+        let r = kv(ui, k, v);
+        super::pins::row_menu(&r, k, v, rows);
     }
 }
 

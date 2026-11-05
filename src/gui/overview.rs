@@ -6,6 +6,7 @@ use super::theme::{self, icon};
 use super::widgets::{self, Tone};
 use crate::Ctx;
 use crate::report::{self, Section};
+use crate::settings::Pin;
 use crate::telemetry::{Series, Telemetry, ThrottleKind, Unit};
 use eframe::egui::{self, RichText, Ui};
 
@@ -108,7 +109,15 @@ fn sgi(r: &[Section], s: &str, g: &str, k: &str) -> String {
     report::find_section(r, s).and_then(|x| x.get_in(g, k)).unwrap_or_default().to_string()
 }
 
-pub fn page(ui: &mut Ui, ctx: &Ctx, r: &[Section], tel: &Telemetry, core_mhz: Option<f64>) {
+/// Returns true when the user unpinned something (the caller saves).
+pub fn page(
+    ui: &mut Ui,
+    ctx: &Ctx,
+    r: &[Section],
+    tel: &Telemetry,
+    core_mhz: Option<f64>,
+    pins: &mut Vec<Pin>,
+) -> bool {
     let p = theme::palette(ui);
     let c = crate::cpu::get(ctx);
     tel.want("overview", &["cpu/", "gpu", "chipset/"]);
@@ -186,6 +195,7 @@ pub fn page(ui: &mut Ui, ctx: &Ctx, r: &[Section], tel: &Telemetry, core_mhz: Op
         let (l, v, sp, col, tone) = &tiles[i];
         widgets::metric(ui, l, v, sp, *col, *tone);
     });
+    let unpinned = pinned(ui, tel, pins);
 
     // Component cards.
     let pkg_w = find(&series, "CPU", Unit::Watt, &["package"]);
@@ -273,4 +283,42 @@ pub fn page(ui: &mut Ui, ctx: &Ctx, r: &[Section], tel: &Telemetry, core_mhz: Op
         widgets::card(ui, ic, title, |ui| widgets::kv_list(ui, rows));
     });
     let _ = RichText::new("");
+    unpinned
+}
+
+/// The rows pinned from other pages (S1-U03): sensors live, other rows as
+/// their page last drew them. Returns true if one was unpinned.
+fn pinned(ui: &mut Ui, tel: &Telemetry, pins: &mut Vec<Pin>) -> bool {
+    if pins.is_empty() {
+        return false;
+    }
+    let ids: Vec<&str> = pins.iter().filter_map(|p| p.metric.as_deref()).collect();
+    if !ids.is_empty() {
+        tel.want("overview-pins", &ids);
+    }
+    let snap = tel.snapshot();
+    let p = theme::palette(ui);
+    let mut remove = None;
+    ui.add_space(theme::GAP);
+    widgets::card(ui, icon::PUSH_PIN, tr("Pinned"), |ui| {
+        for (i, pin) in pins.iter().enumerate() {
+            let value = match &pin.metric {
+                Some(id) => snap.get(id).map(|s| super::sensors::fmt(s.current, s.unit)).unwrap_or_else(|| "–".into()),
+                None => super::pins::latest(ui.ctx(), &pin.card, &pin.label).unwrap_or_else(|| pin.value.clone()),
+            };
+            ui.horizontal(|ui| {
+                if ui.small_button(icon::X).on_hover_text(tr("Unpin")).clicked() {
+                    remove = Some(i);
+                }
+                ui.label(RichText::new(format!("{} · {}", pin.card, pin.label)).color(p.text_secondary));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(RichText::new(value).color(p.text));
+                });
+            });
+        }
+    });
+    if let Some(i) = remove {
+        pins.remove(i);
+    }
+    remove.is_some()
 }

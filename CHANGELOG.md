@@ -27,6 +27,7 @@ generated from its section below.
 - **Per-disk activity** in the Sensors list and CSV logs: read/write speed, IOPS, latency, active time and queue for every physical disk, on Windows, Linux and macOS, without administrator rights.
 - **Per-adapter network traffic** the same way: download/upload in Mbps, packets per second, errors and drops.
 - **GPU engine load**: 3D, copy, video encode and decode, compute and the rest per GPU on Windows (as the Task Manager counts them); the busy figure on Linux (AMD) and Device/Renderer/Tiler on macOS.
+- **Copy and pin**: right-click any row to copy its value, the row or the whole card as text, or pin it to the Overview. Sensors pinned there stay live.
 - **Detail levels** on the Processor, Mainboard, Memory and Graphics pages: *Basic* (the essentials), *Advanced* (everything, as before) and *Expert* (plus raw CPUID leaves and MSRs). Each page remembers its choice.
 - **Units** in *Settings › Units*: °C or °F, MHz or GHz, MB as Windows counts, MiB/GiB or decimal MB, and a fixed number of decimals. Only the display changes; logs and reports keep °C, MHz and MiB.
 - **What memory is used for**: standby/cached, modified, compressed, kernel pools (wired), commit charge and page file or swap use, each where the OS reports it.

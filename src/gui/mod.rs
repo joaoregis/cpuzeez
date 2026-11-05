@@ -12,6 +12,7 @@ mod devices;
 pub mod i18n;
 pub mod overview;
 mod pages;
+pub mod pins;
 mod settings_ui;
 mod shots;
 mod update_ui;
@@ -291,6 +292,7 @@ impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         units::set(self.mon.settings.units);
         let ectx = ui.ctx().clone();
+        self.take_pins(&ectx);
         ectx.request_repaint_after(Duration::from_millis(500));
         self.hotkeys(&ectx);
         self.window_title(&ectx);
@@ -480,6 +482,22 @@ impl App {
             .id()
     }
 
+    /// Pins asked for by any row last frame (S1-U03) go into the settings.
+    fn take_pins(&mut self, ectx: &egui::Context) {
+        let mut changed = false;
+        for p in pins::take_requests(ectx) {
+            let s = &mut self.mon.settings.pins;
+            if !s.iter().any(|q| q.card == p.card && q.label == p.label && q.metric == p.metric) {
+                s.push(p);
+                changed = true;
+            }
+        }
+        if changed && self.auto.is_none() {
+            self.mon.settings.save();
+        }
+        pins::publish(ectx, &self.mon.settings.pins);
+    }
+
     /// A page header with the detail switch; the chosen level is remembered per page.
     fn info_header(&mut self, ui: &mut egui::Ui, title: &str, sub: &str) {
         let key = format!("{:?}", self.page);
@@ -504,7 +522,10 @@ impl App {
             Page::Overview => {
                 let tel = self.mon.tel();
                 let core_mhz = crate::telemetry::core_mhz(&tel.snapshot(), 0);
-                overview::page(ui, &self.ctx, r, &tel, core_mhz);
+                if overview::page(ui, &self.ctx, r, &tel, core_mhz, &mut self.mon.settings.pins) && self.auto.is_none()
+                {
+                    self.mon.settings.save();
+                }
             }
             Page::Processor => {
                 let sub = [c.info.codename.clone(), c.info.package.clone(), c.info.technology.clone()]
@@ -1220,5 +1241,36 @@ mod tests {
         assert!(basic.query_by_label("Only advanced").is_none(), "an empty card isn't drawn");
         let advanced = draw(Level::Advanced);
         assert!(advanced.query_by_label("0xA601209").is_some() && advanced.query_by_label("100 MHz").is_some());
+    }
+
+    /// S1-U03: right-click a row, "Pin to Overview" asks the app to pin it under its card.
+    #[test]
+    fn a_row_pins_under_its_card() {
+        use eframe::egui;
+        use egui_kittest::{Harness, kittest::Queryable};
+        let mut h = Harness::builder().with_size(egui::vec2(600.0, 400.0)).build_ui_state(
+            |ui, got: &mut Vec<crate::settings::Pin>| {
+                if !ui.style().text_styles.contains_key(&egui::TextStyle::Name("title".into())) {
+                    super::theme::install(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                super::detail::set(ui.ctx(), cpuzeez_core::detail::Level::Expert);
+                super::boxed(ui, "Processor", &[("Name", "Ryzen".into())]);
+                got.extend(super::pins::take_requests(ui.ctx()));
+            },
+            Vec::new(),
+        );
+        h.run();
+        h.get_by_label("Ryzen").click_secondary();
+        h.run();
+        h.run();
+        h.get_by_label("Pin to Overview").click();
+        h.run();
+        let p = h.state().first().cloned().expect("a pin request");
+        assert_eq!(
+            (p.card.as_str(), p.label.as_str(), p.value.as_str(), p.metric),
+            ("Processor", "Name", "Ryzen", None)
+        );
     }
 }

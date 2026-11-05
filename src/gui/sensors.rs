@@ -545,9 +545,29 @@ fn sensor_row(ui: &mut egui::Ui, s: &Series, plotted: &mut BTreeSet<String>, tjm
     let mut on = plotted.contains(&s.id);
     ui.horizontal(|ui| {
         ui.checkbox(&mut on, "");
-        if ui.selectable_label(on, &s.label).clicked() {
+        let r = ui.selectable_label(on, &s.label);
+        if r.clicked() {
             on = !on;
         }
+        // Pinned as a metric, so the Overview shows it live (S1-U03).
+        r.context_menu(|ui| {
+            if ui.button(tr("Copy value")).clicked() {
+                ui.ctx().copy_text(fmt(s.current, s.unit));
+                ui.close();
+            }
+            if ui.button(tr("Pin to Overview")).clicked() {
+                super::pins::request(
+                    ui.ctx(),
+                    crate::settings::Pin {
+                        card: s.group.clone(),
+                        label: s.label.clone(),
+                        value: fmt(s.current, s.unit),
+                        metric: Some(s.id.clone()),
+                    },
+                );
+                ui.close();
+            }
+        });
     });
     if on {
         plotted.insert(s.id.clone());
