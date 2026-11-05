@@ -287,7 +287,7 @@ fn tone_of(t: cpuzeez_core::layout::Tone) -> Tone {
 
 pub(super) fn page(
     ui: &mut Ui,
-    ctx: &Ctx,
+    ctx: &std::sync::Arc<Ctx>,
     r: &[Section],
     mon: &mut super::sensors::Monitor,
     st: &mut State,
@@ -408,7 +408,7 @@ pub(super) fn page(
                 .collect()
         })
         .unwrap_or_default();
-    let drives: Vec<(String, String)> = crate::storage::drives(ctx)
+    let drives: Vec<(String, String)> = super::cache::drives(ctx)
         .iter()
         .map(|d| (d.name.clone(), format!("{:.0} GB", d.capacity as f64 / 1e9)))
         .collect();
@@ -473,7 +473,7 @@ pub(super) fn page(
 }
 
 /// One dense, clickable line: CPU · GPU · board · memory · storage · OS.
-fn identity(ui: &mut Ui, ctx: &Ctx, r: &[Section], board: &str, nav: &mut Vec<Nav>) {
+fn identity(ui: &mut Ui, ctx: &std::sync::Arc<Ctx>, r: &[Section], board: &str, nav: &mut Vec<Nav>) {
     use super::Page;
     let c = crate::cpu::get(ctx);
     let all = crate::gpu::adapters(ctx);
@@ -494,7 +494,7 @@ fn identity(ui: &mut Ui, ctx: &Ctx, r: &[Section], board: &str, nav: &mut Vec<Na
             (t, _) => t,
         },
     ]);
-    let total: u64 = crate::storage::drives(ctx).iter().filter(|d| !d.removable).map(|d| d.capacity).sum();
+    let total: u64 = super::cache::drives(ctx).iter().filter(|d| !d.removable).map(|d| d.capacity).sum();
     let storage = match total {
         0 => String::new(),
         b if b >= 1_000_000_000_000 => format!("{:.1} TB", b as f64 / 1e12),
@@ -526,20 +526,20 @@ fn identity(ui: &mut Ui, ctx: &Ctx, r: &[Section], board: &str, nav: &mut Vec<Na
 }
 
 /// Health strip: build health (click for the list), drives, battery wear.
-fn health(ui: &mut Ui, ctx: &Ctx, r: &[Section], st: &mut State, nav: &mut Vec<Nav>) {
+fn health(ui: &mut Ui, ctx: &std::sync::Arc<Ctx>, r: &[Section], st: &mut State, nav: &mut Vec<Nav>) {
     use crate::storage::HealthLevel;
     if st.findings.is_none() && !r.is_empty() {
         st.findings = Some(crate::health::check(ctx, r));
     }
     let findings = st.findings.clone().unwrap_or_default();
-    let drives = crate::storage::drives(ctx);
+    let drives = super::cache::drives(ctx);
     let worst = drives.iter().filter_map(|d| d.smart.as_ref().map(|s| (d, s.health))).max_by_key(|(_, h)| match h {
         HealthLevel::Bad => 3,
         HealthLevel::Caution => 2,
         HealthLevel::Good => 1,
         HealthLevel::Unknown => 0,
     });
-    let worn: Vec<(String, f64)> = crate::battery::batteries(ctx)
+    let worn: Vec<(String, f64)> = super::cache::batteries(ctx)
         .iter()
         .filter_map(|b| b.health_pct.filter(|h| *h < 80.0).map(|h| (b.name.clone(), h)))
         .collect();

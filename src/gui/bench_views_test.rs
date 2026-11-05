@@ -13,8 +13,8 @@ fn themed(ui: &mut egui::Ui) -> bool {
     true
 }
 
-fn ctx() -> crate::Ctx {
-    crate::Ctx::new(crate::config::Config { smart: false, ..Default::default() })
+fn ctx() -> std::sync::Arc<crate::Ctx> {
+    std::sync::Arc::new(crate::Ctx::new(crate::config::Config { smart: false, ..Default::default() }))
 }
 
 /// The CPU suite's modes switch and describe themselves; nothing runs.

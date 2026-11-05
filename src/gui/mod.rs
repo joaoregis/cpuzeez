@@ -21,6 +21,7 @@ mod update_ui;
 #[cfg(test)]
 mod bench_views_test;
 mod benchkit_view;
+mod cache;
 mod cpusuite_view;
 mod diskbench_view;
 mod drivehealth_view;
@@ -399,6 +400,7 @@ impl eframe::App for App {
                 };
                 // The capability banner reflects this machine; CI screenshots would show the runner's.
                 let caps = if self.auto.is_some() { &[][..] } else { access_ui::page_caps(page_name(self.page)) };
+                let t0 = std::time::Instant::now();
                 if self.page == Page::Sensors {
                     // Full-height dashboard with its own scrolling table and charts.
                     self.access.banner(ui, &self.ctx, page_name(self.page), caps);
@@ -412,8 +414,11 @@ impl eframe::App for App {
                         },
                     );
                 }
+                frame_log(page_name(self.page), "page", t0);
             });
+        let t0 = std::time::Instant::now();
         self.mon.frame(&ectx);
+        frame_log("all", "monitor", t0);
         if let Some(i) = self.mon.edit_mini.take() {
             self.page = Page::Settings;
             self.mini_edit = Some(i);
@@ -424,6 +429,16 @@ impl eframe::App for App {
 }
 
 // ---- helpers ----
+
+/// `CZ_FRAME_LOG=1`: frames whose part took longer than 4 ms, on stderr
+/// (a 60 Hz frame has 16 ms for everything).
+fn frame_log(page: &str, part: &str, t0: std::time::Instant) {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    let ms = t0.elapsed().as_secs_f64() * 1000.0;
+    if *ON.get_or_init(|| std::env::var_os("CZ_FRAME_LOG").is_some()) && ms > 4.0 {
+        eprintln!("frame {page} {part} {ms:.1} ms");
+    }
+}
 
 fn value(ui: &mut egui::Ui, text: &str) {
     ui.add(egui::Label::new(RichText::new(text).monospace()).wrap());
@@ -675,7 +690,7 @@ impl App {
                         self.diskbench.page(ui, &self.ctx, t0)
                     }
                     BenchView::Stress => {
-                        let gpus = self.gpubench.adapters().to_vec();
+                        let gpus = cache::gpu_adapters(&self.ctx).map(|g| g.to_vec()).unwrap_or_default();
                         stress::page(ui, &mut self.mon, true, &gpus)
                     }
                     BenchView::History => {

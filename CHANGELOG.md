@@ -7,6 +7,10 @@ generated from its section below.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The interface felt sluggish** (reported on 1.0.0-beta.1). The Overview re-read every drive's SMART data several times per frame, about 150 ms per frame, so the whole app lagged; it now takes under 2 ms. Drives, batteries, firmware details, the OS's CPU settings and the GPU list are read on a background thread and refreshed from time to time, never while a frame is drawn, and a test keeps it that way. `CZ_FRAME_LOG=1` prints any part of a frame that takes longer than 4 ms, for reports like this one.
+
 ## [1.0.0-beta.1] - 2026-11-05
 
 First pre-release of 1.0, for testers: the existing features, improved (stage S1 of the [roadmap](docs/v1/ROADMAP.md)). ZeeZ Live, the bottleneck detector and the System hub come in the next betas. What to try first is in [docs/testing/beta1.md](docs/testing/beta1.md).

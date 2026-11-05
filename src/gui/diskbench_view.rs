@@ -110,12 +110,12 @@ impl Default for State {
 }
 
 impl State {
-    pub fn page(&mut self, ui: &mut egui::Ui, ctx: &Ctx, start_temp: Option<f64>) {
+    pub fn page(&mut self, ui: &mut egui::Ui, ctx: &std::sync::Arc<Ctx>, start_temp: Option<f64>) {
         let p = theme::palette(ui);
         // The system drive's root needs admin: there, use the app's data folder.
         let data = crate::settings::dir();
         let mut places: Vec<(Option<PathBuf>, String)> = vec![(None, tr("App data folder").to_string())];
-        for d in crate::storage::drives(ctx).iter().filter(|d| !d.removable) {
+        for d in super::cache::drives(ctx).iter().filter(|d| !d.removable) {
             for v in &d.volumes {
                 places.push((Some(PathBuf::from(&v.name)), format!("{} · {}", v.name, d.name)));
             }
@@ -207,13 +207,19 @@ impl State {
     }
 
     /// Sustained write (S1-K06): how long the drive keeps its speed.
-    fn sustained(&mut self, ui: &mut egui::Ui, ctx: &Ctx, start_temp: Option<f64>, data: Option<PathBuf>) {
+    fn sustained(
+        &mut self,
+        ui: &mut egui::Ui,
+        ctx: &std::sync::Arc<Ctx>,
+        start_temp: Option<f64>,
+        data: Option<PathBuf>,
+    ) {
         let p = theme::palette(ui);
         let dir = self.dir.clone().or(data);
         // Free space of the volume holding `dir` (longest matching root).
         let free = dir.as_ref().and_then(|d| {
             let d = d.to_string_lossy().to_lowercase();
-            crate::storage::drives(ctx)
+            super::cache::drives(ctx)
                 .iter()
                 .flat_map(|x| x.volumes.iter())
                 .filter(|v| !v.name.is_empty() && d.starts_with(&v.name.to_lowercase()))

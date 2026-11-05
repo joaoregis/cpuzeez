@@ -9,6 +9,7 @@ use crate::benchkit::{self, Job, Sub};
 use eframe::egui::{self, RichText};
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Looking for GPUs…", "Procurando GPUs…"),
     ("GPU", "GPU"),
     (
         "FP32 and FP16 throughput, video-memory bandwidth, the bus to the CPU in both directions (shows the real PCIe link) and a 1080p raster scene. Runs on DX12, Vulkan or Metal.",
@@ -26,6 +27,7 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Looking for GPUs…", "Buscando GPUs…"),
     ("GPU", "GPU"),
     (
         "FP32 and FP16 throughput, video-memory bandwidth, the bus to the CPU in both directions (shows the real PCIe link) and a 1080p raster scene. Runs on DX12, Vulkan or Metal.",
@@ -46,7 +48,6 @@ type Out = (Vec<Sub>, String, Vec<String>);
 
 #[derive(Default)]
 pub struct State {
-    adapters: Option<Vec<String>>,
     pub pick: usize,
     job: Option<Job<Out>>,
     cond: benchkit::Conditions,
@@ -58,16 +59,20 @@ pub struct State {
 }
 
 impl State {
-    /// The adapter list (enumerated once; it takes a moment).
-    pub fn adapters(&mut self) -> &[String] {
-        self.adapters.get_or_insert_with(crate::gpubench::adapters)
-    }
-
-    pub fn page(&mut self, ui: &mut egui::Ui, ctx: &Ctx, start_temp: Option<f64>) {
+    pub fn page(&mut self, ui: &mut egui::Ui, ctx: &std::sync::Arc<Ctx>, start_temp: Option<f64>) {
         let p = theme::palette(ui);
-        let adapters = self.adapters().to_vec();
+        let found = super::cache::gpu_adapters(ctx);
+        let adapters = found.as_deref().cloned().unwrap_or_default();
         widgets::card(ui, icon::GRAPHICS_CARD, tr("GPU"), |ui| {
             ui.label(RichText::new(tr("FP32 and FP16 throughput, video-memory bandwidth, the bus to the CPU in both directions (shows the real PCIe link) and a 1080p raster scene. Runs on DX12, Vulkan or Metal.")).color(p.text_secondary));
+            if found.is_none() {
+                ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label(tr("Looking for GPUs…"));
+                });
+                return;
+            }
             if adapters.is_empty() {
                 ui.label(RichText::new(tr("No GPU adapter found (DX12, Vulkan or Metal).")).color(p.text_muted));
                 return;

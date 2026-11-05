@@ -85,7 +85,8 @@ fn link_status(d: &Device) -> &'static str {
 impl App {
     pub(crate) fn mainboard_more(&mut self, ui: &mut egui::Ui, r: &[Section]) {
         let level = detail::get(ui.ctx());
-        let fw = cpuzeez_platform::firmware::read();
+        // Read in the background (ACPI tables, TPM): it took longer than a frame.
+        let fw = crate::gui::cache::firmware(&self.ctx).unwrap_or_default();
         // The discrete GPU's windows (the iGPU's are fixed by the platform).
         let gpu_bars = crate::gpu::adapters(&self.ctx).iter().filter(|a| !crate::health::integrated(a)).find_map(|a| {
             crate::peripherals::bars().iter().find(|b| b.vendor == a.vendor_id && b.device == a.device_id)

@@ -232,13 +232,15 @@ impl App {
             boxed(ui, "Power limits", &limits);
         }
 
-        let vulns: Vec<(String, String)> = cpuzeez_platform::cpu_os::vulnerabilities();
+        // The OS answers in a few ms, too slow for every frame: read in the background.
+        let os = crate::gui::cache::cpu_os(&self.ctx);
+        let vulns: &[(String, String)] = os.as_ref().map_or(&[], |o| &o.vulnerabilities);
         if !vulns.is_empty() {
             let rows: Vec<(&str, String)> = vulns.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
             boxed(ui, "Security", &rows);
         }
 
-        let v = cpuzeez_platform::cpu_os::virtualization();
+        let v = os.as_ref().map(|o| o.virtualization.clone()).unwrap_or_default();
         let yn = |b: Option<bool>| b.map(|b| tr(if b { "Yes" } else { "No" }).to_string()).unwrap_or_default();
         let hw = c.instructions.iter().any(|i| {
             let u = i.to_ascii_uppercase();
@@ -257,7 +259,7 @@ impl App {
             ],
         );
 
-        let pw = cpuzeez_platform::cpu_os::power();
+        let pw = os.as_ref().map(|o| o.power.clone()).unwrap_or_default();
         boxed(
             ui,
             "Power policy",

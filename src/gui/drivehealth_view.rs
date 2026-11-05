@@ -124,8 +124,8 @@ fn tb(bytes: u64) -> String {
 }
 
 impl State {
-    pub fn page(&mut self, ui: &mut egui::Ui, ctx: &Ctx, mon: &mut super::sensors::Monitor) {
-        let drives = crate::storage::drives(ctx);
+    pub fn page(&mut self, ui: &mut egui::Ui, ctx: &std::sync::Arc<Ctx>, mon: &mut super::sensors::Monitor) {
+        let drives = super::cache::drives(ctx);
         if drives.is_empty() {
             widgets::empty_state(ui, icon::HARD_DRIVES, tr("Drive health"), tr("No SMART data for this drive."));
             return;
