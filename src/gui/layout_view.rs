@@ -61,6 +61,8 @@ pub fn resolve<'a>(metric: &str, series: &'a [Series]) -> Option<&'a Series> {
         "@battery_rate" => id("battery0/power/rate"),
         "@disk_active" => id("disk0/load/active"),
         "@net_rx" => id("net0/rate/rx"),
+        "@cpu_max_core" => id("cpu/load/max"),
+        "@gpu_clock" => series.iter().find(|s| s.id.starts_with("gpu0/clock/")),
         exact => id(exact),
     }
 }

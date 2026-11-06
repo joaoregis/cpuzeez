@@ -207,7 +207,7 @@ impl State {
         match self.first_step {
             0 => {
                 let current = mon.settings.overlay.style.clone();
-                for l in presets::all(tjmax) {
+                for l in presets::live::all(tjmax) {
                     let on = current.as_deref() == Some(l.name.as_str());
                     let title = tr(&l.name).to_string();
                     widgets::card(ui, if on { icon::CHECK_CIRCLE } else { icon::CIRCLE }, &title, |ui| {
@@ -267,7 +267,7 @@ impl State {
         let mut o = mon.settings.overlay.clone();
         widgets::card(ui, icon::STACK, tr("Style"), |ui| {
             ui.horizontal_wrapped(|ui| {
-                for l in presets::all(tjmax) {
+                for l in presets::live::all(tjmax) {
                     if ui.selectable_label(o.style.as_deref() == Some(l.name.as_str()), tr(&l.name)).clicked() {
                         o.style = Some(l.name.clone());
                         o.layout = l;
@@ -354,6 +354,19 @@ fn limits() -> Vec<&'static str> {
 }
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Minimal", "Mínimo"),
+    ("Benchmark", "Benchmark"),
+    ("Overclocker", "Overclocker"),
+    ("Frames", "Quadros"),
+    ("Frame time", "Tempo de quadro"),
+    ("Busiest core", "Núcleo mais ocupado"),
+    ("GPU Busy", "GPU ocupada"),
+    ("1% low", "1% mínimo"),
+    ("0.1% low", "0,1% mínimo"),
+    ("GPU clock", "Clock da GPU"),
+    ("VID", "VID"),
+    ("GPU power", "Energia da GPU"),
+    ("RAM", "RAM"),
     ("ZeeZ Live", "ZeeZ Live"),
     (
         "Overlay, capture and reports while you play or work.",
@@ -423,6 +436,19 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Minimal", "Mínimo"),
+    ("Benchmark", "Benchmark"),
+    ("Overclocker", "Overclocker"),
+    ("Frames", "Fotogramas"),
+    ("Frame time", "Tiempo de fotograma"),
+    ("Busiest core", "Núcleo más ocupado"),
+    ("GPU Busy", "GPU ocupada"),
+    ("1% low", "1% mínimo"),
+    ("0.1% low", "0,1% mínimo"),
+    ("GPU clock", "Reloj de GPU"),
+    ("VID", "VID"),
+    ("GPU power", "Potencia de GPU"),
+    ("RAM", "RAM"),
     ("ZeeZ Live", "ZeeZ Live"),
     ("Overlay, capture and reports while you play or work.", "Overlay, captura e informes mientras juegas o trabajas."),
     ("Show overlay", "Mostrar overlay"),

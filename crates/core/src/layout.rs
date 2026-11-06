@@ -292,6 +292,116 @@ pub mod presets {
         vec![mini(tjmax), compact(tjmax), detailed(tjmax), grid(tjmax), big(tjmax)]
     }
 
+    /// Frame metrics (ZeeZ Live's frame source; empty until a game presents).
+    fn fps(label: &str) -> Widget {
+        Widget::metric(Kind::LabelValue, "frames/fps", label)
+    }
+
+    fn low1() -> Widget {
+        Widget::metric(Kind::LabelValue, "frames/low1", "1% low")
+    }
+
+    /// ZeeZ Live overlay styles (zeez-live §5.2), all editable.
+    pub mod live {
+        use super::super::*;
+        use super::{fps, low1};
+
+        /// One number in a corner: FPS.
+        pub fn minimal() -> Layout {
+            Layout {
+                name: "Minimal".into(),
+                style: Style { scale: 1.6, ..Style::default() },
+                widgets: vec![Widget::metric(Kind::Value, "frames/fps", "FPS").with_thresholds(&[])],
+                ..Default::default()
+            }
+        }
+
+        /// One line: FPS · 1% low · GPU °C/% · CPU °C/% · RAM.
+        pub fn compact(tjmax: f64) -> Layout {
+            Layout {
+                name: "Compact".into(),
+                direction: Direction::Horizontal,
+                widgets: vec![
+                    fps("FPS"),
+                    low1(),
+                    Widget::metric(Kind::LabelValue, "@gpu_temp", "GPU").with_thresholds(&temp_thresholds(90.0)),
+                    Widget::metric(Kind::LabelValue, "@gpu_load", "GPU %"),
+                    Widget::metric(Kind::LabelValue, "@cpu_temp", "CPU").with_thresholds(&temp_thresholds(tjmax)),
+                    Widget::metric(Kind::LabelValue, "@cpu_load", "CPU %"),
+                    Widget::metric(Kind::LabelValue, "@mem_load", "RAM").with_thresholds(&[(90.0, Tone::Warning)]),
+                ],
+                ..Default::default()
+            }
+        }
+
+        /// Frames / GPU / CPU / Memory groups with values and bars.
+        pub fn detailed(tjmax: f64) -> Layout {
+            Layout {
+                name: "Detailed".into(),
+                widgets: vec![
+                    Widget::header("Frames"),
+                    fps("FPS"),
+                    low1(),
+                    Widget::metric(Kind::LabelValue, "frames/ms", "Frame time"),
+                    Widget::header("GPU"),
+                    Widget::metric(Kind::Bar, "@gpu_load", "Load"),
+                    Widget::metric(Kind::LabelValue, "@gpu_temp", "Temperature")
+                        .with_thresholds(&temp_thresholds(90.0)),
+                    Widget::metric(Kind::LabelValue, "@gpu_power", "Power"),
+                    Widget::header("CPU"),
+                    Widget::metric(Kind::Bar, "@cpu_load", "Load"),
+                    Widget::metric(Kind::Bar, "@cpu_max_core", "Busiest core"),
+                    Widget::metric(Kind::LabelValue, "@cpu_temp", "Temperature")
+                        .with_thresholds(&temp_thresholds(tjmax)),
+                    Widget::header("Memory"),
+                    Widget::metric(Kind::Bar, "@mem_load", "RAM").with_thresholds(&[(90.0, Tone::Warning)]),
+                ],
+                ..Default::default()
+            }
+        }
+
+        /// FPS, 1%/0.1% lows, the frame-time graph, GPU Busy, the busiest core and a clock.
+        pub fn benchmark() -> Layout {
+            Layout {
+                name: "Benchmark".into(),
+                widgets: vec![
+                    fps("FPS"),
+                    low1(),
+                    Widget::metric(Kind::LabelValue, "frames/low01", "0.1% low"),
+                    Widget::metric(Kind::Sparkline, "frames/ms", "Frame time"),
+                    Widget::metric(Kind::LabelValue, "frames/gpu_busy", "GPU Busy"),
+                    Widget::metric(Kind::LabelValue, "@cpu_max_core", "Busiest core"),
+                    Widget { kind: Kind::Clock, ..Widget::header("") },
+                ],
+                ..Default::default()
+            }
+        }
+
+        /// Clocks, voltage, power and temperatures in a grid.
+        pub fn overclocker(tjmax: f64) -> Layout {
+            Layout {
+                name: "Overclocker".into(),
+                direction: Direction::Grid,
+                columns: 2,
+                widgets: vec![
+                    Widget::metric(Kind::LabelValue, "@cpu_clock", "CPU clock"),
+                    Widget::metric(Kind::LabelValue, "@gpu_clock", "GPU clock"),
+                    Widget::metric(Kind::LabelValue, "@cpu_vid", "VID"),
+                    Widget::metric(Kind::LabelValue, "@cpu_power", "CPU power"),
+                    Widget::metric(Kind::LabelValue, "@cpu_temp", "CPU").with_thresholds(&temp_thresholds(tjmax)),
+                    Widget::metric(Kind::LabelValue, "@gpu_temp", "GPU").with_thresholds(&temp_thresholds(90.0)),
+                    Widget::metric(Kind::LabelValue, "@gpu_power", "GPU power"),
+                    fps("FPS"),
+                ],
+                ..Default::default()
+            }
+        }
+
+        pub fn all(tjmax: f64) -> Vec<Layout> {
+            vec![minimal(), compact(tjmax), detailed(tjmax), benchmark(), overclocker(tjmax)]
+        }
+    }
+
     /// The Overview's tile sets (S1-G01). "Default" is the pre-1.0 Overview.
     pub const OVERVIEW: [&str; 5] = ["Default", "Gamer", "Overclocker", "Laptop", "Workstation"];
 

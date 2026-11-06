@@ -116,7 +116,7 @@ impl Default for Overlay {
         Overlay {
             shown: false,
             style: Some("Compact".into()),
-            layout: crate::layout::presets::compact(100.0),
+            layout: crate::layout::presets::live::compact(100.0),
             anchor: Anchor::TopLeft,
             offset: [0.0, 0.0],
             hide_from_capture: false,
@@ -145,6 +145,17 @@ mod tests {
             assert_eq!(offset_for(a, pos, size, scr), [30.0, 15.0], "{a:?}");
             assert_eq!(nearest_anchor(place(a, [0.0, 0.0], size, scr), size, scr), a, "{a:?}");
         }
+    }
+
+    #[test]
+    fn five_styles_round_trip() {
+        let all = crate::layout::presets::live::all(95.0);
+        let names: Vec<&str> = all.iter().map(|l| l.name.as_str()).collect();
+        assert_eq!(names, ["Minimal", "Compact", "Detailed", "Benchmark", "Overclocker"]);
+        for l in &all {
+            assert_eq!(&Layout::from_json(&l.to_json()).unwrap(), l, "{}", l.name);
+        }
+        assert!(all[1].metrics().contains(&"frames/fps"), "Compact starts with FPS");
     }
 
     #[test]

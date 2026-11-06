@@ -211,6 +211,10 @@ fn cpu_extra(ctx: &Ctx, o: &mut Out) {
             o.add(format!("cpu/load/cpu{i}"), "CPU", format!("CPU #{i} load"), Unit::Percent, *v);
         }
     }
+    // The busiest logical CPU: a game's main thread shows here, not in the total.
+    if let Some(max) = per.iter().flatten().copied().reduce(f64::max) {
+        o.add("cpu/load/max", "CPU", "Busiest core load", Unit::Percent, max);
+    }
     if let Some([ppt, tdc, edc]) = crate::sensors::amd_limits(ctx) {
         // "PPT Limit" itself is already a monitor reading (cpu/power/pptlimit).
         o.add("cpu/power/ppt", "CPU", "PPT", Unit::Watt, ppt.1);
