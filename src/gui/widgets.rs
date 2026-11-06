@@ -58,18 +58,31 @@ pub fn sidebar_item(ui: &mut Ui, icon: &str, label: &str, selected: bool) -> Res
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
+/// Below this width (points) the header stacks its actions under the title.
+const NARROW_HEADER: f32 = 600.0;
+
 /// Page title, subtitle and optional right-aligned actions.
 pub fn page_header(ui: &mut Ui, title: &str, subtitle: &str, actions: impl FnOnce(&mut Ui)) {
     let p = theme::palette(ui);
-    ui.horizontal(|ui| {
+    let head = |ui: &mut Ui| {
         ui.vertical(|ui| {
             ui.label(RichText::new(title).text_style(theme::title()).color(p.text));
             if !subtitle.is_empty() {
                 ui.label(RichText::new(subtitle).text_style(theme::subtitle()).color(p.text_secondary));
             }
         });
-        ui.with_layout(Layout::right_to_left(Align::Center), actions);
-    });
+    };
+    // Side by side while there is room; below the title, wrapping, when a
+    // large text scale or a narrow window leaves none (a11y.rs checks it).
+    if ui.available_width() >= NARROW_HEADER {
+        ui.horizontal(|ui| {
+            head(ui);
+            ui.with_layout(Layout::right_to_left(Align::Center), actions);
+        });
+    } else {
+        head(ui);
+        ui.horizontal_wrapped(actions);
+    }
     ui.add_space(theme::GAP);
 }
 
