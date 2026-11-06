@@ -322,6 +322,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 | Startup "Advanced" view with enable/disable | task-manager §6 |
 | Drive optimization: defrag/ReTrim/fstrim through the OS engines | core-pages §7.4 |
 | Code signing and notarization, when funded or through a free OSS program | dependencies §3.1, Q9 |
+| Storage audit and safe cleanup: space map, duplicates, reclaimable space, installed programs (a later version, 2.0 or 3.0) | [ideas/storage-and-cleanup.md](../ideas/storage-and-cleanup.md) |
 
 ## Measurements
 
