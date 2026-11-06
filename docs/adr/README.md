@@ -17,3 +17,4 @@ Short records of decisions and why they were made. The full reasoning lives in [
 | [0011](0011-workspace-split-by-layer.md) | Workspace split by layer | engineering |
 | [0012](0012-no-code-injection-ever.md) | No code injection, ever | P4 |
 | [0013](0013-gui-renders-with-glow-and-falls-back-to-wgpu.md) | The GUI renders with glow and falls back to wgpu | Q6c, S0-X01 |
+| [0014](0014-no-hardware-balance-bar-in-1-0.md) | No "hardware balance" bar in 1.0 | S2c-06 |

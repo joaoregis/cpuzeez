@@ -7,6 +7,38 @@ generated from its section below.
 
 ## [Unreleased]
 
+## [1.0.0-beta.7] - 2026-11-06
+
+The bottleneck detector: what limits your FPS, measured, with the evidence.
+
+### Added
+
+- **ZeeZ Live › Bottleneck** answers "what is limiting my frame rate right now?" while a game runs, and over a whole session. It measures; there is no ranking of parts and no guess.
+  - **The "Now" card**: a verdict (*GPU at its limit*, *CPU at its limit (core 4)*, *Held back on purpose*, *Thermal throttling*, *Video memory is full*, *The system is paging*, *Waiting on the disk*, *Another program is competing*, or *Nothing at its limit*), how sure it is, and a plain explanation. *Why?* lists the numbers behind it.
+  - **How it decides**:
+    - the GPU is the limit when *GPU Busy* (the time the GPU actually worked) fills the frame;
+    - the CPU is the limit when the game's heaviest thread is saturated and the GPU has room, which a low *total* CPU load can hide on many-core CPUs;
+    - a limiter is told from a limit: frames locked to the refresh rate (V-Sync, or VRR at its ceiling), steady at a round cap or a Reflex-style cap, or a game that isn't in front;
+    - throttling, full video memory or RAM with paging, disk reads while frames stutter, and another program using the CPU are checked next.
+  - **Without GPU Busy** (Linux, macOS, or Windows without administrator) it falls back to GPU utilization and the game's thread, and says so: lower confidence and "estimated" on screen.
+  - **Live readings**: GPU Busy, GPU load, CPU load, busiest core, the game's busiest thread, video memory, RAM and temperatures. Each bar has a mark where its rule fires, so you can see why.
+  - **Session analysis** for 1, 3 or 5 minutes, or until you stop: share of time per cause, a second-by-second timeline, the strongest evidence, and recommendations. Each recommendation shows the measurement behind it; a session with nothing wrong gets none.
+  - The same analysis appears in each **session report** (and in its HTML export), computed from `frames.csv`, `hw.csv` and the throttling spans.
+- A small **"GPU ▲" / "CPU ▲" pill on the overlay** (turn it off in the Overlay tab).
+- The Overview has a **What limits my FPS?** shortcut next to *Build health*, which already covers the configuration causes (memory profile off, single-channel memory, reduced PCIe link, Resizable BAR, refresh rate, power plan).
+- A *Hard page faults* reading (pages read from disk to resolve faults, per second) on Windows and Linux, for the paging check.
+
+### Changed
+
+- While the Bottleneck tab is open, an analysis runs or the overlay shows the pill, CpuZeeZ reads the process list once a second (one kernel call) and the system counters. It does nothing otherwise.
+- Captured sessions now note the display's refresh rate and the kind of each throttling span (CPU or GPU, thermal or power).
+
+### Not included
+
+- The "GPU limits ↔ balanced ↔ CPU limits" bar from the mockup. Calibrating it honestly needs measured reference pairs that CpuZeeZ doesn't have, and a number from internet rankings is what this feature exists to avoid. See [ADR 0014](docs/adr/0014-no-hardware-balance-bar-in-1-0.md).
+- Shared (spilled) video memory isn't read yet: the video-memory rule uses the game's dedicated usage and stutters, and says so at medium confidence.
+- A game on a second GPU: readings use the first adapter.
+
 ## [1.0.0-beta.6] - 2026-11-05
 
 ZeeZ Live: the overlay, FPS, capture and reports. Test it in your games; the play-session checks are listed in the ROADMAP's S2b status.
@@ -289,7 +321,8 @@ features.
 - GUI with CPU-Z's tabs.
 - Installers for Windows (MSI), macOS (DMG/PKG), Debian/Ubuntu (DEB) and Arch.
 
-[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.6...HEAD
+[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.7...HEAD
+[1.0.0-beta.7]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.6...v1.0.0-beta.7
 [1.0.0-beta.6]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.5...v1.0.0-beta.6
 [1.0.0-beta.5]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.4...v1.0.0-beta.5
 [1.0.0-beta.4]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.3...v1.0.0-beta.4

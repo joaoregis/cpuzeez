@@ -1,7 +1,7 @@
 # CpuZeeZ 1.0: detailed roadmap
 
 > Part of the [1.0 plan](README.md). This document is the **work list**: every fix, foundation piece, improvement, new feature, spike, packaging task and doc change that came out of the planning, with an ID, its source, its dependencies and a testable "done when".
-> **Status:** S0, S1 (`1.0.0-beta.1` / `beta.2`) and S2a (`1.0.0-beta.3`, fixes in `beta.4`, finished in `beta.5`) closed; S2b built (`1.0.0-beta.6`), its gate waits on play sessions; S2c next · **Baseline:** 0.3.0 (`26d9f0e`) · **Date:** 2026-11-05.
+> **Status:** S0, S1 (`1.0.0-beta.1` / `beta.2`) and S2a (`1.0.0-beta.3`, fixes in `beta.4`, finished in `beta.5`) closed; S2b built (`1.0.0-beta.6`) and S2c built (`1.0.0-beta.7`), their gates wait on play sessions; S3 next · **Baseline:** 0.3.0 (`26d9f0e`) · **Date:** 2026-11-05.
 
 ## How to read this
 
@@ -284,12 +284,16 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 
 | ID | Item | Type | Source | Depends | Done when |
 |---|---|---|---|---|---|
-| S2c-01 | `core::bottleneck` rules (limiter, GPU, CPU-thread, throttling, VRAM/RAM/disk, contention) as pure functions + threshold table | 🆕 | [bottleneck §2–3](bottleneck-detector.md) | S2a-01, S2b-05/06 | Recorded-session fixtures classify correctly |
-| S2c-02 | Heuristic fallback without GPU Busy, with lowered confidence shown | 🆕 | bottleneck §3 | 01 | Same |
-| S2c-03 | **"Now" card** + live readings with rule thresholds | 🆕 | bottleneck §5 | 01 | kittest |
-| S2c-04 | **Session analysis** (1/3/5 min, until stop) + evidence-tied recommendations | 🆕 | bottleneck §5 | 01 | No recommendation without evidence (test) |
-| S2c-05 | Integrations: overlay pill, report section, Overview shortcut | 🆕 | bottleneck §5 | S2b | Same |
-| S2c-06 | *(Conditional)* static hardware balance from our own benchmarks | 🆕 | bottleneck §4 | S1-K02, K05 | Calibration passes, or the ADR cuts it |
+| S2c-01 | `core::bottleneck` rules (limiter, GPU, CPU-thread, throttling, VRAM/RAM/disk, contention) as pure functions + threshold table | 🆕 | [bottleneck §2–3](bottleneck-detector.md) | S2a-01, S2b-05/06 | Recorded-session fixtures classify correctly. ✅ `core::bottleneck`: one pure function per rule (`rule_limiter`, `rule_gpu`, `rule_cpu`, `rule_throttling`, `rule_vram`, `rule_ram`, `rule_disk`, `rule_background`), priority-ordered `classify`, the thresholds in one documented `Thresholds` table. Tested on built windows and on a **real PresentMon 2.6 capture** (CPU-bound loading screen, then GPU-bound play): `crates/core/tests/fixtures/` |
+| S2c-02 | Heuristic fallback without GPU Busy, with lowered confidence shown | 🆕 | bottleneck §3 | 01 | Same. ✅ Without GPU Busy the rules use GPU utilization and the game's thread at **lower confidence**, shown on screen as "Estimated without GPU Busy"; counted in the session (`estimated_seconds`); tested |
+| S2c-03 | **"Now" card** + live readings with rule thresholds | 🆕 | bottleneck §5 | 01 | kittest. ✅ ZeeZ Live › Bottleneck: the Now card (verdict, confidence, explanation, *Why?*), live readings with each rule's threshold marked, smoothed over 5 s so one second doesn't flip it; kittest |
+| S2c-04 | **Session analysis** (1/3/5 min, until stop) + evidence-tied recommendations | 🆕 | bottleneck §5 | 01 | No recommendation without evidence (test). ✅ Analysis of 1/3/5 min or until stop; time per class, timeline, evidence, recommendations. `Recommendation.because` is not optional, so none can exist without a measurement; a clean session gets none (tested) |
+| S2c-05 | Integrations: overlay pill, report section, Overview shortcut | 🆕 | bottleneck §5 | S2b | Same. ✅ Overlay pill (setting, default on), report section in the app and the HTML export, Overview shortcut. *Build health* on the Overview already covers §2.5 |
+| S2c-06 | *(Conditional)* static hardware balance from our own benchmarks | 🆕 | bottleneck §4 | S1-K02, K05 | Calibration passes, or the ADR cuts it. ✂ Cut by [ADR 0014](../adr/0014-no-hardware-balance-bar-in-1-0.md): no honest calibration without measured reference pairs |
+**S2c status (2026-11-06): built → `1.0.0-beta.7` for testing.**
+- Done and tested as marked above. The real-capture fixture only has one game, so the rules' thresholds are the plan's (documented in `Thresholds`) and not tuned on data: they are what the beta tests.
+- To check in play, which no machine here can: a CPU-bound game (does the busiest-thread rule agree with the detector's verdict?), a V-Sync and a capped game (limiter detection), a throttling session, and Linux/macOS (the fallback).
+- Known limits: shared video memory isn't read; readings use the first GPU; the compositor limiter is low-confidence by design.
 
 **S2c gate → the pre-release after it** (Bottleneck detector). (`1.0.0-beta.2`, `beta.4` and `beta.5` were S1/S2a fix and completion releases.)
 

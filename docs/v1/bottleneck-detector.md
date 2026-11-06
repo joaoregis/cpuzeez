@@ -1,6 +1,6 @@
 # Bottleneck detector
 
-> Part of the [1.0 plan](README.md). Status: design.
+> Part of the [1.0 plan](README.md). Status: built in `1.0.0-beta.7` (S2c); the hardware-balance bar (§4) is cut by [ADR 0014](../adr/0014-no-hardware-balance-bar-in-1-0.md).
 > It answers one question: **what is limiting my FPS right now: the GPU, the CPU, memory, temperature, a frame cap, or the PC's configuration?**
 
 ## 1. Why most "bottleneck calculators" are wrong
