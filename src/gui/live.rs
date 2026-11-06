@@ -146,6 +146,55 @@ pub fn live_pill(ui: &mut Ui, shown: bool) {
 }
 
 impl State {
+    /// What the frame source is doing, and what the user can do about it.
+    fn frame_source(&mut self, ui: &mut Ui, access: &mut super::access_ui::Access) {
+        use crate::live_frames::Status;
+        let p = theme::palette(ui);
+        let (tone, text) = match crate::live_frames::status() {
+            Status::Running => (Tone::Success, tr("Frame timing on (PresentMon)").to_string()),
+            Status::Off | Status::Starting => (Tone::Neutral, tr("Starting frame timing…").to_string()),
+            Status::NeedsAdmin => {
+                (Tone::Warning, tr("Frame timing needs CpuZeeZ to run as administrator.").to_string())
+            }
+            Status::Missing => {
+                (Tone::Warning, tr("The PresentMon sidecar isn't next to CpuZeeZ: reinstall to get FPS.").to_string())
+            }
+            Status::BadChecksum => (
+                Tone::Danger,
+                tr("PresentMon next to CpuZeeZ isn't the version we ship (SHA-256 differs), so it was not run.")
+                    .to_string(),
+            ),
+            Status::Failed(e) => (Tone::Danger, super::i18n::trf("Frame timing stopped: {}", &[&e])),
+        };
+        let needs_admin = crate::live_frames::status() == Status::NeedsAdmin;
+        ui.horizontal_wrapped(|ui| {
+            if cfg!(windows) {
+                widgets::pill(ui, &text, tone);
+            } else if cfg!(target_os = "linux") {
+                widgets::pill(ui, tr("FPS on Linux comes from MangoHud's logs (below)."), Tone::Neutral);
+            } else {
+                widgets::pill(ui, tr("FPS on macOS is experimental (Metal HUD)."), Tone::Neutral);
+            }
+            if needs_admin {
+                if access.restarting() {
+                    ui.spinner();
+                } else if widgets::primary_button(
+                    ui,
+                    &format!("{} {}", icon::SHIELD_CHECK, tr("Restart as administrator")),
+                )
+                .clicked()
+                {
+                    access.restart_elevated();
+                }
+            }
+        });
+        ui.label(
+            RichText::new(tr("Frames are read from the graphics kernel's events: nothing is injected into the game."))
+                .small()
+                .color(p.text_muted),
+        );
+    }
+
     fn hotkey(&mut self, a: HotkeyAction, mon: &mut Monitor) {
         match a {
             HotkeyAction::ToggleOverlay => {
@@ -205,7 +254,7 @@ impl State {
         });
     }
 
-    pub fn page(&mut self, ui: &mut Ui, mon: &mut Monitor) {
+    pub fn page(&mut self, ui: &mut Ui, mon: &mut Monitor, access: &mut super::access_ui::Access) {
         let shown = mon.settings.overlay.shown;
         widgets::page_header(ui, "ZeeZ Live", tr("Overlay, capture and reports while you play or work."), |ui| {
             let label = if shown { tr("Hide overlay") } else { tr("Show overlay") };
@@ -225,7 +274,7 @@ impl State {
         );
         ui.add_space(8.0);
         match self.tab {
-            Tab::Live => self.live_tab(ui, mon),
+            Tab::Live => self.live_tab(ui, mon, access),
             Tab::Overlay => {
                 if mon.settings.overlay.first_use_done {
                     self.overlay_tab(ui, mon);
@@ -242,7 +291,78 @@ impl State {
         }
     }
 
-    fn live_tab(&mut self, ui: &mut Ui, mon: &mut Monitor) {
+    fn live_tab(&mut self, ui: &mut Ui, mon: &mut Monitor, access: &mut super::access_ui::Access) {
+        let p = theme::palette(ui);
+        let tel = mon.tel();
+        // Reading frames/* is what runs the frame source.
+        tel.want("live-frames", &["frames"]);
+        let series = tel.series_with(|id| id == "frames/ms");
+        widgets::card(ui, icon::GAME_CONTROLLER, tr("Game"), |ui| {
+            self.frame_source(ui, access);
+            let apps = crate::live_frames::apps();
+            let target = crate::live_frames::target();
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(tr("Measuring")).color(p.text_secondary));
+                let shown =
+                    target.as_ref().map_or_else(|| tr("nothing yet").to_string(), |t| format!("{} ({})", t.1, t.0));
+                egui::ComboBox::from_id_salt("live-target").selected_text(shown).show_ui(ui, |ui| {
+                    if ui.selectable_label(false, tr("Automatic: the app in front")).clicked() {
+                        crate::live_frames::pin_target(None);
+                    }
+                    for a in &apps {
+                        if ui
+                            .selectable_label(
+                                target.as_ref().is_some_and(|t| t.0 == a.pid),
+                                format!("{} ({}) · {:.0} FPS", a.name, a.pid, a.fps),
+                            )
+                            .clicked()
+                        {
+                            crate::live_frames::pin_target(Some(a.pid));
+                        }
+                    }
+                });
+            });
+            if cpuzeez_core::frames::exclusive_fullscreen(&crate::live_frames::present_mode()) {
+                widgets::pill(
+                    ui,
+                    &format!(
+                        "{} {}",
+                        icon::WARNING,
+                        tr(
+                            "This game is in exclusive fullscreen: switch it to borderless window to see the overlay. Capture still works."
+                        )
+                    ),
+                    Tone::Warning,
+                );
+            }
+            let v = |id: &str| series.iter().find(|s| s.id == id).map(|s| s.current);
+            ui.add_space(6.0);
+            ui.horizontal_wrapped(|ui| {
+                for (id, label, tip) in [
+                    ("frames/fps", "FPS", "Frames per second over the last second."),
+                    ("frames/low1", "1% low", "How smooth the worst moments feel: the 99th-percentile frame time as FPS, last 30 s. Higher is better."),
+                    ("frames/low01", "0.1% low", "The rare worst hitches: the 99.9th-percentile frame time as FPS, last 30 s."),
+                    ("frames/gpu_busy", "GPU Busy", "How long the GPU actually worked on a frame. Close to the frame time: the GPU limits the frame rate."),
+                ] {
+                    let text = v(id).map_or_else(|| "–".to_string(), |x| if id == "frames/gpu_busy" { format!("{x:.1} ms") } else { format!("{x:.0}") });
+                    widgets::card(ui, "", tr(label), |ui| {
+                        ui.label(RichText::new(text).size(26.0).strong().color(p.text)).on_hover_text(tr(tip));
+                    });
+                }
+            });
+            if let Some(ms) = series.iter().find(|s| s.id == "frames/ms") {
+                let now = ms.points.last().map_or(0.0, |p| p.0);
+                ui.label(RichText::new(tr("Frame time")).small().color(p.text_secondary));
+                super::plot::chart(
+                    ui,
+                    &[super::plot::Line { label: tr("Frame time"), color: p.accent, points: &ms.points }],
+                    now,
+                    60.0,
+                    120.0,
+                    &|v| format!("{v:.1} ms"),
+                );
+            }
+        });
         let o = mon.settings.overlay.clone();
         widgets::card(ui, icon::MONITOR, tr("Overlay"), |ui| {
             ui.label(
@@ -428,6 +548,46 @@ fn limits() -> Vec<&'static str> {
 }
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Game", "Jogo"),
+    ("Measuring", "Medindo"),
+    ("nothing yet", "nada ainda"),
+    ("Automatic: the app in front", "Automático: o app em primeiro plano"),
+    (
+        "This game is in exclusive fullscreen: switch it to borderless window to see the overlay. Capture still works.",
+        "Este jogo está em tela cheia exclusiva: mude para janela sem bordas para ver o overlay. A captura continua funcionando.",
+    ),
+    ("Frames per second over the last second.", "Quadros por segundo no último segundo."),
+    (
+        "How smooth the worst moments feel: the 99th-percentile frame time as FPS, last 30 s. Higher is better.",
+        "Quão suaves são os piores momentos: o percentil 99 do tempo de quadro em FPS, últimos 30 s. Maior é melhor.",
+    ),
+    (
+        "The rare worst hitches: the 99.9th-percentile frame time as FPS, last 30 s.",
+        "Os raros piores engasgos: o percentil 99,9 do tempo de quadro em FPS, últimos 30 s.",
+    ),
+    (
+        "How long the GPU actually worked on a frame. Close to the frame time: the GPU limits the frame rate.",
+        "Quanto tempo a GPU realmente trabalhou num quadro. Perto do tempo de quadro: a GPU limita o FPS.",
+    ),
+    ("Frame timing on (PresentMon)", "Medição de quadros ligada (PresentMon)"),
+    ("Starting frame timing…", "Iniciando a medição de quadros…"),
+    ("Frame timing needs CpuZeeZ to run as administrator.", "A medição de quadros exige o CpuZeeZ como administrador."),
+    (
+        "The PresentMon sidecar isn't next to CpuZeeZ: reinstall to get FPS.",
+        "O PresentMon não está junto do CpuZeeZ: reinstale para ter FPS.",
+    ),
+    (
+        "PresentMon next to CpuZeeZ isn't the version we ship (SHA-256 differs), so it was not run.",
+        "O PresentMon junto do CpuZeeZ não é a versão que distribuímos (SHA-256 diferente), então não foi executado.",
+    ),
+    ("Frame timing stopped: {}", "A medição de quadros parou: {}"),
+    ("FPS on Linux comes from MangoHud's logs (below).", "No Linux, o FPS vem dos logs do MangoHud (abaixo)."),
+    ("FPS on macOS is experimental (Metal HUD).", "No macOS, o FPS é experimental (Metal HUD)."),
+    ("Restart as administrator", "Reiniciar como administrador"),
+    (
+        "Frames are read from the graphics kernel's events: nothing is injected into the game.",
+        "Os quadros vêm dos eventos do kernel gráfico: nada é injetado no jogo.",
+    ),
     ("Same shortcut as another action", "Mesmo atalho de outra ação"),
     ("Taken by another app", "Usado por outro app"),
     ("Not a shortcut CpuZeeZ understands", "Atalho não reconhecido pelo CpuZeeZ"),
@@ -526,6 +686,52 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Game", "Juego"),
+    ("Measuring", "Midiendo"),
+    ("nothing yet", "nada aún"),
+    ("Automatic: the app in front", "Automático: la app en primer plano"),
+    (
+        "This game is in exclusive fullscreen: switch it to borderless window to see the overlay. Capture still works.",
+        "Este juego está en pantalla completa exclusiva: cámbialo a ventana sin bordes para ver el overlay. La captura sigue funcionando.",
+    ),
+    ("Frames per second over the last second.", "Fotogramas por segundo en el último segundo."),
+    (
+        "How smooth the worst moments feel: the 99th-percentile frame time as FPS, last 30 s. Higher is better.",
+        "Qué tan fluidos son los peores momentos: el percentil 99 del tiempo de fotograma en FPS, últimos 30 s. Más alto es mejor.",
+    ),
+    (
+        "The rare worst hitches: the 99.9th-percentile frame time as FPS, last 30 s.",
+        "Los raros peores tirones: el percentil 99,9 del tiempo de fotograma en FPS, últimos 30 s.",
+    ),
+    (
+        "How long the GPU actually worked on a frame. Close to the frame time: the GPU limits the frame rate.",
+        "Cuánto tiempo trabajó realmente la GPU en un fotograma. Cerca del tiempo de fotograma: la GPU limita los FPS.",
+    ),
+    ("Frame timing on (PresentMon)", "Medición de fotogramas activa (PresentMon)"),
+    ("Starting frame timing…", "Iniciando la medición de fotogramas…"),
+    (
+        "Frame timing needs CpuZeeZ to run as administrator.",
+        "La medición de fotogramas requiere CpuZeeZ como administrador.",
+    ),
+    (
+        "The PresentMon sidecar isn't next to CpuZeeZ: reinstall to get FPS.",
+        "PresentMon no está junto a CpuZeeZ: reinstala para tener FPS.",
+    ),
+    (
+        "PresentMon next to CpuZeeZ isn't the version we ship (SHA-256 differs), so it was not run.",
+        "El PresentMon junto a CpuZeeZ no es la versión que distribuimos (SHA-256 distinto), así que no se ejecutó.",
+    ),
+    ("Frame timing stopped: {}", "La medición de fotogramas se detuvo: {}"),
+    (
+        "FPS on Linux comes from MangoHud's logs (below).",
+        "En Linux, los FPS vienen de los registros de MangoHud (abajo).",
+    ),
+    ("FPS on macOS is experimental (Metal HUD).", "En macOS, los FPS son experimentales (Metal HUD)."),
+    ("Restart as administrator", "Reiniciar como administrador"),
+    (
+        "Frames are read from the graphics kernel's events: nothing is injected into the game.",
+        "Los fotogramas vienen de los eventos del kernel gráfico: nada se inyecta en el juego.",
+    ),
     ("Same shortcut as another action", "Mismo atajo que otra acción"),
     ("Taken by another app", "Usado por otra app"),
     ("Not a shortcut CpuZeeZ understands", "Atajo no reconocido por CpuZeeZ"),

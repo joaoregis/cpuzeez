@@ -852,6 +852,28 @@ pub struct Telemetry {
     gpu_live: Arc<Mutex<Vec<crate::gpu::Live>>>,
 }
 
+/// ZeeZ Live frame metrics of the target app (S2b-05). Reading it is what
+/// keeps the frame source (PresentMon on Windows) running.
+struct Frames;
+
+impl Source for Frames {
+    fn name(&self) -> &'static str {
+        "frames"
+    }
+    fn prefixes(&self) -> &'static [&'static str] {
+        &["frames"]
+    }
+    fn read(&mut self, out: &mut Vec<Reading>) {
+        crate::live_frames::want();
+        let group = crate::live_frames::target().map_or_else(|| "Frames".to_string(), |t| format!("Frames · {}", t.1));
+        let mut o = Out::default();
+        for (id, label, unit, v) in crate::live_frames::readings() {
+            o.add(id, &group, label, unit, v);
+        }
+        out.append(&mut o.v);
+    }
+}
+
 /// Every source the app reads.
 fn sources(ctx: &Arc<Ctx>, gpu_live: &Arc<Mutex<Vec<crate::gpu::Live>>>) -> Vec<Box<dyn Source>> {
     let have_batteries = !crate::battery::batteries(ctx).is_empty();
@@ -867,6 +889,7 @@ fn sources(ctx: &Arc<Ctx>, gpu_live: &Arc<Mutex<Vec<crate::gpu::Live>>>) -> Vec<
         Box::new(Memory),
         Box::new(Drives { ctx: ctx.clone() }),
         Box::new(Batteries { ctx: ctx.clone() }),
+        Box::new(Frames),
     ];
     #[cfg(target_os = "macos")]
     v.push(Box::new(MeasuredClock));

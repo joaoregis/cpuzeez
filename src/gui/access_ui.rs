@@ -127,6 +127,18 @@ impl Access {
         self.message = None;
     }
 
+    /// Restart CpuZeeZ elevated (a page outside the banner asked for it).
+    pub fn restart_elevated(&mut self) {
+        if self.pending.is_none() && elevation::can_relaunch() {
+            let args: Vec<String> = std::env::args().skip(1).filter(|a| !a.contains("elevated-handoff")).collect();
+            self.pending = Some(elevation::relaunch(&args));
+        }
+    }
+
+    pub fn restarting(&self) -> bool {
+        self.pending.is_some()
+    }
+
     /// Call every frame: finishes a pending restart or action.
     pub fn frame(&mut self, ectx: &egui::Context) {
         if let Some(slot) = &self.running {

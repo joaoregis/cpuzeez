@@ -26,6 +26,7 @@ mod gui;
 mod health;
 mod history;
 mod latency;
+mod live_frames;
 mod membench;
 mod memplus;
 mod memtest;

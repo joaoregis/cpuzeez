@@ -28,6 +28,11 @@ pub enum WindowOp {
     Close,
 }
 
+/// The process that owns the foreground window (the game, when one is played).
+pub fn foreground_pid() -> Option<u32> {
+    imp::foreground_pid()
+}
+
 /// A window action (no privilege: windows of this desktop).
 pub fn window_op(handle: isize, op: WindowOp) -> bool {
     imp::window_op(handle, op)
@@ -76,6 +81,16 @@ mod imp {
         v
     }
 
+    pub fn foreground_pid() -> Option<u32> {
+        use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+        // SAFETY: plain queries; a null window gives pid 0.
+        unsafe {
+            let mut pid = 0u32;
+            GetWindowThreadProcessId(GetForegroundWindow(), &mut pid);
+            (pid != 0).then_some(pid)
+        }
+    }
+
     pub fn window_op(handle: isize, op: WindowOp) -> bool {
         let h = handle as HWND;
         // SAFETY: plain window calls; a stale handle just fails.
@@ -101,6 +116,9 @@ mod imp {
     }
     pub fn window_op(_: isize, _: WindowOp) -> bool {
         false
+    }
+    pub fn foreground_pid() -> Option<u32> {
+        None
     }
 }
 

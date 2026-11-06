@@ -137,7 +137,7 @@ enum Step {
     AboutPt,
 }
 
-const SHOTS: [(&str, Step); 23] = [
+const SHOTS: [(&str, Step); 24] = [
     ("overview", Step::Page(Page::Overview)),
     ("processor", Step::Page(Page::Processor)),
     ("mainboard", Step::Page(Page::Mainboard)),
@@ -157,6 +157,7 @@ const SHOTS: [(&str, Step); 23] = [
     ("system-startup", Step::System(system::SysTab::Startup)),
     ("system-users", Step::System(system::SysTab::Users)),
     ("system-services", Step::System(system::SysTab::Services)),
+    ("live", Step::Page(Page::Live)),
     ("settings", Step::Page(Page::Settings)),
     ("about", Step::Page(Page::About)),
     ("about-pt", Step::AboutPt),
@@ -642,7 +643,7 @@ impl App {
                 }
             }
             Page::System => self.system.page(ui, &self.ctx, &mut self.mon),
-            Page::Live => self.live.page(ui, &mut self.mon),
+            Page::Live => self.live.page(ui, &mut self.mon, &mut self.access),
             Page::Processor => {
                 let sub = [c.info.codename.clone(), c.info.package.clone(), c.info.technology.clone()]
                     .into_iter()
