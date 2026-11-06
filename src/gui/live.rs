@@ -55,6 +55,13 @@ pub struct State {
     /// The overlay was shown, or the capture started, by a profile.
     auto_shown: Option<String>,
     auto_capture: Option<String>,
+    /// MangoHud (Linux): a pending install/configure, its result, the install confirmation.
+    #[allow(dead_code)]
+    mh_job: Option<std::sync::Arc<std::sync::Mutex<Option<Result<String, String>>>>>,
+    #[allow(dead_code)]
+    mh_msg: Option<(String, Tone)>,
+    #[allow(dead_code)]
+    mh_confirm: bool,
 }
 
 /// A capture in progress (S2b-09).
@@ -273,6 +280,114 @@ impl State {
                 .small()
                 .color(p.text_muted),
         );
+    }
+
+    /// Linux: MangoHud's status line and its one-click steps (zeez-live §3.1 Q4).
+    #[cfg(target_os = "linux")]
+    fn mangohud_card(&mut self, ui: &mut Ui, mon: &mut Monitor) {
+        use crate::live_mangohud as m;
+        let p = theme::palette(ui);
+        let done = self.mh_job.as_ref().and_then(|job| job.lock().unwrap_or_else(|e| e.into_inner()).take());
+        if let Some(r) = done {
+            self.mh_msg = Some(match r {
+                Ok(t) => (t, Tone::Success),
+                Err(e) => (e, Tone::Danger),
+            });
+            self.mh_job = None;
+        }
+        let st = m::status();
+        type Job = Box<dyn FnOnce() -> Result<String, String> + Send>;
+        let run = |f: Job| {
+            let slot = std::sync::Arc::new(std::sync::Mutex::new(None));
+            let s2 = slot.clone();
+            std::thread::spawn(move || *s2.lock().unwrap_or_else(|e| e.into_inner()) = Some(f()));
+            slot
+        };
+        widgets::card(ui, icon::GAME_CONTROLLER, "MangoHud", |ui| {
+            let installed = if st.installed.is_empty() {
+                format!("{} {}", icon::X, tr("not installed"))
+            } else {
+                format!("{} {}", icon::CHECK, tr("installed"))
+            };
+            let all = if st.enabled_all {
+                format!("{} {}", icon::CHECK, tr("enabled for all games"))
+            } else {
+                tr("not enabled for all games").to_string()
+            };
+            let last = crate::live_frames::target()
+                .map_or_else(String::new, |t| format!(" · {} {}", tr("last game seen:"), t.1));
+            ui.label(RichText::new(format!("MangoHud: {installed} · {all}{last}")).color(p.text));
+            ui.horizontal_wrapped(|ui| {
+                let busy = self.mh_job.is_some();
+                if st.installed.is_empty() {
+                    match st.manager {
+                        Some(mgr) if self.mh_confirm => {
+                            ui.label(super::i18n::trf(
+                                "Install MangoHud with {}? Your password is asked by the system.",
+                                &[&mgr],
+                            ));
+                            if widgets::primary_button(ui, tr("Install")).clicked() {
+                                self.mh_job = Some(run(Box::new(move || {
+                                    m::install(mgr).map(|_| tr("MangoHud installed.").to_string())
+                                })));
+                                self.mh_confirm = false;
+                            }
+                            if ui.button(tr("Cancel")).clicked() {
+                                self.mh_confirm = false;
+                            }
+                        }
+                        Some(_) => {
+                            if ui
+                                .add_enabled(
+                                    !busy,
+                                    egui::Button::new(format!("{} {}", icon::DOWNLOAD_SIMPLE, tr("Install"))),
+                                )
+                                .clicked()
+                            {
+                                self.mh_confirm = true;
+                            }
+                        }
+                        None => {
+                            ui.label(
+                                RichText::new(tr(
+                                    "Install the mangohud package with your distribution's software tool.",
+                                ))
+                                .small(),
+                            );
+                        }
+                    }
+                    ui.label(
+                        RichText::new(super::i18n::trf(
+                            "Flatpak Steam: install {}",
+                            &[&cpuzeez_core::mangohud::FLATPAK_ID],
+                        ))
+                        .small()
+                        .color(p.text_muted),
+                    );
+                }
+                let (layout, anchor) = (mon.settings.overlay.layout.clone(), mon.settings.overlay.anchor);
+                let mut all = st.enabled_all;
+                if ui.add_enabled(!busy, egui::Checkbox::new(&mut all, tr("Enable for all games"))).changed() {
+                    self.mh_job = Some(run(Box::new(move || {
+                        m::configure(all, &layout, anchor)
+                            .map(|_| tr("Saved. It applies from your next login.").to_string())
+                    })));
+                }
+                if ui.button(format!("{} {}", icon::COPY, tr("Copy launch option"))).clicked() {
+                    ui.ctx().copy_text(cpuzeez_core::mangohud::LAUNCH_OPTION.into());
+                    self.mh_msg =
+                        Some((tr("Copied. In Steam: the game's Properties › Launch options.").into(), Tone::Neutral));
+                }
+            });
+            if let Some((t, tone)) = &self.mh_msg {
+                widgets::pill(ui, t, *tone);
+            }
+            ui.label(
+                RichText::new(tr("CpuZeeZ writes MangoHud's config from your overlay layout and reads its logs for FPS. Steam's own files are never edited."))
+                    .small()
+                    .color(p.text_muted),
+            );
+        });
     }
 
     pub fn capturing(&self) -> bool {
@@ -680,6 +795,8 @@ impl State {
                 );
             }
         });
+        #[cfg(target_os = "linux")]
+        self.mangohud_card(ui, mon);
         self.capture_card(ui, mon);
         let o = mon.settings.overlay.clone();
         widgets::card(ui, icon::MONITOR, tr("Overlay"), |ui| {
@@ -937,6 +1054,33 @@ fn limits() -> Vec<&'static str> {
 }
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("not installed", "não instalado"),
+    ("installed", "instalado"),
+    ("enabled for all games", "ligado para todos os jogos"),
+    ("not enabled for all games", "não ligado para todos os jogos"),
+    ("last game seen:", "último jogo visto:"),
+    (
+        "Install MangoHud with {}? Your password is asked by the system.",
+        "Instalar o MangoHud com {}? O sistema pede sua senha.",
+    ),
+    ("Install", "Instalar"),
+    ("MangoHud installed.", "MangoHud instalado."),
+    (
+        "Install the mangohud package with your distribution's software tool.",
+        "Instale o pacote mangohud pela ferramenta de software da sua distribuição.",
+    ),
+    ("Flatpak Steam: install {}", "Steam Flatpak: instale {}"),
+    ("Enable for all games", "Ligar para todos os jogos"),
+    ("Saved. It applies from your next login.", "Salvo. Vale a partir do próximo login."),
+    ("Copy launch option", "Copiar opção de lançamento"),
+    (
+        "Copied. In Steam: the game's Properties › Launch options.",
+        "Copiado. Na Steam: Propriedades do jogo › Opções de inicialização.",
+    ),
+    (
+        "CpuZeeZ writes MangoHud's config from your overlay layout and reads its logs for FPS. Steam's own files are never edited.",
+        "O CpuZeeZ gera a config do MangoHud a partir do layout do overlay e lê os logs dele para o FPS. Os arquivos da Steam nunca são editados.",
+    ),
     ("Per-game profiles", "Perfis por jogo"),
     (
         "A game's own style and place, and what happens when it starts. Everything here is off until you turn it on.",
@@ -1108,6 +1252,33 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("not installed", "no instalado"),
+    ("installed", "instalado"),
+    ("enabled for all games", "activado para todos los juegos"),
+    ("not enabled for all games", "no activado para todos los juegos"),
+    ("last game seen:", "último juego visto:"),
+    (
+        "Install MangoHud with {}? Your password is asked by the system.",
+        "¿Instalar MangoHud con {}? El sistema pide tu contraseña.",
+    ),
+    ("Install", "Instalar"),
+    ("MangoHud installed.", "MangoHud instalado."),
+    (
+        "Install the mangohud package with your distribution's software tool.",
+        "Instala el paquete mangohud con la herramienta de software de tu distribución.",
+    ),
+    ("Flatpak Steam: install {}", "Steam Flatpak: instala {}"),
+    ("Enable for all games", "Activar para todos los juegos"),
+    ("Saved. It applies from your next login.", "Guardado. Se aplica desde tu próximo inicio de sesión."),
+    ("Copy launch option", "Copiar opción de inicio"),
+    (
+        "Copied. In Steam: the game's Properties › Launch options.",
+        "Copiado. En Steam: Propiedades del juego › Opciones de lanzamiento.",
+    ),
+    (
+        "CpuZeeZ writes MangoHud's config from your overlay layout and reads its logs for FPS. Steam's own files are never edited.",
+        "CpuZeeZ genera la configuración de MangoHud desde el diseño del overlay y lee sus registros para los FPS. Los archivos de Steam nunca se editan.",
+    ),
     ("Per-game profiles", "Perfiles por juego"),
     (
         "A game's own style and place, and what happens when it starts. Everything here is off until you turn it on.",

@@ -27,6 +27,8 @@ mod health;
 mod history;
 mod latency;
 mod live_frames;
+#[cfg(target_os = "linux")]
+mod live_mangohud;
 mod membench;
 mod memplus;
 mod memtest;

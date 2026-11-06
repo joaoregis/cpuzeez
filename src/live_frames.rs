@@ -100,7 +100,7 @@ pub fn want() {
     }
 }
 
-fn wanted() -> bool {
+pub fn wanted() -> bool {
     lock().wanted_at.is_some_and(|t| t.elapsed() < Duration::from_secs(5))
 }
 
@@ -194,6 +194,12 @@ pub fn push(batch: Vec<Frame>, foreground: Option<u32>) {
 
 fn set_status(s: Status) {
     lock().status = s;
+}
+
+/// A source delivered frames (the Linux log reader).
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub fn set_running() {
+    set_status(Status::Running);
 }
 
 /// The readings `frames/*` for the telemetry engine.
@@ -329,10 +335,26 @@ mod imp {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
 mod imp {
     pub fn start() {
-        // Linux: MangoHud logs are read by `live_mangohud` (S2b-06); macOS: experimental (S2b-07).
+        super::lock().running = true;
+        super::set_status(super::Status::Starting);
+        let ok = std::thread::Builder::new().name("cz-mangohud".into()).spawn(|| {
+            crate::live_mangohud::tail();
+            super::lock().running = false;
+            super::set_status(super::Status::Off);
+        });
+        if ok.is_err() {
+            super::lock().running = false;
+        }
+    }
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+mod imp {
+    pub fn start() {
+        // macOS has no frame timing for other apps (zeez-live §3.1): see live.rs's Metal HUD launcher.
     }
 }
 
