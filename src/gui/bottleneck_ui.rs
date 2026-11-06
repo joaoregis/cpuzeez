@@ -243,6 +243,10 @@ impl Detector {
                 }
             }
             w.focused = cpuzeez_platform::desktop::foreground_pid().map(|f| f == *pid);
+            #[cfg(feature = "soak")]
+            if crate::soak::enabled() {
+                w.focused = Some(true); // the synthetic game has no window
+            }
         }
         let target_pid = target.as_ref().map(|t| t.0);
         w.background = snap
@@ -457,6 +461,13 @@ fn meter(ui: &mut Ui, label: &str, value: Option<f64>, max: f64, mark: Option<f6
         let painter = ui.painter_at(rect.expand(2.0));
         painter.rect_filled(rect, 4.0, ui.visuals().extreme_bg_color);
         let over = value.zip(mark).is_some_and(|(v, m)| v >= m);
+        resp.widget_info(|| {
+            let v = value.map_or_else(|| "–".to_string(), |v| format!("{v:.0} {unit}"));
+            let at = mark.map_or(String::new(), |m| {
+                format!(", {}", trf("The rule fires at {} {}", &[&format!("{m:.0}"), &unit]))
+            });
+            egui::WidgetInfo::labeled(egui::WidgetType::ProgressIndicator, true, format!("{label}: {v}{at}"))
+        });
         if let Some(v) = value {
             let w = (v / max).clamp(0.0, 1.0) as f32 * rect.width();
             let color = if over { p.warning } else { p.accent };

@@ -11,8 +11,9 @@ on:
         description: "Tag to release (e.g. v0.1.0)"
         required: true
 
+# Build jobs only read the repository; the one job that publishes gets write access itself.
 permissions:
-  contents: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -22,8 +23,10 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
       - name: Version (tag must match Cargo.toml; per-format mapping for pre-releases)
         shell: bash
         run: |
@@ -45,7 +48,7 @@ jobs:
       - name: Portable zip
         shell: pwsh
         run: Compress-Archive -Path target/release/cpuzeez.exe, pawnio/PawnIO_setup.exe, pawnio/pawnio-modules, pawnio/PresentMon.exe, pawnio/PresentMon-LICENSE.txt, README.md, THIRD_PARTY.md, LICENSE-MIT, LICENSE-APACHE -DestinationPath "cpuzeez-$env:VER-windows-x64-portable.zip"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows
           path: |
@@ -55,8 +58,10 @@ jobs:
   macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
         with: { targets: "x86_64-apple-darwin,aarch64-apple-darwin" }
       - run: |
           cargo build --release --locked --target aarch64-apple-darwin
@@ -97,7 +102,7 @@ jobs:
           codesign --verify --all-architectures --deep --strict --verbose=2 verify/pkg/Payload/Applications/CpuZeeZ.app
           verify/tar/cpuzeez -help
           verify/pkg/Payload/usr/local/bin/cpuzeez -help
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: macos, path: "cpuzeez-*" }
 
   linux:
@@ -108,8 +113,10 @@ jobs:
           - { os: ubuntu-24.04-arm, arch: aarch64, deb: arm64 }
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
       # Built on Ubuntu 22.04 (glibc 2.35) so the binary runs on Debian 12+, Ubuntu 22.04+ and Arch.
       - run: |
           cargo build --release --locked
@@ -122,7 +129,7 @@ jobs:
         run: |
           mkdir -p "cpuzeez-$VER" && cp target/release/cpuzeez README.md LICENSE-MIT LICENSE-APACHE packaging/linux/cpuzeez.desktop assets/icon.svg assets/icon-*.png "cpuzeez-$VER/"
           tar -czf "cpuzeez-$VER-linux-${{ matrix.arch }}.tar.gz" "cpuzeez-$VER"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: "linux-${{ matrix.arch }}"
           path: |
@@ -134,8 +141,8 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with: { name: linux-x86_64, path: dl }
       - name: makepkg (repackages the release binary)
         run: |
@@ -150,15 +157,17 @@ jobs:
           chown -R builder /home/builder/pkg
           su builder -c "cd /home/builder/pkg && makepkg --nodeps --noconfirm"
           cp /home/builder/pkg/*.pkg.tar.zst .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: arch, path: "*.pkg.tar.zst" }
 
   publish:
     needs: [windows, macos, linux, arch]
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         # Not "assets/": that is the repo's icon folder after checkout.
         with: { path: dist, merge-multiple: true }
       - name: Checksums

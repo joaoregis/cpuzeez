@@ -1,0 +1,18 @@
+# Keeps the pinned GitHub Actions (by commit SHA) and the Rust crates current.
+# Each update is a pull request that CI checks (including cargo-deny); nothing
+# is merged by itself.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci"
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "deps"
+    open-pull-requests-limit: 5

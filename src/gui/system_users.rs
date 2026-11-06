@@ -201,7 +201,9 @@ impl State {
                     .inner_margin(Margin::symmetric(12, 10))
                     .show(ui, |ui| {
                         ui.set_width(ui.available_width());
-                        ui.horizontal(|ui| {
+                        // Wrapping, not right-aligned: at 150-200 % zoom the buttons must go to
+                        // the next line instead of over the session text.
+                        ui.horizontal_wrapped(|ui| {
                             let caret = if is_expanded { icon::CARET_DOWN } else { icon::CARET_RIGHT };
                             if ui.button(format!("{caret} {} ({})", u.user, u.processes.len())).clicked() {
                                 if is_expanded {
@@ -225,13 +227,14 @@ impl State {
                                         .color(p.text_secondary),
                                 );
                             }
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                let Some(sid) = u.session_id else { return };
-                                if ui.small_button(tr("Sign out")).clicked() {
-                                    self.modal = Some(Modal::ConfirmAction {
+                            if let Some(sid) = u.session_id {
+                                ui.add_space(8.0);
+                                if ui.small_button(tr("Send message")).clicked() {
+                                    self.modal = Some(Modal::SendMessage {
                                         session_id: sid,
                                         user: u.user.clone(),
-                                        sign_out: true,
+                                        title: String::from("Message from Administrator"),
+                                        body: String::new(),
                                     });
                                 }
                                 if ui.small_button(tr("Disconnect")).clicked() {
@@ -241,15 +244,14 @@ impl State {
                                         sign_out: false,
                                     });
                                 }
-                                if ui.small_button(tr("Send message")).clicked() {
-                                    self.modal = Some(Modal::SendMessage {
+                                if ui.small_button(tr("Sign out")).clicked() {
+                                    self.modal = Some(Modal::ConfirmAction {
                                         session_id: sid,
                                         user: u.user.clone(),
-                                        title: String::from("Message from Administrator"),
-                                        body: String::new(),
+                                        sign_out: true,
                                     });
                                 }
-                            });
+                            }
                         });
                         ui.add_space(4.0);
                         ui.horizontal_wrapped(|ui| {

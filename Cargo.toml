@@ -45,6 +45,9 @@ ksni = { version = "0.3", default-features = false, features = ["blocking", "asy
 
 [features]
 default = ["gui"]
+# Test hooks for the long-running soak (docs/testing/soak.md): a synthetic game
+# and an automatic tour of every page. Never in a release.
+soak = []
 gui = ["dep:eframe", "dep:png", "dep:rusqlite", "dep:global-hotkey", "dep:egui-phosphor", "dep:tray-icon", "dep:ksni"]
 
 

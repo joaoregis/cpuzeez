@@ -38,6 +38,17 @@ pub fn sidebar_item(ui: &mut Ui, icon: &str, label: &str, selected: bool) -> Res
         Color32::TRANSPARENT
     };
     ui.painter().rect_filled(rect, CornerRadius::same(theme::RADIUS_CONTROL), fill);
+    // Painted text is invisible to screen readers: name the item and say if it is the current one.
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, label));
+    // Keyboard focus is shown, not only felt.
+    if resp.has_focus() {
+        ui.painter().rect_stroke(
+            rect,
+            CornerRadius::same(theme::RADIUS_CONTROL),
+            Stroke::new(2.0, p.accent),
+            StrokeKind::Inside,
+        );
+    }
     let color = if selected { p.accent } else { p.text_secondary };
     let text_color = if selected { p.text } else { p.text_secondary };
     let font = egui::FontId::proportional(16.0);
@@ -223,6 +234,13 @@ pub fn progress(ui: &mut Ui, frac: f32, text: &str) -> Response {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 22.0), Sense::hover());
     let r = CornerRadius::same(6);
     ui.painter().rect_filled(rect, r, p.sidebar);
+    resp.widget_info(|| {
+        egui::WidgetInfo::labeled(
+            egui::WidgetType::ProgressIndicator,
+            true,
+            format!("{text} ({:.0} %)", frac.clamp(0.0, 1.0) * 100.0),
+        )
+    });
     let mut fill = rect;
     fill.set_width(rect.width() * frac.clamp(0.0, 1.0));
     ui.painter().rect_filled(fill, r, p.accent);
@@ -251,7 +269,9 @@ pub fn segmented<T: PartialEq + Copy>(ui: &mut Ui, current: &mut T, items: &[(T,
                         .fill(if on { p.card } else { Color32::TRANSPARENT })
                         .stroke(if on { Stroke::new(1.0, p.border) } else { Stroke::NONE })
                         .corner_radius(CornerRadius::same(theme::RADIUS_CONTROL));
-                    if ui.add(b).clicked() {
+                    let resp = ui.add(b);
+                    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, label));
+                    if resp.clicked() {
                         *current = *v;
                     }
                 }

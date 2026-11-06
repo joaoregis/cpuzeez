@@ -842,6 +842,41 @@ mod tests {
         assert_eq!(h.state().sort, Some(("cpu".into(), true)));
     }
 
+    /// The keyboard does what the mouse does: arrows move the selection,
+    /// Ctrl+A selects all, Enter opens, Esc clears.
+    #[test]
+    fn the_keyboard_selects_and_activates() {
+        use egui_kittest::{Harness, kittest::Queryable};
+        let r = rows();
+        let mut h = Harness::new_ui_state(
+            |ui, (st, opened): &mut (State, Vec<u64>)| {
+                let t = Table { id: "procs", cols: cols(), key: Box::new(|p: &P| p.pid), group: None };
+                t.show(ui, &r, st, |_, _| {});
+                opened.extend(st.activated); // a one-frame signal: keep every one
+            },
+            (State::default(), Vec::new()),
+        );
+        h.run();
+        h.get_by_label("svchost.exe, 10, 0.5 %").click();
+        h.run();
+        assert_eq!(h.state().0.selected, [10].into());
+        h.key_press(egui::Key::ArrowDown);
+        h.run();
+        assert_eq!(h.state().0.selected, [42].into(), "Down selects the next row");
+        h.key_press(egui::Key::ArrowUp);
+        h.run();
+        assert_eq!(h.state().0.selected, [10].into(), "Up goes back");
+        h.key_press(egui::Key::Enter);
+        h.run();
+        assert_eq!(h.state().1, [10], "Enter opens the selected row");
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+        h.run();
+        assert_eq!(h.state().0.selected.len(), 4, "Ctrl+A selects every row");
+        h.key_press(egui::Key::Escape);
+        h.run();
+        assert!(h.state().0.selected.is_empty(), "Esc clears the selection");
+    }
+
     #[test]
     fn ten_thousand_rows_filter_and_sort_quickly() {
         let _heavy = crate::heavy_test();

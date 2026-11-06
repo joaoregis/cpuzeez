@@ -45,7 +45,7 @@ pub fn latest() -> Option<Release> {
     parse(&body)
 }
 
-fn parse(body: &str) -> Option<Release> {
+pub(crate) fn parse(body: &str) -> Option<Release> {
     let v: Value = serde_json::from_str(body).ok()?;
     let tag = v["tag_name"].as_str()?;
     let assets: Vec<Asset> = v["assets"]

@@ -4,6 +4,8 @@
 //! tree as `-txt`. F5 BMP, F6 clipboard, F7 .cvf (our JSON). UI text goes
 //! through `i18n::tr` (English keys; tables at the end of each file).
 
+#[cfg(test)]
+mod a11y;
 mod access_ui;
 mod bench_tab;
 mod bmp;
@@ -17,6 +19,8 @@ mod palette;
 pub mod pins;
 mod settings_ui;
 mod shots;
+#[cfg(feature = "soak")]
+mod soak;
 mod update_ui;
 // ---- monitoring (sensors / stress / tray) ----
 #[cfg(test)]
@@ -232,9 +236,13 @@ struct App {
     diskbench: diskbench_view::State,
     system: system::State,
     live: live::State,
+    #[cfg(feature = "soak")]
+    soak: Option<soak::Tour>,
 }
 
 pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
+    #[cfg(feature = "soak")]
+    crate::soak::start();
     let ctx = Arc::new(ctx);
     let report = Arc::new(Mutex::new(None));
     {
@@ -313,6 +321,8 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         diskbench: Default::default(),
         system: Default::default(),
         live: Default::default(),
+        #[cfg(feature = "soak")]
+        soak: None,
     };
     if app.auto.is_none() {
         crate::data::expire_logs(app.mon.settings.log_retention_days);
@@ -386,6 +396,8 @@ impl eframe::App for App {
         let ectx = ui.ctx().clone();
         self.take_pins(&ectx);
         ectx.request_repaint_after(Duration::from_millis(500));
+        #[cfg(feature = "soak")]
+        self.soak_tour(&ectx);
         if self.auto.is_none() {
             self.system.background(&self.mon.settings);
         }

@@ -26,6 +26,8 @@ pub mod pdh;
 pub mod proc_net;
 pub mod proc_ops;
 pub mod procs;
+#[cfg(test)]
+mod robustness;
 pub mod services;
 pub mod startup;
 pub mod users;

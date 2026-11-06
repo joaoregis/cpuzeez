@@ -37,9 +37,13 @@ mod npu;
 mod pci;
 mod peripherals;
 mod procs;
+#[cfg(test)]
+mod robustness;
 mod sensors;
 mod settings;
 mod smbios;
+#[cfg(feature = "soak")]
+mod soak;
 mod software;
 mod spd;
 mod storage;

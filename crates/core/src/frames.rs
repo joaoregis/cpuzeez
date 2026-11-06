@@ -153,7 +153,9 @@ pub fn histogram(ms: &[f64], width: f64) -> Vec<(f64, f64)> {
         return Vec::new();
     }
     let max = f.iter().copied().fold(0.0, f64::max);
-    let bins = ((max / width).floor() as usize + 1).min(1000);
+    // At most 1000 bins, whatever the data or the width (corrupt input can be absurd).
+    let top = (max / width).floor();
+    let bins = if top.is_finite() { top.clamp(0.0, 999.0) as usize + 1 } else { 1 };
     let mut counts = vec![0usize; bins];
     for v in &f {
         counts[((v / width).floor() as usize).min(bins - 1)] += 1;

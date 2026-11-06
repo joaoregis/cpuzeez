@@ -37,6 +37,8 @@ pub mod services;
 pub mod session;
 pub mod smbios;
 pub mod startup;
+#[doc(hidden)]
+pub mod testkit;
 pub mod units;
 
 pub mod cpu {

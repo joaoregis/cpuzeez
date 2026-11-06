@@ -78,7 +78,7 @@ fn tone_color(p: &theme::Palette, t: Tone) -> Color32 {
 
 /// Colour is never the only cue (colour-blind users): warn/danger add an
 /// icon (Phosphor: the UI fonts don't have ▲ on every OS).
-fn tone_mark(t: Tone) -> String {
+pub(super) fn tone_mark(t: Tone) -> String {
     match t {
         Tone::Warning => format!("{} ", theme::icon::WARNING),
         Tone::Danger => format!("{} ", theme::icon::WARNING_OCTAGON),

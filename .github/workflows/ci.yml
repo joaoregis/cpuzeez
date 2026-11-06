@@ -9,6 +9,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+# Read-only token: nothing here pushes, comments or publishes.
+permissions:
+  contents: read
+
 jobs:
   native:
     name: ${{ matrix.name }}
@@ -23,14 +27,19 @@ jobs:
           - { name: macOS arm64, os: macos-latest }
           - { name: macOS x64, os: macos-15-intel }
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
+          toolchain: stable
           components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings -A dead_code  # module APIs are used per-OS
       - run: cargo test --workspace --all-targets
+      - name: Soak hooks (the synthetic game) and the soak analysis itself
+        run: |
+          cargo test --bin cpuzeez --features soak soak
+          python .github/scripts/soak.py --selftest
       - name: Build release
         run: cargo build --release
       - name: Static C runtime (starts without the VC++ redistributable)
@@ -103,7 +112,7 @@ jobs:
             attempt 2
           fi
           test -s out/wayland/overview.png
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: report-${{ matrix.os }}
           path: out/
@@ -124,8 +133,10 @@ jobs:
           else
             apt-get update && apt-get install -y --no-install-recommends build-essential curl ca-certificates git python3
           fi
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
       - run: cargo test --workspace
       - run: cargo build --release
       - name: Run
@@ -133,7 +144,7 @@ jobs:
           target/release/cpuzeez -txt=out/report -json=out/report
           target/release/cpuzeez -console | head -n 60
           python3 -c "import json; d=json.load(open('out/report.json')); print([s['title'] for s in d])"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: report-${{ strategy.job-index }}-distro
           path: out/
@@ -143,10 +154,12 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { fetch-depth: 0 }
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - name: Build this PR and its base
         shell: bash
         run: |
@@ -167,7 +180,7 @@ jobs:
         continue-on-error: ${{ contains(github.event.pull_request.labels.*.name, 'visual-change') }}
         run: python .github/scripts/shotdiff.py out/base out/head --max-diff 0.05
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: visual-regression
           path: out/
@@ -176,9 +189,11 @@ jobs:
     name: .deb builds, installs, runs and uninstalls
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: cargo install cargo-deb --locked
       - run: cargo deb
       - name: Install, run, uninstall
@@ -194,24 +209,28 @@ jobs:
     name: Dependencies (licenses, advisories, sources)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
 
   headless:
     name: CLI-only build (no GUI feature)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
       - run: cargo build --no-default-features && ./target/debug/cpuzeez | head -n 20
 
   msi-upgrade:
     name: MSI install / upgrade chain / downgrade-block
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: cargo build --release
       - name: Version mapping self-test
         run: python .github/scripts/pkgver.py --test

@@ -15,6 +15,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 cpuzeez-core = { path = "../crates/core" }
+serde_json = "1"
 
 [[bin]]
 name = "elevated_op"
@@ -54,6 +55,41 @@ bench = false
 [[bin]]
 name = "pci_config"
 path = "fuzz_targets/pci_config.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "presentmon_csv"
+path = "fuzz_targets/presentmon_csv.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "output_lines"
+path = "fuzz_targets/output_lines.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "hw_csv"
+path = "fuzz_targets/hw_csv.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "session_json"
+path = "fuzz_targets/session_json.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "detector"
+path = "fuzz_targets/detector.rs"
 test = false
 doc = false
 bench = false

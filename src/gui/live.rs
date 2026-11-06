@@ -474,6 +474,13 @@ impl State {
         });
     }
 
+    /// The soak tour's capture: a timed one of `secs`, unless one is running.
+    #[cfg(feature = "soak")]
+    pub fn soak_capture(&mut self, mon: &mut Monitor, secs: u32) {
+        self.timed_secs = secs;
+        self.start_capture(mon, Mode::Timed);
+    }
+
     pub fn capturing(&self) -> bool {
         self.capture.as_ref().is_some_and(|c| c.started.is_some())
     }

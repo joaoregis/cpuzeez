@@ -985,17 +985,49 @@ pub fn keys() -> Vec<&'static str> {
 /// Windows of a recorded session: one per second of `frames`, with the
 /// hardware log's readings of that second and the throttling spans.
 pub fn windows_from_session(frames: &[Frame], hw: &HwLog, refresh_hz: Option<f64>, throttling: &[Band]) -> Vec<Window> {
-    let secs = frames.last().map_or(0, |f| f.t_s.floor() as usize + 1);
-    let mut by_sec: Vec<Vec<Frame>> = vec![Vec::new(); secs];
+    // A corrupt file can say a frame happened at t = 1e15 s: never size anything from it.
+    let secs = frames
+        .iter()
+        .map(|f| f.t_s)
+        .filter(|t| t.is_finite() && *t >= 0.0)
+        .fold(0.0, f64::max)
+        .floor()
+        .min((MAX_SESSION_SECONDS - 1) as f64) as usize
+        + 1;
+    let mut by_sec: Vec<Vec<Frame>> = vec![Vec::new(); if frames.is_empty() { 0 } else { secs }];
     for f in frames {
-        if let Some(b) = by_sec.get_mut(f.t_s.max(0.0).floor() as usize) {
+        if f.t_s.is_finite()
+            && f.t_s >= 0.0
+            && let Some(b) = by_sec.get_mut(f.t_s.floor() as usize)
+        {
             b.push(f.clone());
         }
     }
-    let at = |id: &str, s: usize| -> Option<f64> {
-        let v: Vec<f64> = hw.series(id).into_iter().filter(|(t, _)| t.floor() as usize == s).map(|p| p.1).collect();
-        (!v.is_empty()).then(|| v.iter().sum::<f64>() / v.len() as f64)
+    // Each hardware series once, bucketed per second: linear in the log's size.
+    let bucket = |id: &str| -> Vec<Option<f64>> {
+        let mut sum = vec![0.0f64; by_sec.len()];
+        let mut n = vec![0u32; by_sec.len()];
+        for (t, v) in hw.series(id) {
+            if t.is_finite()
+                && t >= 0.0
+                && v.is_finite()
+                && let Some(k) = sum.get_mut(t.floor() as usize)
+            {
+                *k += v;
+                n[t.floor() as usize] += 1;
+            }
+        }
+        sum.iter().zip(&n).map(|(s, n)| (*n > 0).then(|| s / f64::from(*n))).collect()
     };
+    let (gpu_util, cpu_total, busiest, ram, pages, cpu_temp, gpu_temp) = (
+        bucket("gpu0/load/core"),
+        bucket("cpu/load/total"),
+        bucket("cpu/load/max"),
+        bucket("mem/load/used"),
+        bucket("mem/rate/pages_in"),
+        bucket("cpu/temp/package"),
+        bucket("gpu0/temp/core"),
+    );
     by_sec
         .iter()
         .enumerate()
@@ -1003,13 +1035,13 @@ pub fn windows_from_session(frames: &[Frame], hw: &HwLog, refresh_hz: Option<f64
         .map(|(s, b)| {
             let mut w = Window::from_frames(b);
             w.refresh_hz = refresh_hz;
-            w.gpu_util = at("gpu0/load/core", s);
-            w.cpu_total = at("cpu/load/total", s);
-            w.busiest_core = at("cpu/load/max", s);
-            w.ram_used_pct = at("mem/load/used", s);
-            w.pages_in = at("mem/rate/pages_in", s);
-            w.cpu_temp = at("cpu/temp/package", s);
-            w.gpu_temp = at("gpu0/temp/core", s);
+            w.gpu_util = gpu_util[s];
+            w.cpu_total = cpu_total[s];
+            w.busiest_core = busiest[s];
+            w.ram_used_pct = ram[s];
+            w.pages_in = pages[s];
+            w.cpu_temp = cpu_temp[s];
+            w.gpu_temp = gpu_temp[s];
             let on = |kinds: &[&str]| {
                 throttling
                     .iter()
@@ -1023,6 +1055,9 @@ pub fn windows_from_session(frames: &[Frame], hw: &HwLog, refresh_hz: Option<f64
         })
         .collect()
 }
+
+/// The longest session the analysis builds windows for (about 27 hours).
+pub const MAX_SESSION_SECONDS: usize = 100_000;
 
 /// The report section for a session, as English HTML (the offline report).
 pub fn html_section(a: &Analysis) -> String {
