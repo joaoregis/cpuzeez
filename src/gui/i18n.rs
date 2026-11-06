@@ -74,6 +74,7 @@ fn tables() -> &'static [(Table, Table)] {
         (super::drivehealth_view::PT_BR, super::drivehealth_view::ES),
         (super::mini::PT_BR, super::mini::ES),
         (super::live::PT_BR, super::live::ES),
+        (super::live_sessions::PT_BR, super::live_sessions::ES),
         (super::layout_editor::PT_BR, super::layout_editor::ES),
         (super::system::PT_BR, super::system::ES),
         (super::system_history::PT_BR, super::system_history::ES),

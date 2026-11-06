@@ -31,6 +31,7 @@ mod latency_view;
 mod layout_editor;
 pub mod layout_view;
 pub mod live;
+mod live_sessions;
 mod memplus_view;
 mod mini;
 mod plot;
@@ -643,7 +644,13 @@ impl App {
                 }
             }
             Page::System => self.system.page(ui, &self.ctx, &mut self.mon),
-            Page::Live => self.live.page(ui, &mut self.mon, &mut self.access),
+            Page::Live => {
+                self.live.page(ui, &mut self.mon, &mut self.access);
+                if let Some(path) = self.live.sessions.png_request.take() {
+                    self.shot = Some(Shot::Png(path));
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
+                }
+            }
             Page::Processor => {
                 let sub = [c.info.codename.clone(), c.info.package.clone(), c.info.technology.clone()]
                     .into_iter()

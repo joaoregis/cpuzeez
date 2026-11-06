@@ -48,6 +48,7 @@ pub struct State {
     /// The capture just written, opened in Sessions.
     pub last_session: Option<PathBuf>,
     capture_error: Option<String>,
+    pub sessions: super::live_sessions::Sessions,
 }
 
 /// A capture in progress (S2b-09).
@@ -531,12 +532,12 @@ impl State {
                     self.first_use(ui, mon);
                 }
             }
-            Tab::Sessions => widgets::empty_state(
-                ui,
-                icon::FILM_STRIP,
-                tr("No sessions yet"),
-                tr("Captured sessions and their reports will be listed here."),
-            ),
+            Tab::Sessions => {
+                if let Some(dir) = self.last_session.take() {
+                    self.sessions.focus(dir);
+                }
+                self.sessions.show(ui);
+            }
         }
     }
 
@@ -781,7 +782,7 @@ impl State {
 }
 
 /// `frames.csv` (PresentMon columns, opens in CapFrameX) and `session.json`.
-fn write_session(dir: &std::path::Path, frames: &[cpuzeez_core::frames::Frame], s: &Session) {
+pub fn write_session(dir: &std::path::Path, frames: &[cpuzeez_core::frames::Frame], s: &Session) {
     use std::io::Write;
     if let Ok(f) = std::fs::File::create(dir.join("frames.csv")) {
         let mut w = std::io::BufWriter::new(f);
