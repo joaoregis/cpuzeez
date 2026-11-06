@@ -19,11 +19,14 @@ pub enum Category {
     Diagnostics,
     /// Preferences (`settings.json`); deleting them resets the app.
     Settings,
+    /// ZeeZ Live captures (`sessions/<date>_<game>/`).
+    Sessions,
 }
 
 impl Category {
-    pub const ALL: [Category; 6] = [
+    pub const ALL: [Category; 7] = [
         Category::SensorLogs,
+        Category::Sessions,
         Category::BenchmarkHistory,
         Category::AuditLog,
         Category::AppLog,
@@ -40,6 +43,7 @@ impl Category {
             Category::AppLog => "App log",
             Category::Diagnostics => "Diagnostics bundles",
             Category::Settings => "Settings",
+            Category::Sessions => "ZeeZ Live sessions",
         }
     }
 
@@ -62,6 +66,14 @@ impl Category {
                 })
                 .unwrap_or_default(),
             Category::Settings => existing(&[dir.join("settings.json")]),
+            Category::Sessions => std::fs::read_dir(dir.join("sessions"))
+                .map(|rd| {
+                    rd.flatten()
+                        .flat_map(|s| std::fs::read_dir(s.path()).into_iter().flatten().flatten().map(|e| e.path()))
+                        .filter(|p| p.is_file())
+                        .collect()
+                })
+                .unwrap_or_default(),
         }
     }
 }
@@ -95,6 +107,9 @@ pub fn delete_in(dir: &Path, cat: Category) -> std::io::Result<usize> {
     }
     if cat == Category::Diagnostics && dir.join("diagnostics").exists() {
         std::fs::remove_dir_all(dir.join("diagnostics"))?; // the now-empty bundle folders
+    }
+    if cat == Category::Sessions && dir.join("sessions").exists() {
+        std::fs::remove_dir_all(dir.join("sessions"))?;
     }
     Ok(f.len())
 }

@@ -847,6 +847,8 @@ pub struct Telemetry {
     engine: Engine,
     throttles: Arc<Mutex<Vec<Throttle>>>,
     csv: Arc<Mutex<Option<Csv>>>,
+    /// A ZeeZ Live capture's `hw.csv` (the leased metrics, same format).
+    capture: Arc<Mutex<Option<Csv>>>,
     /// Set while a CSV log runs (the engine then reads every source).
     logging: Arc<AtomicBool>,
     gpu_live: Arc<Mutex<Vec<crate::gpu::Live>>>,
@@ -900,8 +902,24 @@ impl Telemetry {
     pub fn start(ctx: Arc<Ctx>, period: Duration, keep: Duration) -> Telemetry {
         let gpu_live = Arc::new(Mutex::new(Vec::new()));
         let engine = Engine::start(sources(&ctx, &gpu_live), metrics::Config { period, keep, ..Default::default() });
-        let t = Telemetry { engine, throttles: Arc::default(), csv: Arc::default(), logging: Arc::default(), gpu_live };
+        let t = Telemetry {
+            engine,
+            throttles: Arc::default(),
+            csv: Arc::default(),
+            capture: Arc::default(),
+            logging: Arc::default(),
+            gpu_live,
+        };
         t.engine.add_hook(throttle_hook(ctx, t.throttles.clone()));
+        let cap = t.capture.clone();
+        t.engine.add_hook(Box::new(move |tick: &Tick| {
+            let mut c = lock(&cap);
+            if let Some(f) = c.as_mut()
+                && f.write(tick.wall, tick.readings).is_err()
+            {
+                *c = None;
+            }
+        }));
         let csv = t.csv.clone();
         t.engine.add_hook(Box::new(move |tick: &Tick| {
             let mut c = lock(&csv);
@@ -968,6 +986,16 @@ impl Telemetry {
     /// Sources that failed recently: (name, error).
     pub fn failures(&self) -> Vec<(&'static str, String)> {
         self.engine.failures()
+    }
+
+    /// Write the sampled metrics to `path` (a capture's `hw.csv`) until `stop_capture`.
+    pub fn start_capture(&self, path: &std::path::Path) -> std::io::Result<()> {
+        *lock(&self.capture) = Some(Csv::create(path)?);
+        Ok(())
+    }
+
+    pub fn stop_capture(&self) {
+        *lock(&self.capture) = None;
     }
 
     /// Append every sample of every metric to `path` as CSV until `stop_csv`.

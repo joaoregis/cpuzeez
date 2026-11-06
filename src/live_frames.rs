@@ -56,6 +56,27 @@ struct Hub {
     running: bool,
     /// Present mode of the target (exclusive fullscreen hides the overlay).
     present_mode: String,
+    /// Every target frame since `begin_capture` (None: not capturing).
+    captured: Option<Vec<Frame>>,
+}
+
+/// At most this many frames per capture (about 2.3 h at 240 FPS).
+const CAPTURE_MAX: usize = 2_000_000;
+
+/// Start keeping every frame of the target.
+pub fn begin_capture() {
+    lock().captured = Some(Vec::new());
+}
+
+/// Stop, and return the frames with times from the capture's first frame.
+pub fn end_capture() -> Vec<Frame> {
+    let mut v = lock().captured.take().unwrap_or_default();
+    if let Some(t0) = v.first().map(|f| f.t_s) {
+        for f in &mut v {
+            f.t_s -= t0;
+        }
+    }
+    v
 }
 
 fn hub() -> &'static Mutex<Hub> {
@@ -156,6 +177,9 @@ pub fn push(batch: Vec<Frame>, foreground: Option<u32>) {
         }
         if Some(f.pid) == target {
             h.present_mode = f.present_mode.clone();
+            if let Some(c) = h.captured.as_mut().filter(|c| c.len() < CAPTURE_MAX) {
+                c.push(f.clone());
+            }
             h.frames.push_back(f);
         }
     }

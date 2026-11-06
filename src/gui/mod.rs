@@ -843,7 +843,7 @@ impl App {
     /// minimized (as CPU-Z does). Sent only when it changes.
     fn window_title(&mut self, ectx: &egui::Context) {
         let mut t = String::new();
-        if self.mon.recording() {
+        if self.mon.recording() || self.live.capturing() {
             t += "● REC · ";
         }
         if ectx.input(|i| i.viewport().minimized.unwrap_or(false)) {

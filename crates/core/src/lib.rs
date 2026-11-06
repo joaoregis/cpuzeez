@@ -32,6 +32,7 @@ pub mod report;
 #[cfg(test)]
 mod robustness;
 pub mod services;
+pub mod session;
 pub mod smbios;
 pub mod startup;
 pub mod units;

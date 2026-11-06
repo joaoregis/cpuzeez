@@ -205,6 +205,10 @@ impl Monitor {
         self.view.table.filter = filter;
     }
 
+    pub fn ctx(&self) -> &Arc<Ctx> {
+        &self.ctx
+    }
+
     pub fn tel(&mut self) -> Telemetry {
         let (period, keep) = self.sampling();
         let ctx = self.ctx.clone();

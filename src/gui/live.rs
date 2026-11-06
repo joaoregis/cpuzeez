@@ -12,9 +12,11 @@ use super::theme::{self, icon};
 use super::widgets::{self, Tone};
 use cpuzeez_core::layout::presets;
 use cpuzeez_core::live::{self as model, Anchor, HotkeyAction};
+use cpuzeez_core::session::{self, Band, Marker, Mode, Session};
 use cpuzeez_platform::overlay as os_overlay;
 use eframe::egui::{self, RichText, Ui};
-use std::time::{Duration, Instant};
+use std::path::PathBuf;
+use std::time::{Duration, Instant, SystemTime};
 
 /// The overlay window's title: how `platform::overlay` finds it.
 pub const OVERLAY_TITLE: &str = "CpuZeeZ ZeeZ Live overlay";
@@ -40,6 +42,43 @@ pub struct State {
     hotkeys: super::hotkeys::Hotkeys,
     /// Capture and marker presses, for the recorder (S2b-09).
     pub capture_requests: Vec<HotkeyAction>,
+    capture: Option<Capture>,
+    /// Timed capture length, seconds.
+    timed_secs: u32,
+    /// The capture just written, opened in Sessions.
+    pub last_session: Option<PathBuf>,
+    capture_error: Option<String>,
+}
+
+/// A capture in progress (S2b-09).
+struct Capture {
+    dir: PathBuf,
+    mode: Mode,
+    wall: SystemTime,
+    /// The countdown before a timed capture (zeez-live §6).
+    begins: Instant,
+    started: Option<Instant>,
+    length: Option<Duration>,
+    game: (u32, String),
+    markers: Vec<Marker>,
+    throttling: Vec<Band>,
+    open_band: Option<(f64, String)>,
+}
+
+impl Capture {
+    fn elapsed(&self) -> f64 {
+        self.started.map_or(0.0, |s| s.elapsed().as_secs_f64())
+    }
+}
+
+/// Where captures go: `sessions/` next to the settings.
+pub fn sessions_dir() -> Option<PathBuf> {
+    crate::settings::dir().map(|d| d.join("sessions"))
+}
+
+fn timer(s: f64) -> String {
+    let s = s.max(0.0) as u64;
+    format!("{:02}:{:02}", s / 60, s % 60)
 }
 
 /// Every frame: the hotkeys, and the overlay when it's shown. `live`: false
@@ -51,11 +90,20 @@ pub fn overlay(mon: &mut Monitor, st: &mut State, ectx: &egui::Context, live: bo
             st.hotkey(a, mon);
         }
     }
+    for a in std::mem::take(&mut st.capture_requests) {
+        match a {
+            HotkeyAction::Capture if st.capture.is_some() => st.stop_capture(mon),
+            HotkeyAction::Capture => st.start_capture(mon, Mode::Manual),
+            _ => st.marker(),
+        }
+    }
+    st.tick_capture(mon);
     let o = mon.settings.overlay.clone();
     if !o.shown {
         st.styled = None;
         return;
     }
+    let rec = st.capture.as_ref().map(|c| (c.started.is_some(), c.elapsed(), c.begins));
     let tel = mon.tel();
     let lease = super::layout_view::prefixes(&o.layout.widgets);
     tel.want("overlay", &lease.iter().map(String::as_str).collect::<Vec<_>>());
@@ -74,7 +122,26 @@ pub fn overlay(mon: &mut Monitor, st: &mut State, ectx: &egui::Context, live: bo
     let mut end_edit = false;
     ectx.show_viewport_immediate(egui::ViewportId::from_hash_of("zeez-live-overlay"), builder, |ui, _| {
         egui::CentralPanel::default().frame(egui::Frame::NONE).show(ui, |ui| {
-            let drawn = super::layout_view::show(ui, &o.layout, &series, &|id| tel.points(id)).rect;
+            // ● REC is always on the overlay while capturing (zeez-live §7).
+            let rec_rect = rec.map(|(on, t, begins)| {
+                let p = theme::palette(ui);
+                let text = if on {
+                    format!("{} REC {}", icon::CIRCLE, timer(t))
+                } else {
+                    format!("{} REC {}…", icon::CIRCLE, begins.saturating_duration_since(Instant::now()).as_secs() + 1)
+                };
+                egui::Frame::NONE
+                    .fill(egui::Color32::from_black_alpha(170))
+                    .corner_radius(egui::CornerRadius::same(4))
+                    .inner_margin(egui::Margin::symmetric(6, 2))
+                    .show(ui, |ui| ui.label(RichText::new(text).strong().color(p.danger)))
+                    .response
+                    .rect
+            });
+            let mut drawn = super::layout_view::show(ui, &o.layout, &series, &|id| tel.points(id)).rect;
+            if let Some(r) = rec_rect {
+                drawn = drawn.union(r);
+            }
             if edit {
                 let p = theme::palette(ui);
                 ui.painter().rect_stroke(
@@ -193,6 +260,188 @@ impl State {
                 .small()
                 .color(p.text_muted),
         );
+    }
+
+    pub fn capturing(&self) -> bool {
+        self.capture.as_ref().is_some_and(|c| c.started.is_some())
+    }
+
+    /// Start a capture: manual now, timed after a 3 s countdown.
+    fn start_capture(&mut self, mon: &mut Monitor, mode: Mode) {
+        if self.capture.is_some() {
+            return;
+        }
+        let Some(root) = sessions_dir() else {
+            self.capture_error = Some(tr("No data folder to save the session in.").into());
+            return;
+        };
+        let wall = SystemTime::now();
+        let iso = cpuzeez_core::metrics::iso8601(wall);
+        let stamp = format!("{}_{}{}", &iso[..10], &iso[11..13], &iso[14..16]);
+        let game = crate::live_frames::target().unwrap_or((0, "desktop".into()));
+        let mut dir = root.join(session::folder_name(&stamp, &game.1));
+        let mut n = 2;
+        while dir.exists() {
+            dir = root.join(format!("{}-{n}", session::folder_name(&stamp, &game.1)));
+            n += 1;
+        }
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            self.capture_error = Some(e.to_string());
+            return;
+        }
+        let countdown = if mode == Mode::Timed { 3 } else { 0 };
+        let length = (mode == Mode::Timed).then(|| Duration::from_secs(self.timed_secs.max(1) as u64));
+        self.capture_error = None;
+        self.capture = Some(Capture {
+            dir,
+            mode,
+            wall,
+            begins: Instant::now() + Duration::from_secs(countdown),
+            started: None,
+            length,
+            game,
+            markers: Vec::new(),
+            throttling: Vec::new(),
+            open_band: None,
+        });
+        self.tick_capture(mon);
+    }
+
+    fn marker(&mut self) {
+        if let Some(c) = self.capture.as_mut().filter(|c| c.started.is_some()) {
+            let n = c.markers.len() + 1;
+            c.markers.push(Marker { t_s: c.elapsed(), label: format!("Marker {n}") });
+        }
+    }
+
+    /// Every frame while capturing: start after the countdown, keep the
+    /// metrics sampled, record throttling, stop a timed capture.
+    fn tick_capture(&mut self, mon: &mut Monitor) {
+        let Some(c) = self.capture.as_mut() else { return };
+        let tel = mon.tel();
+        tel.want("capture", &["cpu", "gpu", "mem", "frames"]);
+        if c.started.is_none() {
+            if Instant::now() < c.begins {
+                return;
+            }
+            if let Err(e) = tel.start_capture(&c.dir.join("hw.csv")) {
+                self.capture_error = Some(e.to_string());
+                self.capture = None;
+                return;
+            }
+            crate::live_frames::begin_capture();
+            c.started = Some(Instant::now());
+        }
+        let t = c.elapsed();
+        let thr = tel.throttling();
+        match (&c.open_band, thr.first()) {
+            (None, Some(th)) => c.open_band = Some((t, format!("{}: {}", th.device, th.detail))),
+            (Some((from, label)), None) => {
+                c.throttling.push(Band { from_s: *from, to_s: t, label: label.clone() });
+                c.open_band = None;
+            }
+            _ => {}
+        }
+        if c.length.is_some_and(|l| t >= l.as_secs_f64()) {
+            self.stop_capture(mon);
+        }
+    }
+
+    /// Stop and write `frames.csv` and `session.json` (on a thread: a long
+    /// capture is millions of lines).
+    fn stop_capture(&mut self, mon: &mut Monitor) {
+        let Some(mut c) = self.capture.take() else { return };
+        let tel = mon.tel();
+        tel.stop_capture();
+        if c.started.is_none() {
+            let _ = std::fs::remove_dir(&c.dir); // cancelled during the countdown
+            return;
+        }
+        let frames = crate::live_frames::end_capture();
+        let duration_s = c.elapsed();
+        if let Some((from, label)) = c.open_band.take() {
+            c.throttling.push(Band { from_s: from, to_s: duration_s, label });
+        }
+        let ctx = mon.ctx().clone();
+        let cpu = crate::cpu::get(&ctx).name.clone();
+        let gpu = crate::gpu::adapters(&ctx).first().cloned();
+        let s = Session {
+            version: session::VERSION,
+            game: c.game.1.clone(),
+            pid: c.game.0,
+            started: cpuzeez_core::metrics::iso8601(c.wall),
+            duration_s,
+            mode: c.mode,
+            source: if cfg!(windows) {
+                format!("PresentMon {}", crate::executor::pin("PRESENTMON_VERSION"))
+            } else {
+                "MangoHud".into()
+            },
+            system: session::System {
+                cpu,
+                gpu: gpu.as_ref().map(|g| g.name.clone()).unwrap_or_default(),
+                gpu_driver: gpu.and_then(|g| g.driver_version).unwrap_or_default(),
+                os: std::env::consts::OS.into(),
+                ..Default::default()
+            },
+            markers: c.markers,
+            throttling: c.throttling,
+            summary: cpuzeez_core::frames::summarize(&frames, Default::default()),
+            convention: Default::default(),
+            note: String::new(),
+        };
+        let dir = c.dir.clone();
+        std::thread::spawn(move || write_session(&dir, &frames, &s));
+        self.last_session = Some(c.dir);
+        self.tab = Tab::Sessions;
+    }
+
+    fn capture_card(&mut self, ui: &mut Ui, mon: &mut Monitor) {
+        let p = theme::palette(ui);
+        if self.timed_secs == 0 {
+            self.timed_secs = 60; // the usual benchmark pass
+        }
+        widgets::card(ui, icon::RECORD, tr("Capture"), |ui| {
+            ui.horizontal_wrapped(|ui| match &self.capture {
+                Some(c) => {
+                    let t = c.elapsed();
+                    let text = if c.started.is_some() {
+                        format!("{} REC {}", icon::CIRCLE, timer(t))
+                    } else {
+                        tr("Starting…").into()
+                    };
+                    widgets::pill(ui, &text, Tone::Danger);
+                    if ui.button(format!("{} {}", icon::STOP, tr("Stop"))).clicked() {
+                        self.stop_capture(mon);
+                    }
+                    if ui.button(format!("{} {}", icon::FLAG, tr("Marker"))).clicked() {
+                        self.marker();
+                    }
+                }
+                None => {
+                    if widgets::primary_button(ui, &format!("{} {}", icon::RECORD, tr("Start capture"))).clicked() {
+                        self.start_capture(mon, Mode::Manual);
+                    }
+                    ui.separator();
+                    ui.add(egui::DragValue::new(&mut self.timed_secs).range(5..=3600).suffix(" s"));
+                    if ui.button(format!("{} {}", icon::TIMER, tr("Timed capture"))).clicked() {
+                        self.start_capture(mon, Mode::Timed);
+                    }
+                }
+            });
+            if let Some(e) = &self.capture_error {
+                ui.label(RichText::new(super::i18n::trf("Capture failed: {}", &[e])).color(p.danger));
+            }
+            let keys = mon.settings.overlay.keys(HotkeyAction::Capture).to_string();
+            ui.label(
+                RichText::new(super::i18n::trf(
+                    "Timed captures count down 3 s first. {} starts or stops a capture from the game. Nothing is recorded unless you start it.",
+                    &[&keys],
+                ))
+                .small()
+                .color(p.text_muted),
+            );
+        });
     }
 
     fn hotkey(&mut self, a: HotkeyAction, mon: &mut Monitor) {
@@ -363,6 +612,7 @@ impl State {
                 );
             }
         });
+        self.capture_card(ui, mon);
         let o = mon.settings.overlay.clone();
         widgets::card(ui, icon::MONITOR, tr("Overlay"), |ui| {
             ui.label(
@@ -530,6 +780,21 @@ impl State {
     }
 }
 
+/// `frames.csv` (PresentMon columns, opens in CapFrameX) and `session.json`.
+fn write_session(dir: &std::path::Path, frames: &[cpuzeez_core::frames::Frame], s: &Session) {
+    use std::io::Write;
+    if let Ok(f) = std::fs::File::create(dir.join("frames.csv")) {
+        let mut w = std::io::BufWriter::new(f);
+        let _ = writeln!(w, "{}", cpuzeez_core::frames::FRAMES_CSV_HEADER);
+        for fr in frames {
+            let _ = writeln!(w, "{}", cpuzeez_core::frames::frame_csv_line(fr));
+        }
+    }
+    if let Ok(json) = serde_json::to_string_pretty(s) {
+        let _ = std::fs::write(dir.join("session.json"), json);
+    }
+}
+
 /// What the overlay can't do on this OS (zeez-live §8), said up front.
 fn limits() -> Vec<&'static str> {
     let mut v = Vec::new();
@@ -548,6 +813,18 @@ fn limits() -> Vec<&'static str> {
 }
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("No data folder to save the session in.", "Sem pasta de dados para salvar a sessão."),
+    ("Capture", "Captura"),
+    ("Starting…", "Iniciando…"),
+    ("Stop", "Parar"),
+    ("Marker", "Marcador"),
+    ("Start capture", "Iniciar captura"),
+    ("Timed capture", "Captura cronometrada"),
+    ("Capture failed: {}", "A captura falhou: {}"),
+    (
+        "Timed captures count down 3 s first. {} starts or stops a capture from the game. Nothing is recorded unless you start it.",
+        "Capturas cronometradas contam 3 s antes. {} inicia ou para a captura de dentro do jogo. Nada é gravado sem você iniciar.",
+    ),
     ("Game", "Jogo"),
     ("Measuring", "Medindo"),
     ("nothing yet", "nada ainda"),
@@ -686,6 +963,18 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("No data folder to save the session in.", "No hay carpeta de datos para guardar la sesión."),
+    ("Capture", "Captura"),
+    ("Starting…", "Iniciando…"),
+    ("Stop", "Detener"),
+    ("Marker", "Marcador"),
+    ("Start capture", "Iniciar captura"),
+    ("Timed capture", "Captura cronometrada"),
+    ("Capture failed: {}", "La captura falló: {}"),
+    (
+        "Timed captures count down 3 s first. {} starts or stops a capture from the game. Nothing is recorded unless you start it.",
+        "Las capturas cronometradas cuentan 3 s antes. {} inicia o detiene la captura desde el juego. No se graba nada si no lo inicias.",
+    ),
     ("Game", "Juego"),
     ("Measuring", "Midiendo"),
     ("nothing yet", "nada aún"),
@@ -825,3 +1114,41 @@ pub const ES: &[(&str, &str)] = &[
         "Sobre apps a pantalla completa (en su propio Space) el overlay aún no se muestra.",
     ),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// What a capture writes reads back: frames through the PresentMon parser
+    /// (so CapFrameX reads it too), the session through serde.
+    #[test]
+    fn a_written_session_reads_back() {
+        let dir = std::env::temp_dir().join(format!("cz-session-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let frames: Vec<cpuzeez_core::frames::Frame> = (0..100)
+            .map(|i| cpuzeez_core::frames::Frame {
+                t_s: i as f64 * 0.01,
+                ms: 10.0,
+                app: "game.exe".into(),
+                pid: 7,
+                gpu_busy_ms: Some(8.0),
+                ..Default::default()
+            })
+            .collect();
+        let s = Session {
+            game: "game.exe".into(),
+            summary: cpuzeez_core::frames::summarize(&frames, Default::default()),
+            markers: vec![Marker { t_s: 0.5, label: "Marker 1".into() }],
+            ..Default::default()
+        };
+        write_session(&dir, &frames, &s);
+        let back =
+            cpuzeez_core::frames::parse_presentmon(&std::fs::read_to_string(dir.join("frames.csv")).unwrap()).unwrap();
+        assert_eq!(back.len(), 100);
+        assert_eq!((back[99].ms, back[99].gpu_busy_ms, back[99].pid), (10.0, Some(8.0), 7));
+        let js: Session = serde_json::from_str(&std::fs::read_to_string(dir.join("session.json")).unwrap()).unwrap();
+        assert_eq!(js, s);
+        assert!((js.summary.avg_fps - 100.0).abs() < 1e-6);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
