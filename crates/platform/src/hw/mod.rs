@@ -11,6 +11,19 @@ mod windows;
 
 pub use cpuzeez_core::pci::Bdf;
 
+static PAUSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// ZeeZ Live's anti-cheat safe mode (S2b-12): while on, no call reaches the
+/// PawnIO driver; readings that need it come back empty and the app shows
+/// what the OS and the GPU driver give. The driver itself stays loaded.
+pub fn pause(on: bool) {
+    PAUSED.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn paused() -> bool {
+    PAUSED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// One SMBus/I2C adapter that can talk to DIMM SPD/thermal/PMIC devices.
 pub trait Smbus: Send + Sync {
     fn name(&self) -> String;
@@ -147,4 +160,16 @@ pub fn detect() -> Box<dyn Hw> {
 #[allow(dead_code)]
 pub(crate) fn none() -> Box<dyn Hw> {
     Box::new(NoHw)
+}
+
+#[cfg(test)]
+mod pause_tests {
+    /// Safe mode closes the PawnIO gate (Windows: `Module::exec` checks it).
+    #[test]
+    fn pause_flag_round_trips() {
+        super::pause(true);
+        assert!(super::paused());
+        super::pause(false);
+        assert!(!super::paused());
+    }
 }

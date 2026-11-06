@@ -151,6 +151,9 @@ impl Module {
 
     /// Run `ioctl_*` with `input`; returns the cells the module wrote (≤ out_n).
     fn exec(&self, f: &str, input: &[u64], out_n: usize) -> Option<Vec<u64>> {
+        if super::paused() {
+            return None; // anti-cheat safe mode: the one gate every PawnIO call passes
+        }
         let f = fn_name(f)?;
         let mut out = vec![0u64; out_n];
         let mut ret = 0usize;

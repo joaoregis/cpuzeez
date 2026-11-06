@@ -49,6 +49,12 @@ pub struct State {
     pub last_session: Option<PathBuf>,
     capture_error: Option<String>,
     pub sessions: super::live_sessions::Sessions,
+    /// Profile games running at the last check, and when it was.
+    running: Vec<String>,
+    checked: Option<Instant>,
+    /// The overlay was shown, or the capture started, by a profile.
+    auto_shown: Option<String>,
+    auto_capture: Option<String>,
 }
 
 /// A capture in progress (S2b-09).
@@ -99,6 +105,9 @@ pub fn overlay(mon: &mut Monitor, st: &mut State, ectx: &egui::Context, live: bo
         }
     }
     st.tick_capture(mon);
+    if live {
+        st.automation(mon);
+    }
     let o = mon.settings.overlay.clone();
     if !o.shown {
         st.styled = None;
@@ -106,7 +115,10 @@ pub fn overlay(mon: &mut Monitor, st: &mut State, ectx: &egui::Context, live: bo
     }
     let rec = st.capture.as_ref().map(|c| (c.started.is_some(), c.elapsed(), c.begins));
     let tel = mon.tel();
-    let lease = super::layout_view::prefixes(&o.layout.widgets);
+    // A game's profile can bring its own layout and place.
+    let target = crate::live_frames::target().map(|t| t.1);
+    let (layout, anchor, offset) = o.effective(target.as_deref());
+    let lease = super::layout_view::prefixes(&layout.widgets);
     tel.want("overlay", &lease.iter().map(String::as_str).collect::<Vec<_>>());
     let series = tel.series_with(|_| false);
     let edit = st.edit_mode;
@@ -139,7 +151,7 @@ pub fn overlay(mon: &mut Monitor, st: &mut State, ectx: &egui::Context, live: bo
                     .response
                     .rect
             });
-            let mut drawn = super::layout_view::show(ui, &o.layout, &series, &|id| tel.points(id)).rect;
+            let mut drawn = super::layout_view::show(ui, &layout, &series, &|id| tel.points(id)).rect;
             if let Some(r) = rec_rect {
                 drawn = drawn.union(r);
             }
@@ -174,7 +186,7 @@ pub fn overlay(mon: &mut Monitor, st: &mut State, ectx: &egui::Context, live: bo
                 } else {
                     // ponytail: placed on the monitor the window is on, from its
                     // origin, so the primary display; per-monitor origins need winit.
-                    let pos = model::place(o.anchor, o.offset, size, scr);
+                    let pos = model::place(anchor, offset, size, scr);
                     if (pos[0] - r.min.x).abs() + (pos[1] - r.min.y).abs() > 1.0 {
                         ui.ctx().send_viewport_cmd(egui::ViewportCommand::OuterPosition(pos.into()));
                     }
@@ -267,8 +279,63 @@ impl State {
         self.capture.as_ref().is_some_and(|c| c.started.is_some())
     }
 
+    /// Every 2 s while a profile automates: which of its games run, and
+    /// show/hide, capture and safe mode as they start and stop.
+    fn automation(&mut self, mon: &mut Monitor) {
+        let profiles: Vec<model::Profile> =
+            mon.settings.overlay.profiles.iter().filter(|p| p.automates()).cloned().collect();
+        if profiles.is_empty() {
+            if !self.running.is_empty() {
+                self.running.clear();
+                cpuzeez_platform::hw::pause(false);
+            }
+            return;
+        }
+        if self.checked.is_some_and(|t| t.elapsed() < Duration::from_secs(2)) {
+            return;
+        }
+        self.checked = Some(Instant::now());
+        // One kernel snapshot without threads: a few ms every 2 s.
+        let names: Vec<String> = cpuzeez_platform::procs::snapshot(false)
+            .into_iter()
+            .map(|p| p.name)
+            .filter(|n| model::profile_for(&profiles, n).is_some())
+            .collect();
+        let (started, stopped) = model::transitions(&self.running, &names);
+        for exe in started {
+            let Some(p) = model::profile_for(&profiles, exe) else { continue };
+            if p.auto_show && !mon.settings.overlay.shown {
+                mon.set_setting(|s| s.overlay.shown = true);
+                self.auto_shown = Some(exe.to_string());
+            }
+            if p.auto_capture && self.capture.is_none() {
+                self.start_capture_of(mon, Mode::Automatic, Some((0, exe.to_string())));
+                self.auto_capture = Some(exe.to_string());
+            }
+        }
+        for exe in stopped {
+            if self.auto_shown.as_deref().is_some_and(|e| e.eq_ignore_ascii_case(&exe)) {
+                mon.set_setting(|s| s.overlay.shown = false);
+                self.auto_shown = None;
+            }
+            if self.auto_capture.as_deref().is_some_and(|e| e.eq_ignore_ascii_case(&exe)) {
+                self.stop_capture(mon);
+                self.auto_capture = None;
+            }
+        }
+        // Safe mode holds while any safe-mode game runs.
+        let safe = names.iter().any(|n| model::profile_for(&profiles, n).is_some_and(|p| p.safe_mode));
+        cpuzeez_platform::hw::pause(safe);
+        self.running = names;
+    }
+
     /// Start a capture: manual now, timed after a 3 s countdown.
     fn start_capture(&mut self, mon: &mut Monitor, mode: Mode) {
+        self.start_capture_of(mon, mode, None);
+    }
+
+    /// `game`: what an automatic capture is of (else the measured app).
+    fn start_capture_of(&mut self, mon: &mut Monitor, mode: Mode, game: Option<(u32, String)>) {
         if self.capture.is_some() {
             return;
         }
@@ -279,7 +346,7 @@ impl State {
         let wall = SystemTime::now();
         let iso = cpuzeez_core::metrics::iso8601(wall);
         let stamp = format!("{}_{}{}", &iso[..10], &iso[11..13], &iso[14..16]);
-        let game = crate::live_frames::target().unwrap_or((0, "desktop".into()));
+        let game = game.or_else(crate::live_frames::target).unwrap_or((0, "desktop".into()));
         let mut dir = root.join(session::folder_name(&stamp, &game.1));
         let mut n = 2;
         while dir.exists() {
@@ -761,6 +828,7 @@ impl State {
             });
         });
         self.hotkeys_card(ui, &mut o);
+        profiles_card(ui, &mut o);
         widgets::card(ui, icon::GEAR_SIX, tr("Behaviour"), |ui| {
             if cfg!(windows) {
                 ui.checkbox(&mut o.hide_from_capture, tr("Hide from screenshots, recordings and streams"));
@@ -796,6 +864,61 @@ pub fn write_session(dir: &std::path::Path, frames: &[cpuzeez_core::frames::Fram
     }
 }
 
+/// Per-game profiles (zeez-live §5.4, S2b-11) and anti-cheat safe mode (§7, S2b-12).
+fn profiles_card(ui: &mut Ui, o: &mut model::Overlay) {
+    let p = theme::palette(ui);
+    widgets::card(ui, icon::GAME_CONTROLLER, tr("Per-game profiles"), |ui| {
+        ui.label(RichText::new(tr("A game's own style and place, and what happens when it starts. Everything here is off until you turn it on.")).small().color(p.text_secondary));
+        let mut remove = None;
+        let (layout, anchor, offset) = (o.layout.clone(), o.anchor, o.offset);
+        for (i, pr) in o.profiles.iter_mut().enumerate() {
+            egui::Frame::group(ui.style()).show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.add(egui::TextEdit::singleline(&mut pr.exe).desired_width(180.0).hint_text("game.exe"));
+                    let own = pr.layout.is_some();
+                    let label = if own { tr("Own style: update to the current one") } else { tr("Use the current style and place") };
+                    if ui.button(label).clicked() {
+                        pr.layout = Some(layout.clone());
+                        pr.anchor = Some(anchor);
+                        pr.offset = Some(offset);
+                    }
+                    if own && ui.button(tr("Use the overlay's")).clicked() {
+                        pr.layout = None;
+                        pr.anchor = None;
+                        pr.offset = None;
+                    }
+                    if ui.small_button(icon::TRASH).clicked() {
+                        remove = Some(i);
+                    }
+                });
+                ui.horizontal_wrapped(|ui| {
+                    ui.checkbox(&mut pr.auto_show, tr("Show the overlay when it starts"));
+                    ui.checkbox(&mut pr.auto_capture, tr("Capture while it runs"));
+                    ui.checkbox(&mut pr.safe_mode, tr("Anti-cheat safe mode"))
+                        .on_hover_text(tr("While this game runs, CpuZeeZ reads nothing through the PawnIO driver: temperatures and clocks that need it go blank, GPU and OS readings stay. The driver stays loaded; if an anti-cheat refuses the driver itself, uninstall PawnIO."));
+                });
+                if pr.auto_capture {
+                    ui.label(RichText::new(tr("Records every session of this game; ● REC shows while it does.")).small().color(p.warning));
+                }
+            });
+        }
+        if let Some(i) = remove {
+            o.profiles.remove(i);
+        }
+        ui.horizontal(|ui| {
+            if ui.button(format!("{} {}", icon::PLUS, tr("Add a game"))).clicked() {
+                o.profiles.push(model::Profile::default());
+            }
+            if let Some((_, game)) = crate::live_frames::target()
+                && model::profile_for(&o.profiles, &game).is_none()
+                && ui.button(format!("{} {}", icon::PLUS, super::i18n::trf("Add {}", &[&game]))).clicked()
+            {
+                o.profiles.push(model::Profile { exe: game, ..Default::default() });
+            }
+        });
+    });
+}
+
 /// What the overlay can't do on this OS (zeez-live §8), said up front.
 fn limits() -> Vec<&'static str> {
     let mut v = Vec::new();
@@ -814,6 +937,27 @@ fn limits() -> Vec<&'static str> {
 }
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Per-game profiles", "Perfis por jogo"),
+    (
+        "A game's own style and place, and what happens when it starts. Everything here is off until you turn it on.",
+        "O estilo e a posição de cada jogo, e o que acontece quando ele abre. Tudo aqui fica desligado até você ligar.",
+    ),
+    ("Own style: update to the current one", "Estilo próprio: atualizar para o atual"),
+    ("Use the current style and place", "Usar o estilo e a posição atuais"),
+    ("Use the overlay's", "Usar o do overlay"),
+    ("Show the overlay when it starts", "Mostrar o overlay quando ele abrir"),
+    ("Capture while it runs", "Capturar enquanto ele roda"),
+    ("Anti-cheat safe mode", "Modo seguro para anti-cheat"),
+    (
+        "While this game runs, CpuZeeZ reads nothing through the PawnIO driver: temperatures and clocks that need it go blank, GPU and OS readings stay. The driver stays loaded; if an anti-cheat refuses the driver itself, uninstall PawnIO.",
+        "Enquanto este jogo roda, o CpuZeeZ não lê nada pelo driver PawnIO: temperaturas e clocks que dependem dele ficam em branco; leituras da GPU e do sistema continuam. O driver continua carregado; se um anti-cheat recusar o próprio driver, desinstale o PawnIO.",
+    ),
+    (
+        "Records every session of this game; ● REC shows while it does.",
+        "Grava todas as sessões deste jogo; ● REC aparece enquanto grava.",
+    ),
+    ("Add a game", "Adicionar um jogo"),
+    ("Add {}", "Adicionar {}"),
     ("No data folder to save the session in.", "Sem pasta de dados para salvar a sessão."),
     ("Capture", "Captura"),
     ("Starting…", "Iniciando…"),
@@ -964,6 +1108,27 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Per-game profiles", "Perfiles por juego"),
+    (
+        "A game's own style and place, and what happens when it starts. Everything here is off until you turn it on.",
+        "El estilo y la posición de cada juego, y qué pasa cuando se abre. Todo aquí está apagado hasta que lo actives.",
+    ),
+    ("Own style: update to the current one", "Estilo propio: actualizar al actual"),
+    ("Use the current style and place", "Usar el estilo y la posición actuales"),
+    ("Use the overlay's", "Usar el del overlay"),
+    ("Show the overlay when it starts", "Mostrar el overlay cuando se abra"),
+    ("Capture while it runs", "Capturar mientras se ejecuta"),
+    ("Anti-cheat safe mode", "Modo seguro para anti-trampas"),
+    (
+        "While this game runs, CpuZeeZ reads nothing through the PawnIO driver: temperatures and clocks that need it go blank, GPU and OS readings stay. The driver stays loaded; if an anti-cheat refuses the driver itself, uninstall PawnIO.",
+        "Mientras este juego se ejecuta, CpuZeeZ no lee nada a través del controlador PawnIO: las temperaturas y relojes que lo necesitan quedan en blanco; las lecturas de la GPU y del sistema siguen. El controlador sigue cargado; si un anti-trampas rechaza el controlador, desinstala PawnIO.",
+    ),
+    (
+        "Records every session of this game; ● REC shows while it does.",
+        "Graba cada sesión de este juego; ● REC se muestra mientras graba.",
+    ),
+    ("Add a game", "Añadir un juego"),
+    ("Add {}", "Añadir {}"),
     ("No data folder to save the session in.", "No hay carpeta de datos para guardar la sesión."),
     ("Capture", "Captura"),
     ("Starting…", "Iniciando…"),

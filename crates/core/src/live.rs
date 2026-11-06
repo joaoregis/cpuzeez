@@ -168,6 +168,48 @@ pub fn hotkey_conflicts(keys: &[(HotkeyAction, String)]) -> Vec<(HotkeyAction, H
     out
 }
 
+/// A game's own overlay settings and automation (zeez-live §5.4), opt-in.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Profile {
+    /// The executable's file name ("cs2.exe").
+    pub exe: String,
+    /// Its own layout and position (None: the overlay's).
+    pub layout: Option<Layout>,
+    pub anchor: Option<Anchor>,
+    pub offset: Option<[f32; 2]>,
+    /// Show the overlay while the game runs.
+    pub auto_show: bool,
+    /// Capture while the game runs (off by default; ● REC shows).
+    pub auto_capture: bool,
+    /// Anti-cheat safe mode (S2b-12): no reads through the PawnIO driver while it runs.
+    pub safe_mode: bool,
+}
+
+impl Profile {
+    pub fn automates(&self) -> bool {
+        self.auto_show || self.auto_capture || self.safe_mode
+    }
+}
+
+/// The file name of a path or name, for matching a profile.
+pub fn exe_name(s: &str) -> &str {
+    s.rsplit(['/', '\\']).next().unwrap_or(s)
+}
+
+pub fn profile_for<'a>(profiles: &'a [Profile], exe: &str) -> Option<&'a Profile> {
+    let exe = exe_name(exe);
+    profiles.iter().find(|p| !p.exe.is_empty() && exe_name(&p.exe).eq_ignore_ascii_case(exe))
+}
+
+/// What a profile changes in what was ever running: (started, stopped).
+pub fn transitions<'a>(before: &[String], now: &'a [String]) -> (Vec<&'a str>, Vec<String>) {
+    let has = |list: &[String], x: &str| list.iter().any(|y| y.eq_ignore_ascii_case(x));
+    let started = now.iter().filter(|x| !has(before, x)).map(String::as_str).collect();
+    let stopped = before.iter().filter(|x| !has(now, x)).cloned().collect();
+    (started, stopped)
+}
+
 /// What the user set for the overlay (saved with the settings).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -187,9 +229,20 @@ pub struct Overlay {
     pub graph_hz: f32,
     /// Shortcut per action ("" = off).
     pub hotkeys: Vec<(HotkeyAction, String)>,
+    pub profiles: Vec<Profile>,
 }
 
 impl Overlay {
+    /// The layout, anchor and offset in effect while `exe` is the target.
+    pub fn effective(&self, exe: Option<&str>) -> (Layout, Anchor, [f32; 2]) {
+        let p = exe.and_then(|e| profile_for(&self.profiles, e));
+        (
+            p.and_then(|p| p.layout.clone()).unwrap_or_else(|| self.layout.clone()),
+            p.and_then(|p| p.anchor).unwrap_or(self.anchor),
+            p.and_then(|p| p.offset).unwrap_or(self.offset),
+        )
+    }
+
     /// The shortcut bound to `a` ("" when off).
     pub fn keys(&self, a: HotkeyAction) -> &str {
         self.hotkeys.iter().find(|h| h.0 == a).map_or("", |h| h.1.as_str())
@@ -209,6 +262,7 @@ impl Default for Overlay {
             text_hz: 4.0,
             graph_hz: 30.0,
             hotkeys: HotkeyAction::ALL.iter().map(|a| (*a, a.default_keys().to_string())).collect(),
+            profiles: Vec::new(),
         }
     }
 }
@@ -256,6 +310,26 @@ mod tests {
         keys[2].1.clear();
         assert!(hotkey_conflicts(&keys).is_empty(), "turned-off bindings never conflict");
         assert_eq!(Overlay::default().keys(HotkeyAction::Capture), "Ctrl+Shift+R");
+    }
+
+    #[test]
+    fn profiles_match_and_apply() {
+        let mut o = Overlay::default();
+        o.profiles.push(Profile {
+            exe: "CS2.exe".into(),
+            layout: Some(crate::layout::presets::live::minimal()),
+            anchor: Some(Anchor::BottomRight),
+            ..Default::default()
+        });
+        assert!(profile_for(&o.profiles, r"C:\Games\cs2.exe").is_some(), "by file name, any case");
+        assert!(profile_for(&o.profiles, "notcs2.exe").is_none());
+        let (l, a, off) = o.effective(Some("cs2.exe"));
+        assert_eq!((l.name.as_str(), a, off), ("Minimal", Anchor::BottomRight, [0.0, 0.0]));
+        assert_eq!(o.effective(Some("other.exe")).1, Anchor::TopLeft);
+        let (before, now) =
+            (vec!["a.exe".to_string(), "b.exe".to_string()], vec!["B.exe".to_string(), "c.exe".to_string()]);
+        let (started, stopped) = transitions(&before, &now);
+        assert_eq!((started, stopped), (vec!["c.exe"], vec!["a.exe".to_string()]));
     }
 
     #[test]
