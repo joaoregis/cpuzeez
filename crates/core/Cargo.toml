@@ -1,6 +1,6 @@
 [package]
 name = "cpuzeez-core"
-version = "1.0.0-beta.5"
+version = "1.0.0-beta.6"
 edition = "2024"
 rust-version = "1.89"
 description = "CpuZeeZ domain types and pure logic: decoders and the report model. No OS calls, no GUI."

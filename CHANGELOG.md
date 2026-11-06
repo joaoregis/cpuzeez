@@ -7,6 +7,10 @@ generated from its section below.
 
 ## [Unreleased]
 
+## [1.0.0-beta.6] - 2026-11-05
+
+ZeeZ Live: the overlay, FPS, capture and reports. Test it in your games; the play-session checks are listed in the ROADMAP's S2b status.
+
 ### Added
 
 - **ZeeZ Live**, a new sidebar entry with three tabs: *Live*, *Overlay* and *Sessions*.
@@ -285,7 +289,8 @@ features.
 - GUI with CPU-Z's tabs.
 - Installers for Windows (MSI), macOS (DMG/PKG), Debian/Ubuntu (DEB) and Arch.
 
-[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.5...HEAD
+[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.6...HEAD
+[1.0.0-beta.6]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.5...v1.0.0-beta.6
 [1.0.0-beta.5]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.4...v1.0.0-beta.5
 [1.0.0-beta.4]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.3...v1.0.0-beta.4
 [1.0.0-beta.3]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.2...v1.0.0-beta.3
