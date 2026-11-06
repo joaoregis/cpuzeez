@@ -73,6 +73,7 @@ fn tables() -> &'static [(Table, Table)] {
         (super::gpubench_view::PT_BR, super::gpubench_view::ES),
         (super::drivehealth_view::PT_BR, super::drivehealth_view::ES),
         (super::mini::PT_BR, super::mini::ES),
+        (super::live::PT_BR, super::live::ES),
         (super::layout_editor::PT_BR, super::layout_editor::ES),
         (super::system::PT_BR, super::system::ES),
         (super::system_history::PT_BR, super::system_history::ES),

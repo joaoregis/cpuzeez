@@ -29,6 +29,7 @@ mod gpubench_view;
 mod latency_view;
 mod layout_editor;
 pub mod layout_view;
+pub mod live;
 mod memplus_view;
 mod mini;
 mod plot;
@@ -64,6 +65,7 @@ use theme::icon;
 enum Page {
     Overview,
     System,
+    Live,
     Processor,
     Mainboard,
     Memory,
@@ -77,9 +79,10 @@ enum Page {
 }
 
 /// (page, icon, English name: translated when shown, used as-is for file names).
-const NAV: [(Page, &str, &str); 10] = [
+const NAV: [(Page, &str, &str); 11] = [
     (Page::Overview, icon::SQUARES_FOUR, "Overview"),
     (Page::System, icon::LIST_BULLETS, "System"),
+    (Page::Live, icon::PULSE, "ZeeZ Live"),
     (Page::Processor, icon::CPU, "Processor"),
     (Page::Mainboard, icon::CIRCUITRY, "Mainboard"),
     (Page::Memory, icon::MEMORY, "Memory"),
@@ -221,6 +224,7 @@ struct App {
     gpubench: gpubench_view::State,
     diskbench: diskbench_view::State,
     system: system::State,
+    live: live::State,
 }
 
 pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
@@ -301,6 +305,7 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         gpubench: Default::default(),
         diskbench: Default::default(),
         system: Default::default(),
+        live: Default::default(),
     };
     if app.auto.is_none() {
         crate::data::expire_logs(app.mon.settings.log_retention_days);
@@ -376,6 +381,7 @@ impl eframe::App for App {
         if self.auto.is_none() {
             self.system.background(&self.mon.settings);
         }
+        live::overlay(&mut self.mon, &mut self.live, &ectx);
         self.hotkeys(&ectx);
         self.window_title(&ectx);
         self.access.frame(&ectx);
@@ -635,6 +641,7 @@ impl App {
                 }
             }
             Page::System => self.system.page(ui, &self.ctx, &mut self.mon),
+            Page::Live => self.live.page(ui, &mut self.mon),
             Page::Processor => {
                 let sub = [c.info.codename.clone(), c.info.package.clone(), c.info.technology.clone()]
                     .into_iter()

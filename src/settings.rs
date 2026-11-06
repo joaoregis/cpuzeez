@@ -66,6 +66,8 @@ pub struct Settings {
     pub tray_click: cpuzeez_core::layout::tray::Click,
     /// Mini monitors (S1-M02). Empty = one default, open when `mini` is set.
     pub minis: Vec<cpuzeez_core::layout::mini::Mini>,
+    /// ZeeZ Live overlay (S2b-01).
+    pub overlay: cpuzeez_core::live::Overlay,
     /// Default start page when CpuZeeZ opens (S2a-11, e.g. "Overview" or "System").
     pub default_start_page: String,
     /// Keep the main window always on top (S2a-11).
@@ -123,6 +125,7 @@ impl Default for Settings {
             tray_items: vec![Default::default()],
             tray_click: Default::default(),
             minis: Vec::new(),
+            overlay: Default::default(),
             default_start_page: "Overview".into(),
             always_on_top: false,
             minimize_on_use: false,

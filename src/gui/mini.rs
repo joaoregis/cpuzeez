@@ -84,6 +84,13 @@ const SNAP: f32 = 20.0;
 #[derive(Default)]
 pub struct Runtime {
     fullscreen: Option<(bool, Instant)>,
+    /// When each monitor's window style was last applied, and with what lock.
+    styled: Vec<Option<(bool, Instant)>>,
+}
+
+/// Each mini monitor's window title: unique, so `platform::overlay` finds it.
+fn title(i: usize) -> String {
+    format!("{} · {} {}", crate::DISPLAY_NAME, tr("Mini monitor"), i + 1)
 }
 
 enum Change {
@@ -124,7 +131,7 @@ pub fn show_all(mon: &mut Monitor, ectx: &egui::Context) {
             continue;
         }
         let mut builder = egui::ViewportBuilder::default()
-            .with_title(format!("{} · {}", crate::DISPLAY_NAME, tr("Mini monitor")))
+            .with_title(title(i))
             .with_always_on_top()
             .with_decorations(false)
             .with_resizable(false)
@@ -176,6 +183,22 @@ pub fn show_all(mon: &mut Monitor, ectx: &egui::Context) {
                 }
             });
         });
+    }
+    // A locked (click-through) glow window is invisible on Windows without
+    // the layered-window alpha (ADR 0013): apply it, and re-assert topmost.
+    let rt = &mut mon.mini_rt;
+    rt.styled.resize(minis.len(), None);
+    for (i, m) in minis.iter().enumerate() {
+        if !m.open {
+            rt.styled[i] = None;
+            continue;
+        }
+        if rt.styled[i].is_none_or(|(l, t)| l != m.locked || t.elapsed() > Duration::from_secs(2)) {
+            let s = cpuzeez_platform::overlay::Style { click_through: m.locked, ..Default::default() };
+            if cpuzeez_platform::overlay::apply(&title(i), s) || !cfg!(windows) {
+                rt.styled[i] = Some((m.locked, Instant::now()));
+            }
+        }
     }
     apply(mon, ectx, changes);
 }

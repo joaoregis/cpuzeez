@@ -20,6 +20,7 @@ pub mod large_pages;
 pub mod memory;
 pub mod net_io;
 pub mod os;
+pub mod overlay;
 pub mod partitions;
 pub mod pdh;
 pub mod proc_net;
