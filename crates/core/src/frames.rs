@@ -177,6 +177,7 @@ pub struct PresentMonColumns {
     pid: Option<usize>,
     time_s: Option<usize>,
     time_ms: Option<usize>,
+    present_ms: Option<usize>,
     between: Option<usize>,
     display: Option<usize>,
     until_displayed: Option<usize>,
@@ -198,7 +199,8 @@ impl PresentMonColumns {
             app: at("Application"),
             pid: at("ProcessID"),
             time_s: at("TimeInSeconds"),
-            time_ms: at("CPUStartTime"),
+            time_ms: at("CPUStartTime").or(at("CPUStartTimeInMs")),
+            present_ms: at("TimeInMs"),
             between: at("MsBetweenPresents"),
             display: at("MsBetweenDisplayChange"),
             until_displayed: at("MsUntilDisplayed"),
@@ -222,7 +224,11 @@ impl PresentMonColumns {
         let get = |i: Option<usize>| i.and_then(|i| f.get(i)).map(|s| s.trim());
         let num = |i: Option<usize>| get(i).and_then(|s| s.parse::<f64>().ok()).filter(|v| v.is_finite());
         let ms = num(self.between)?;
-        let t_s = num(self.time_s).or_else(|| num(self.time_ms).map(|m| m / 1000.0)).unwrap_or(0.0);
+        // 1.x TimeInSeconds; 2.6 TimeInMs (the present) or CPUStartTimeInMs; 2.0 CPUStartTime.
+        let t_s = num(self.time_s)
+            .or_else(|| num(self.present_ms).map(|m| m / 1000.0))
+            .or_else(|| num(self.time_ms).map(|m| m / 1000.0))
+            .unwrap_or(0.0);
         let frame_type = get(self.frame_type).unwrap_or("");
         let generated = !frame_type.is_empty()
             && !["application", "notset", "na", "repeated"].contains(&frame_type.to_ascii_lowercase().as_str());
@@ -287,6 +293,68 @@ pub fn frame_csv_line(f: &Frame) -> String {
 pub fn exclusive_fullscreen(present_mode: &str) -> bool {
     let m = present_mode.to_ascii_lowercase();
     m.contains("legacy") || m.contains("hardware: legacy")
+}
+
+/// Lines of PresentMon's stdout, fed in chunks of any size. It writes
+/// UTF-16LE with a BOM when redirected to a file and UTF-8 through a pipe,
+/// so the first bytes decide.
+#[derive(Default)]
+pub struct OutputLines {
+    /// None until the first two bytes arrive; Some(true) = UTF-16LE.
+    utf16: Option<bool>,
+    bytes: Vec<u8>,
+}
+
+impl OutputLines {
+    pub fn feed(&mut self, chunk: &[u8]) -> Vec<String> {
+        self.bytes.extend_from_slice(chunk);
+        if self.utf16.is_none() {
+            if self.bytes.len() < 2 {
+                return Vec::new();
+            }
+            let bom16 = self.bytes[..2] == [0xFF, 0xFE];
+            self.utf16 = Some(bom16);
+            if bom16 {
+                self.bytes.drain(..2);
+            } else if self.bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+                self.bytes.drain(..3);
+            }
+        }
+        let mut out = Vec::new();
+        if self.utf16 == Some(true) {
+            // Whole code units only: a newline is 0x0A 0x00 at an even offset.
+            let (mut start, mut k) = (0, 0);
+            while k + 1 < self.bytes.len() {
+                if self.bytes[k] == b'\n' && self.bytes[k + 1] == 0 {
+                    let units: Vec<u16> =
+                        self.bytes[start..k].as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes(*c)).collect();
+                    out.push(String::from_utf16_lossy(&units).trim_end_matches('\r').to_string());
+                    start = k + 2;
+                }
+                k += 2;
+            }
+            self.bytes.drain(..start);
+        } else {
+            while let Some(i) = self.bytes.iter().position(|&b| b == b'\n') {
+                let line: Vec<u8> = self.bytes.drain(..=i).collect();
+                out.push(String::from_utf8_lossy(&line).trim_end_matches(['\r', '\n']).to_string());
+            }
+        }
+        out
+    }
+
+    /// The last line, if it had no newline.
+    pub fn finish(&mut self) -> Option<String> {
+        if self.bytes.is_empty() {
+            return None;
+        }
+        let b = std::mem::take(&mut self.bytes);
+        Some(if self.utf16 == Some(true) {
+            String::from_utf16_lossy(&b.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes(*c)).collect::<Vec<_>>())
+        } else {
+            String::from_utf8_lossy(&b).into_owned()
+        })
+    }
 }
 
 // ---------------------------------------------------------------- MangoHud
@@ -378,6 +446,35 @@ VALORANT-Win64-Shipping.exe,1234,0x1,DXGI,0,0,1,Hardware Composed: Independent F
         assert!(f[1].dropped, "MsUntilDisplayed = NA");
         assert!(!exclusive_fullscreen(&f[0].present_mode));
         assert!(exclusive_fullscreen("Hardware: Legacy Flip"));
+    }
+
+    /// Two lines of PresentMon 2.6.0's real output (Deadlock, RTX 4060), as
+    /// it writes them to a file (UTF-16LE with a BOM) and to a pipe (UTF-8).
+    #[test]
+    fn presentmon_2_6_real_output() {
+        let csv = "Application,ProcessID,SwapChainAddress,PresentRuntime,SyncInterval,PresentFlags,AllowsTearing,PresentMode,TimeInMs,MsBetweenSimulationStart,MsBetweenPresents,MsBetweenDisplayChange,MsInPresentAPI,MsRenderPresentLatency,MsUntilDisplayed,CPUStartTimeInMs,MsBetweenAppStart,MsCPUBusy,MsCPUWait,MsGPULatency,MsGPUTime,MsGPUBusy,MsGPUWait,MsAnimationError,AnimationTime,MsFlipDelay
+deadlock.exe,51892,0x22A8A266F70,DXGI,0,512,1,Hardware Composed: Independent Flip,12.0427,NA,7.69620000000000,8.13470000000000,1.80370000000000,9.38120000000000,9.4676,5.1852,8.6612,6.8575,1.8037,8.0649,8.1738,8.1686,0.0052,NA,5.1852,NA
+deadlock.exe,51892,0x22A8A266F70,DXGI,0,512,1,Hardware Composed: Independent Flip,23.8011,NA,11.75840000000000,10.38210000000000,0.06660000000000,6.92320000000000,8.0913,13.8464,10.0213,9.9547,0.0666,7.5775,9.3004,7.9833,1.3171,-1.7209,13.8464,NA";
+        let mut utf16: Vec<u8> = vec![0xFF, 0xFE];
+        utf16.extend(csv.encode_utf16().flat_map(|u| u.to_le_bytes()));
+        let decode = |bytes: &[u8], cut: usize| {
+            let mut dec = OutputLines::default();
+            let mut lines = dec.feed(&bytes[..1]); // the BOM split too
+            lines.extend(dec.feed(&bytes[1..cut])); // and a character
+            lines.extend(dec.feed(&bytes[cut..]));
+            lines.extend(dec.finish());
+            lines
+        };
+        let from_file = decode(&utf16, 77);
+        let from_pipe = decode(csv.as_bytes(), 40);
+        assert_eq!(from_file, from_pipe, "UTF-16 (file) and UTF-8 (pipe) read the same");
+        let f = parse_presentmon(&from_file.join("\n")).unwrap();
+        assert_eq!(f.len(), 2);
+        assert_eq!((f[0].app.as_str(), f[0].pid, f[0].ms), ("deadlock.exe", 51892, 7.6962));
+        assert!((f[1].t_s - 0.0238011).abs() < 1e-9, "TimeInMs is the present's time");
+        assert_eq!(f[1].gpu_busy_ms, Some(7.9833));
+        assert_eq!(f[0].present_mode, "Hardware Composed: Independent Flip");
+        assert!(!f[0].dropped && !f[0].generated);
     }
 
     #[test]

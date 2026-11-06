@@ -58,6 +58,8 @@ struct Hub {
     present_mode: String,
     /// Every target frame since `begin_capture` (None: not capturing).
     captured: Option<Vec<Frame>>,
+    /// The running sidecar's PID (Windows), to stop it on exit.
+    child: Option<u32>,
 }
 
 /// At most this many frames per capture (about 2.3 h at 240 FPS).
@@ -227,11 +229,39 @@ pub fn readings() -> Vec<(&'static str, &'static str, cpuzeez_core::metrics::Uni
     v
 }
 
+/// Stop the frame source now (on exit: a sidecar outlives its parent otherwise).
+pub fn stop() {
+    imp::stop();
+}
+
 #[cfg(windows)]
 mod imp {
     use super::{Status, set_status};
-    use std::io::{BufRead, BufReader};
+    use std::io::Read;
     use std::process::{Command, Stdio};
+
+    const SESSION: &str = "CpuZeeZ-PresentMon";
+
+    /// A killed PresentMon leaves its ETW session running: end it by name.
+    fn end_session(exe: &std::path::Path) {
+        use std::os::windows::process::CommandExt;
+        let _ = Command::new(exe)
+            .args(["--terminate_existing_session", "--session_name", SESSION])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(0x0800_0000)
+            .status();
+    }
+
+    pub fn stop() {
+        let pid = super::lock().child.take();
+        if let Some(pid) = pid {
+            let _ = cpuzeez_platform::proc_ops::kill(pid);
+            if let Some(exe) = sidecar() {
+                end_session(&exe);
+            }
+        }
+    }
 
     /// Where the packages put the sidecar (next to cpuzeez.exe); a dev
     /// build can point `CPUZEEZ_PRESENTMON` at one.
@@ -280,9 +310,11 @@ mod imp {
                 "--output_stdout",
                 "--no_console_stats",
                 "--session_name",
-                "CpuZeeZ-PresentMon",
+                SESSION,
                 "--stop_existing_session",
                 "--no_track_input",
+                // Marks Frame Generation frames (FrameType), where the driver reports them.
+                "--track_frame_type",
             ])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -293,34 +325,45 @@ mod imp {
             Ok(c) => c,
             Err(e) => return set_status(Status::Failed(e.to_string())),
         };
-        let Some(out) = child.stdout.take() else { return };
+        super::lock().child = Some(child.id());
+        let Some(mut out) = child.stdout.take() else { return };
         let mut cols = None;
         let mut batch = Vec::new();
         let mut last_push = std::time::Instant::now();
-        for line in BufReader::new(out).lines() {
-            let Ok(line) = line else { break };
-            match &cols {
-                None => {
-                    cols = cpuzeez_core::frames::PresentMonColumns::parse(&line);
-                    if cols.is_some() {
-                        set_status(Status::Running);
+        // UTF-8 through a pipe, UTF-16LE to a file: the decoder tells which.
+        let mut dec = cpuzeez_core::frames::OutputLines::default();
+        let mut buf = [0u8; 16 * 1024];
+        'read: loop {
+            let n = match out.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => n,
+            };
+            for line in dec.feed(&buf[..n]) {
+                match &cols {
+                    None => {
+                        cols = cpuzeez_core::frames::PresentMonColumns::parse(&line);
+                        if cols.is_some() {
+                            set_status(Status::Running);
+                        }
                     }
-                }
-                Some(c) => {
-                    if let Some(f) = c.frame(&line) {
-                        batch.push(f);
+                    Some(c) => {
+                        if let Some(f) = c.frame(&line) {
+                            batch.push(f);
+                        }
                     }
                 }
             }
             if last_push.elapsed().as_millis() >= 100 && !batch.is_empty() {
                 super::push(std::mem::take(&mut batch), cpuzeez_platform::desktop::foreground_pid());
                 last_push = std::time::Instant::now();
-                if !super::wanted() {
-                    break;
-                }
+            }
+            if !super::wanted() {
+                break 'read;
             }
         }
         let _ = child.kill();
+        super::lock().child = None;
+        end_session(exe);
         let status = child.wait_with_output().ok();
         let err = status.as_ref().map(|o| String::from_utf8_lossy(&o.stderr).trim().to_string()).unwrap_or_default();
         if cols.is_none() {
@@ -337,6 +380,8 @@ mod imp {
 
 #[cfg(target_os = "linux")]
 mod imp {
+    pub fn stop() {}
+
     pub fn start() {
         super::lock().running = true;
         super::set_status(super::Status::Starting);
@@ -353,6 +398,8 @@ mod imp {
 
 #[cfg(not(any(windows, target_os = "linux")))]
 mod imp {
+    pub fn stop() {}
+
     pub fn start() {
         // macOS has no frame timing for other apps (zeez-live §3.1): see live.rs's Metal HUD launcher.
     }
@@ -390,5 +437,26 @@ mod tests {
         push((0..10).map(|i| f(10, "game.exe", 2.5 + i as f64 * 0.01)).collect(), Some(30));
         assert_eq!(target().map(|t| t.0), Some(10));
         pin_target(None);
+    }
+
+    /// The real sidecar end to end (Windows, administrator, a GPU presenting):
+    /// `CPUZEEZ_PRESENTMON=path\PresentMon.exe cargo test sidecar -- --ignored`.
+    #[test]
+    #[ignore]
+    #[cfg(windows)]
+    fn sidecar_delivers_frames_and_cleans_up() {
+        for _ in 0..40 {
+            want();
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        let (st, apps) = (status(), apps());
+        stop();
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let sessions = std::process::Command::new("logman").args(["query", "-ets"]).output().unwrap();
+        let left = String::from_utf8_lossy(&sessions.stdout).contains("CpuZeeZ-PresentMon");
+        assert_eq!(st, Status::Running, "apps seen: {apps:?}");
+        assert!(!apps.is_empty(), "something presented frames");
+        assert!(!left, "the ETW session was ended");
+        eprintln!("apps presenting: {apps:?}");
     }
 }

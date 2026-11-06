@@ -69,6 +69,7 @@ pub struct State {
 
 /// `open` arguments that start `app` (a .app bundle) with Apple's Metal
 /// Performance HUD on (macOS 13+). Apple draws that HUD, not CpuZeeZ.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn metal_hud_args(app: &str) -> Option<Vec<String>> {
     let app = app.trim().trim_end_matches('/');
     app.ends_with(".app").then(|| vec!["-a".into(), app.into(), "--env".into(), "MTL_HUD_ENABLED=1".into()])

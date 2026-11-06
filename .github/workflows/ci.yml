@@ -239,7 +239,7 @@ jobs:
             if ($e.Count -ne 1) { throw "after $v there are $($e.Count) entries" }
           }
           if ($e[0].DisplayVersion -ne '1.0.1') { throw 'upgrade chain ended on the wrong version' }
-          foreach ($f in 'pawnio-modules\AMDFamily17.bin', 'pawnio-modules\COPYING', 'PawnIO_setup.exe', 'THIRD_PARTY.md') {
+          foreach ($f in 'pawnio-modules\AMDFamily17.bin', 'pawnio-modules\COPYING', 'PawnIO_setup.exe', 'PresentMon.exe', 'PresentMon-LICENSE.txt', 'THIRD_PARTY.md') {
             if (-not (Test-Path "C:\Program Files\CpuZeeZ\$f")) { throw "missing $f" }
           }
           & "C:\Program Files\CpuZeeZ\cpuzeez.exe" -core=0

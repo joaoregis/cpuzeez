@@ -30,6 +30,11 @@
         <Component Id="PawnIoSetup" Guid="*">
           <File Id="PawnIoSetupExe" Source="$(PawnIo)\PawnIO_setup.exe" KeyPath="yes" />
         </Component>
+        <!-- ZeeZ Live frame timing (Intel PresentMon, MIT): the app checks its SHA-256 before running it. -->
+        <Component Id="PresentMon" Guid="*">
+          <File Id="PresentMonExe" Source="$(PawnIo)\PresentMon.exe" KeyPath="yes" />
+          <File Id="PresentMonLicense" Source="$(PawnIo)\PresentMon-LICENSE.txt" />
+        </Component>
         <Directory Id="ModulesFolder" Name="pawnio-modules" />
       </Directory>
     </StandardDirectory>
@@ -46,6 +51,7 @@
       <ComponentRef Id="MainExe" />
       <ComponentRef Id="ThirdParty" />
       <ComponentRef Id="PawnIoSetup" />
+      <ComponentRef Id="PresentMon" />
       <ComponentRef Id="StartMenuShortcut" />
       <Files Directory="ModulesFolder" Include="$(PawnIo)\pawnio-modules\*" />
     </Feature>

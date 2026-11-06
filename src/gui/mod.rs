@@ -367,6 +367,7 @@ impl eframe::App for App {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         // The ETW session behind the Network column outlives the process otherwise.
         cpuzeez_platform::proc_net::stop();
+        crate::live_frames::stop();
         self.system.history.flush();
     }
 

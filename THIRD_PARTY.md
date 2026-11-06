@@ -10,6 +10,7 @@ official releases and checked by the release workflow.
 | Component | Version | Author | License | What it's for |
 |---|---|---|---|---|
 | **PawnIO driver installer** (`PawnIO_setup.exe`) | 2.2.0 | namazso, [pawnio.eu](https://pawnio.eu) | Proprietary; redistribution of the installer is allowed | Hardware access (CPU temperatures, voltages, SPD, memory timings). The MSI installs it through its *Hardware access* feature, which is ticked by default and can be unticked. The portable zip installs it only when you press *Install hardware access* in the app. Shared with LibreHardwareMonitor and FanControl, so uninstalling CpuZeeZ keeps it; remove it from *Installed apps* if you want |
+| **PresentMon** (`PresentMon.exe`) | 2.6.0 | Intel Corporation, [GameTechDev/PresentMon](https://github.com/GameTechDev/PresentMon) | MIT (text in `PresentMon-LICENSE.txt`) | ZeeZ Live frame timing: FPS, frame times, GPU Busy. It reads the graphics kernel's ETW events, so nothing touches the game. Runs only while ZeeZ Live reads frames, and only as administrator; CpuZeeZ checks its SHA-256 before every start |
 | **PawnIO modules** (`pawnio-modules\*.bin`) | 0.2.11 | namazso | LGPL-2.1-or-later (text in `pawnio-modules\COPYING`; source: [PawnIO.Modules 0.2.11](https://github.com/namazso/PawnIO.Modules/tree/0.2.11)) | Small signed programs the driver runs; each exposes a narrow, audited set of operations. Inert without the driver |
 
 ## Compiled into the app
