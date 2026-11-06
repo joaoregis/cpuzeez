@@ -62,6 +62,16 @@ pub struct State {
     mh_msg: Option<(String, Tone)>,
     #[allow(dead_code)]
     mh_confirm: bool,
+    /// macOS: the app to open with Apple's Metal Performance HUD.
+    #[allow(dead_code)]
+    metal_app: String,
+}
+
+/// `open` arguments that start `app` (a .app bundle) with Apple's Metal
+/// Performance HUD on (macOS 13+). Apple draws that HUD, not CpuZeeZ.
+pub fn metal_hud_args(app: &str) -> Option<Vec<String>> {
+    let app = app.trim().trim_end_matches('/');
+    app.ends_with(".app").then(|| vec!["-a".into(), app.into(), "--env".into(), "MTL_HUD_ENABLED=1".into()])
 }
 
 /// A capture in progress (S2b-09).
@@ -280,6 +290,37 @@ impl State {
                 .small()
                 .color(p.text_muted),
         );
+    }
+
+    /// macOS (experimental, zeez-live §3.1): no public API gives another
+    /// app's frame times, so CpuZeeZ offers Apple's own Metal HUD.
+    #[cfg(target_os = "macos")]
+    fn metal_card(&mut self, ui: &mut Ui) {
+        let p = theme::palette(ui);
+        widgets::card(ui, icon::GAME_CONTROLLER, tr("Metal Performance HUD (experimental)"), |ui| {
+            ui.label(RichText::new(tr("macOS gives no app another app's frame times. Apple's own HUD shows FPS inside Metal games: open the game with it from here.")).color(p.text_secondary));
+            ui.horizontal(|ui| {
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.metal_app)
+                        .desired_width(280.0)
+                        .hint_text("/Applications/Game.app"),
+                );
+                let args = metal_hud_args(&self.metal_app);
+                if ui.add_enabled(args.is_some(), egui::Button::new(tr("Open with the Metal HUD"))).clicked()
+                    && let Some(a) = args
+                {
+                    let ok = std::process::Command::new("/usr/bin/open").args(&a).status().is_ok_and(|s| s.success());
+                    self.mh_msg = Some(if ok {
+                        (tr("Opened. The HUD is drawn by macOS, in the game's corner.").into(), Tone::Success)
+                    } else {
+                        (tr("macOS couldn't open that app.").into(), Tone::Danger)
+                    });
+                }
+            });
+            if let Some((t, tone)) = &self.mh_msg {
+                widgets::pill(ui, t, *tone);
+            }
+        });
     }
 
     /// Linux: MangoHud's status line and its one-click steps (zeez-live §3.1 Q4).
@@ -797,6 +838,8 @@ impl State {
         });
         #[cfg(target_os = "linux")]
         self.mangohud_card(ui, mon);
+        #[cfg(target_os = "macos")]
+        self.metal_card(ui);
         self.capture_card(ui, mon);
         let o = mon.settings.overlay.clone();
         widgets::card(ui, icon::MONITOR, tr("Overlay"), |ui| {
@@ -1054,6 +1097,17 @@ fn limits() -> Vec<&'static str> {
 }
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Metal Performance HUD (experimental)", "Metal Performance HUD (experimental)"),
+    (
+        "macOS gives no app another app's frame times. Apple's own HUD shows FPS inside Metal games: open the game with it from here.",
+        "O macOS não dá a um app os tempos de quadro de outro. O HUD da própria Apple mostra o FPS dentro de jogos Metal: abra o jogo com ele daqui.",
+    ),
+    ("Open with the Metal HUD", "Abrir com o Metal HUD"),
+    (
+        "Opened. The HUD is drawn by macOS, in the game's corner.",
+        "Aberto. O HUD é desenhado pelo macOS, no canto do jogo.",
+    ),
+    ("macOS couldn't open that app.", "O macOS não conseguiu abrir esse app."),
     ("not installed", "não instalado"),
     ("installed", "instalado"),
     ("enabled for all games", "ligado para todos os jogos"),
@@ -1252,6 +1306,17 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Metal Performance HUD (experimental)", "Metal Performance HUD (experimental)"),
+    (
+        "macOS gives no app another app's frame times. Apple's own HUD shows FPS inside Metal games: open the game with it from here.",
+        "macOS no da a una app los tiempos de fotograma de otra. El HUD de Apple muestra los FPS dentro de juegos Metal: abre el juego con él desde aquí.",
+    ),
+    ("Open with the Metal HUD", "Abrir con el Metal HUD"),
+    (
+        "Opened. The HUD is drawn by macOS, in the game's corner.",
+        "Abierto. El HUD lo dibuja macOS, en la esquina del juego.",
+    ),
+    ("macOS couldn't open that app.", "macOS no pudo abrir esa app."),
     ("not installed", "no instalado"),
     ("installed", "instalado"),
     ("enabled for all games", "activado para todos los juegos"),
@@ -1458,6 +1523,15 @@ mod tests {
 
     /// What a capture writes reads back: frames through the PresentMon parser
     /// (so CapFrameX reads it too), the session through serde.
+    #[test]
+    fn metal_hud_launch_arguments() {
+        assert_eq!(
+            metal_hud_args("/Applications/Game.app/").unwrap(),
+            ["-a", "/Applications/Game.app", "--env", "MTL_HUD_ENABLED=1"]
+        );
+        assert!(metal_hud_args("/bin/sh").is_none(), "only app bundles");
+    }
+
     #[test]
     fn a_written_session_reads_back() {
         let dir = std::env::temp_dir().join(format!("cz-session-{}", std::process::id()));
