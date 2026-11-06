@@ -1,7 +1,7 @@
 # CpuZeeZ 1.0: detailed roadmap
 
 > Part of the [1.0 plan](README.md). This document is the **work list**: every fix, foundation piece, improvement, new feature, spike, packaging task and doc change that came out of the planning, with an ID, its source, its dependencies and a testable "done when".
-> **Status:** S0, S1 (`1.0.0-beta.1` / `beta.2`) and S2a (`1.0.0-beta.3`, fixes in `beta.4`, finished in `beta.5`) closed, S2b next · **Baseline:** 0.3.0 (`26d9f0e`) · **Date:** 2026-11-05.
+> **Status:** S0, S1 (`1.0.0-beta.1` / `beta.2`) and S2a (`1.0.0-beta.3`, fixes in `beta.4`, finished in `beta.5`) closed; S2b built (`1.0.0-beta.6`), its gate waits on play sessions; S2c next · **Baseline:** 0.3.0 (`26d9f0e`) · **Date:** 2026-11-05.
 
 ## How to read this
 
@@ -261,20 +261,24 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 
 | ID | Item | Type | Source | Depends | Done when |
 |---|---|---|---|---|---|
-| S2b-01 | **Overlay window** per OS (click-through, no focus, deferred viewport, capture-exclusion option, exclusive-fullscreen detection) | 🆕 | [zeez-live §3.2](zeez-live.md) | X01, X03–X05, X09 | P6 FPS impact ≤ 1% |
-| S2b-02 | **Brand and first use**: ZeeZ Live entry with Live / Overlay / Sessions tabs, ● LIVE / ● REC, 3-step first use, glossary, teaching empty states | 🆕 | zeez-live §1 | 01 | Usability check: a new user shows the overlay in under 1 minute |
-| S2b-03 | **Styles** (Minimal, Compact, Detailed, Benchmark, Overclocker) and the **layout editor** (WYSIWYG, widgets, styles, anchors/drag, rates) | 🆕 | zeez-live §5.2–5.3 | S0-B02 | Layouts shared with the mini monitor |
-| S2b-04 | **Global hotkeys** (Win/mac/X11 + Wayland portal), conflict detection | 🆕 | zeez-live §5.5 | — | Per-OS tests |
-| S2b-05 | **Frame source, Windows**: bundled PresentMon sidecar | 🆕 | zeez-live §3.1, Q3 | X02 | Frames, GPU Busy, FG and present mode parsed (fixtures) |
-| S2b-06 | **Frame source, Linux**: MangoHud detect, install, enable for all games, copy launch option, config generator, log ingest, status line | 🆕 | zeez-live §3.1, Q4 | X06 | Works with distro and Flatpak Steam |
-| S2b-07 | **Frame source, macOS (experimental)**: Metal HUD launcher, ScreenCaptureKit displayed FPS | 🆕 | zeez-live §3.1 | X07 | Labelled experimental |
-| S2b-08 | **Live** dashboard tab (target, FPS, graphs, capture button) | 🆕 | zeez-live §5.1 | 05–07 | Same |
-| S2b-09 | **Capture**: manual, timed, automatic (opt-in); `frames.csv` (PresentMon columns), `hw.csv`, `session.json` | 🆕 | zeez-live §6 | S0-B07–B08 | Files open in CapFrameX (manual check) |
-| S2b-10 | **Reports**: summary (1% convention stated), aligned charts, percentiles, histogram, comparison, validity warnings, HTML/PNG export, CSV import | 🆕 | zeez-live §6 | 09 | Fixture sessions produce known numbers |
-| S2b-11 | **Per-game profiles** and automation | 🆕 | zeez-live §5.4 | 03 | Same |
-| S2b-12 | **Anti-cheat safety**: "no PawnIO" mode where needed, the compatibility list from X08 | 🆕 | zeez-live §7 | X08 | Documented |
-
+| S2b-01 | **Overlay window** per OS (click-through, no focus, deferred viewport, capture-exclusion option, exclusive-fullscreen detection) | 🆕 | [zeez-live §3.2](zeez-live.md) | X01, X03–X05, X09 | P6 FPS impact ≤ 1%. ✅ `gui/live.rs` overlay viewport + `platform::overlay` (Windows: NOACTIVATE/TOOLWINDOW/TRANSPARENT, the ADR 0013 layered alpha, topmost re-asserted, `WDA_EXCLUDEFROMCAPTURE`); 9 anchors + offset (`core::live::place`, tested); exclusive-fullscreen warning from the present mode. Shown over a running borderless game on Windows (2026-11-05). FPS impact (SP2/SP8) needs a play session |
+| S2b-02 | **Brand and first use**: ZeeZ Live entry with Live / Overlay / Sessions tabs, ● LIVE / ● REC, 3-step first use, glossary, teaching empty states | 🆕 | zeez-live §1 | 01 | Usability check: a new user shows the overlay in under 1 minute. ✅ Sidebar entry, Live / Overlay / Sessions, ● LIVE and ● REC, 3-step first use, metric tooltips, teaching empty states. The in-app glossary is the tooltips; the 1-minute usability check is the beta |
+| S2b-03 | **Styles** (Minimal, Compact, Detailed, Benchmark, Overclocker) and the **layout editor** (WYSIWYG, widgets, styles, anchors/drag, rates) | 🆕 | zeez-live §5.2–5.3 | S0-B02 | Layouts shared with the mini monitor. ✅ `presets::live` (Minimal, Compact, Detailed, Benchmark, Overclocker) on `frames/*` metrics; the layout editor behind *Customize*. Throttling pills and per-range colours beyond thresholds aren't in the Widget Engine yet |
+| S2b-04 | **Global hotkeys** (Win/mac/X11 + Wayland portal), conflict detection | 🆕 | zeez-live §5.5 | — | Per-OS tests. ✅ `global-hotkey` (RegisterHotKey / Carbon / XGrabKey), five actions, editable, conflicts with our actions and with other apps (`core::live::hotkey_conflicts`, tested). Wayland GlobalShortcuts portal not done: focus-only there, tray instead |
+| S2b-05 | **Frame source, Windows**: bundled PresentMon sidecar | 🆕 | zeez-live §3.1, Q3 | X02 | Frames, GPU Busy, FG and present mode parsed (fixtures). ✅ PresentMon 2.6.0 bundled (MSI, zip; SHA-256 pinned; license shipped), run on demand as administrator, SHA-256 checked before each start, ETW session ended on stop and exit; parser on 2.6's real output (UTF-8 pipe / UTF-16 file, `TimeInMs`, `FrameType` via `--track_frame_type`), end-to-end test against a running game. FG frames need a FG game (X02) |
+| S2b-06 | **Frame source, Linux**: MangoHud detect, install, enable for all games, copy launch option, config generator, log ingest, status line | 🆕 | zeez-live §3.1, Q4 | X06 | Works with distro and Flatpak Steam. ✅ `live_mangohud.rs` + `core::mangohud`: detect (distro, Flatpak), pkexec install after confirmation, `environment.d` enable-all, copy launch option, config from the layout, log tail into the frame hub, status line. **Not run on a Linux desktop yet** (X05/X06) |
+| S2b-07 | **Frame source, macOS (experimental)**: Metal HUD launcher, ScreenCaptureKit displayed FPS | 🆕 | zeez-live §3.1 | X07 | Labelled experimental. 🟡 Metal HUD launcher (`open --env MTL_HUD_ENABLED=1`). ScreenCaptureKit displayed FPS waits for X07 on a Mac |
+| S2b-08 | **Live** dashboard tab (target, FPS, graphs, capture button) | 🆕 | zeez-live §5.1 | 05–07 | Same. ✅ Live tab: target (auto/pick), FPS, lows, GPU Busy, frame-time chart, capture card, restart as administrator |
+| S2b-09 | **Capture**: manual, timed, automatic (opt-in); `frames.csv` (PresentMon columns), `hw.csv`, `session.json` | 🆕 | zeez-live §6 | S0-B07–B08 | Files open in CapFrameX (manual check). ✅ Manual, timed (3 s countdown), hotkey, automatic per profile; markers; throttling bands; `frames.csv` (PresentMon columns) / `hw.csv` / `session.json` (round-trip tested). CapFrameX opening our file is a manual check for the beta |
+| S2b-10 | **Reports**: summary (1% convention stated), aligned charts, percentiles, histogram, comparison, validity warnings, HTML/PNG export, CSV import | 🆕 | zeez-live §6 | 09 | Fixture sessions produce known numbers. ✅ `core::session` (comparability, variance, medians, `hw.csv` reader, offline HTML with inline SVG; tested) + `gui/live_sessions.rs` (report, compare, HTML/PNG export, CSV import, tested) |
+| S2b-11 | **Per-game profiles** and automation | 🆕 | zeez-live §5.4 | 03 | Same. ✅ `core::live::Profile`: own layout/place, show on start, capture while running (opt-in, ● REC), detected by process name every 2 s |
+| S2b-12 | **Anti-cheat safety**: "no PawnIO" mode where needed, the compatibility list from X08 | 🆕 | zeez-live §7 | X08 | Documented. ✅ Per-game safe mode: `platform::hw::pause` closes the one PawnIO gate (`Module::exec`); X08 rows in zeez-live §7. In-match results need the account owner (X08) |
 **S2b gate → the next pre-release** (ZeeZ Live; betas are numbered in delivery order).
+
+**S2b status (2026-11-05): built → `1.0.0-beta.6` for testing; the gate stays open on the play-session spikes.**
+- Done and tested as marked above; CI green on every OS.
+- Open, needing a person or hardware, as the S0 gate table lists: X02 (Frame Generation frames, 240+ FPS sidecar cost), X03/X09 (overlay latency and GPU cost per display mode), X04/X07 (macOS fullscreen Spaces, ScreenCaptureKit), X05/X06 (Wayland layer-shell, MangoHud live latency), X08 (in-match with sensors; FACEIT/EAC/BattlEye).
+- Not built: the Wayland GlobalShortcuts portal, ScreenCaptureKit FPS, throttling pills in the Widget Engine.
 
 ## S2c. Bottleneck detector
 

@@ -7,6 +7,44 @@ generated from its section below.
 
 ## [Unreleased]
 
+### Added
+
+- **ZeeZ Live**, a new sidebar entry with three tabs: *Live*, *Overlay* and *Sessions*.
+  - **Overlay**: a HUD above games and apps. CpuZeeZ draws it in its own window: transparent, always on top, it never takes focus and lets every click through. Nothing is injected into the game.
+    - Five styles: *Minimal*, *Compact*, *Detailed*, *Benchmark*, *Overclocker*. *Customize* opens the layout editor.
+    - Nine places on the screen plus an offset, or *Move with the mouse*.
+    - On Windows it can be hidden from screenshots, recordings and streams.
+    - First use takes three steps: pick a style, confirm the hotkey, *Try it now*.
+  - **FPS on Windows** through Intel's PresentMon 2.6.0, now in the installer and the portable zip.
+    - It reads the graphics kernel's events, so nothing touches the game.
+    - It needs CpuZeeZ running as administrator; the Live tab offers the restart.
+    - It runs only while ZeeZ Live shows frames, and CpuZeeZ checks its SHA-256 before every start.
+    - Readings: FPS, frame time, 1% and 0.1% lows, GPU Busy, and the present mode. A warning shows when a game is in true exclusive fullscreen, where no window can be drawn on top.
+  - **FPS on Linux** through MangoHud:
+    - CpuZeeZ detects it and installs it with your package manager after you confirm;
+    - it can enable it for every game, or copy the Steam launch option `mangohud %command%`;
+    - its config is written from your overlay layout, and its logs are read for FPS.
+  - **macOS (experimental)**: open a game with Apple's Metal Performance HUD. macOS gives no app another app's frame times.
+  - **Live** tab: the game being measured (automatic or picked from a list), FPS, lows, GPU Busy and a frame-time chart.
+  - **Capture**:
+    - manual, or timed (60 s by default, after a 3 s countdown), or from its hotkey;
+    - markers during a capture, and throttling recorded as time spans;
+    - each session is saved in `sessions/<date>_<game>/` as `frames.csv` (PresentMon's columns, so CapFrameX opens it), `hw.csv` and `session.json`;
+    - **● REC** shows on the overlay and in the window title while recording.
+  - **Sessions**:
+    - **Report**: average, 1% and 0.1% lows (the convention is always stated) and stutters; the frame-time chart with markers and throttling; load and temperature charts; the frame-time percentile curve and an FPS histogram.
+    - **Compare** several sessions, with warnings when they aren't comparable (different game, resolution or driver) and when repeats vary more than 5 % (the median is shown).
+    - Export as offline HTML or PNG; import PresentMon, CapFrameX or MangoHud CSVs.
+  - **Global hotkeys**: show/hide (`Ctrl+Shift+O`), next style, start/stop capture, marker, edit mode. All of them can be changed, and conflicts are shown, with each other and with other apps. On Wayland they only work while CpuZeeZ has focus.
+  - **Per-game profiles**: a game's own style and place; show the overlay when it starts; capture while it runs (off by default).
+  - **Anti-cheat safe mode**, per game: while it runs, nothing is read through the PawnIO driver. Temperatures and clocks that need the driver go blank; GPU and OS readings stay.
+- A *Busiest core load* reading (the busiest logical CPU) for the Benchmark style and the bottleneck detector.
+- *Privacy & data* lists ZeeZ Live sessions, and can delete them.
+
+### Fixed
+
+- Locked (click-through) mini monitors were invisible on Windows: glow draws nothing in a layered window until it gets its alpha (ADR 0013).
+
 ## [1.0.0-beta.5] - 2026-11-05
 
 The System hub finished: what beta.3 left out, and the UI problems found testing beta.4.

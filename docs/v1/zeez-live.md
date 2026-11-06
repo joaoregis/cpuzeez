@@ -105,6 +105,10 @@ Mixing them confuses comparisons. We use the **percentile** by default, offer th
     | OpenGL | CpuZeeZ on glow (default) | 15 | Other · Composed: Copy with GPU GDI |
 
     ✅ All four APIs are captured, with the runtime and present mode we need for the exclusive-fullscreen detection (§3.2). OpenGL windows land in *Composed: Copy with GPU GDI*, which is worth knowing for the overlay: they're always composed, so the external overlay sits on top of them.
+  - **Integration findings (S2b-05, 2026-11-05)**, from running the sidecar against a game (Deadlock, ~148 FPS):
+    - 2.6.0 writes **UTF-8 through a pipe** and **UTF-16LE with a BOM to a file**; the reader sniffs the first bytes (`core::frames::OutputLines`).
+    - 2.6.0's time columns are `TimeInMs` and `CPUStartTimeInMs`; `FrameType` only appears with `--track_frame_type`.
+    - A killed PresentMon **leaves its ETW session running**; CpuZeeZ ends it with `--terminate_existing_session` on stop and on exit.
   - Still to do (need a game session, in the beta checklist): Frame Generation (a game with DLSS FG / FSR FG: FG frames should show as extra presents with `FrameType`), and 240+ FPS to re-measure the sidecar's CPU at a high frame rate.
 
 **Linux: there is no "ETW".**
