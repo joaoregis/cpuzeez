@@ -92,6 +92,82 @@ pub fn nearest_anchor(pos: [f32; 2], size: [f32; 2], screen: [f32; 2]) -> Anchor
     Anchor::ALL[third(pos[1], size[1], screen[1]) * 3 + third(pos[0], size[0], screen[0])]
 }
 
+/// What a ZeeZ Live hotkey does (zeez-live §5.5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum HotkeyAction {
+    ToggleOverlay,
+    CycleStyle,
+    Capture,
+    Marker,
+    EditMode,
+}
+
+impl HotkeyAction {
+    pub const ALL: [HotkeyAction; 5] = [
+        HotkeyAction::ToggleOverlay,
+        HotkeyAction::CycleStyle,
+        HotkeyAction::Capture,
+        HotkeyAction::Marker,
+        HotkeyAction::EditMode,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            HotkeyAction::ToggleOverlay => "Show/hide overlay",
+            HotkeyAction::CycleStyle => "Next style",
+            HotkeyAction::Capture => "Start/stop capture",
+            HotkeyAction::Marker => "Marker during capture",
+            HotkeyAction::EditMode => "Overlay edit mode",
+        }
+    }
+
+    pub fn default_keys(self) -> &'static str {
+        match self {
+            HotkeyAction::ToggleOverlay => "Ctrl+Shift+O",
+            HotkeyAction::CycleStyle => "Ctrl+Shift+L",
+            HotkeyAction::Capture => "Ctrl+Shift+R",
+            HotkeyAction::Marker => "Ctrl+Shift+M",
+            HotkeyAction::EditMode => "Ctrl+Shift+E",
+        }
+    }
+}
+
+/// "ctrl + shift+o" → "CTRL+SHIFT+O": modifiers in a fixed order, so two
+/// spellings of one shortcut compare equal. None when there's no main key.
+pub fn normalize_keys(k: &str) -> Option<String> {
+    let mut mods: Vec<&str> = Vec::new();
+    let mut key = None;
+    for t in k.split('+').map(str::trim).filter(|t| !t.is_empty()) {
+        match t.to_ascii_uppercase().as_str() {
+            "CTRL" | "CONTROL" => mods.push("CTRL"),
+            "SHIFT" => mods.push("SHIFT"),
+            "ALT" | "OPTION" => mods.push("ALT"),
+            "SUPER" | "META" | "CMD" | "COMMAND" | "WIN" => mods.push("SUPER"),
+            other => key = Some(other.to_string()),
+        }
+    }
+    let order = ["CTRL", "ALT", "SHIFT", "SUPER"];
+    mods.sort_by_key(|m| order.iter().position(|o| o == m));
+    mods.dedup();
+    let key = key?;
+    Some(mods.into_iter().map(str::to_string).chain([key]).collect::<Vec<_>>().join("+"))
+}
+
+/// Pairs of actions bound to the same shortcut (empty bindings are off).
+pub fn hotkey_conflicts(keys: &[(HotkeyAction, String)]) -> Vec<(HotkeyAction, HotkeyAction)> {
+    let norm: Vec<(HotkeyAction, Option<String>)> = keys.iter().map(|(a, k)| (*a, normalize_keys(k))).collect();
+    let mut out = Vec::new();
+    for (i, (a, ka)) in norm.iter().enumerate() {
+        for (b, kb) in &norm[i + 1..] {
+            if ka.is_some() && ka == kb {
+                out.push((*a, *b));
+            }
+        }
+    }
+    out
+}
+
 /// What the user set for the overlay (saved with the settings).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -109,6 +185,15 @@ pub struct Overlay {
     /// Text refresh (Hz) and graph refresh (Hz).
     pub text_hz: f32,
     pub graph_hz: f32,
+    /// Shortcut per action ("" = off).
+    pub hotkeys: Vec<(HotkeyAction, String)>,
+}
+
+impl Overlay {
+    /// The shortcut bound to `a` ("" when off).
+    pub fn keys(&self, a: HotkeyAction) -> &str {
+        self.hotkeys.iter().find(|h| h.0 == a).map_or("", |h| h.1.as_str())
+    }
 }
 
 impl Default for Overlay {
@@ -123,6 +208,7 @@ impl Default for Overlay {
             first_use_done: false,
             text_hz: 4.0,
             graph_hz: 30.0,
+            hotkeys: HotkeyAction::ALL.iter().map(|a| (*a, a.default_keys().to_string())).collect(),
         }
     }
 }
@@ -156,6 +242,20 @@ mod tests {
             assert_eq!(&Layout::from_json(&l.to_json()).unwrap(), l, "{}", l.name);
         }
         assert!(all[1].metrics().contains(&"frames/fps"), "Compact starts with FPS");
+    }
+
+    #[test]
+    fn hotkeys_normalize_and_conflict() {
+        assert_eq!(normalize_keys("shift + ctrl+o").as_deref(), Some("CTRL+SHIFT+O"));
+        assert_eq!(normalize_keys("Ctrl+Shift"), None, "no main key");
+        let mut keys = Overlay::default().hotkeys;
+        assert!(hotkey_conflicts(&keys).is_empty(), "the defaults don't collide");
+        keys[1].1 = "shift+CTRL+o".into();
+        assert_eq!(hotkey_conflicts(&keys), [(HotkeyAction::ToggleOverlay, HotkeyAction::CycleStyle)]);
+        keys[1].1.clear();
+        keys[2].1.clear();
+        assert!(hotkey_conflicts(&keys).is_empty(), "turned-off bindings never conflict");
+        assert_eq!(Overlay::default().keys(HotkeyAction::Capture), "Ctrl+Shift+R");
     }
 
     #[test]

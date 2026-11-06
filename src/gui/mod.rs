@@ -26,6 +26,7 @@ mod cpusuite_view;
 mod diskbench_view;
 mod drivehealth_view;
 mod gpubench_view;
+mod hotkeys;
 mod latency_view;
 mod layout_editor;
 pub mod layout_view;
@@ -381,7 +382,7 @@ impl eframe::App for App {
         if self.auto.is_none() {
             self.system.background(&self.mon.settings);
         }
-        live::overlay(&mut self.mon, &mut self.live, &ectx);
+        live::overlay(&mut self.mon, &mut self.live, &ectx, self.auto.is_none());
         self.hotkeys(&ectx);
         self.window_title(&ectx);
         self.access.frame(&ectx);

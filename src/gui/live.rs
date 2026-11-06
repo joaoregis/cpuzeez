@@ -11,7 +11,7 @@ use super::sensors::Monitor;
 use super::theme::{self, icon};
 use super::widgets::{self, Tone};
 use cpuzeez_core::layout::presets;
-use cpuzeez_core::live::{self as model, Anchor};
+use cpuzeez_core::live::{self as model, Anchor, HotkeyAction};
 use cpuzeez_platform::overlay as os_overlay;
 use eframe::egui::{self, RichText, Ui};
 use std::time::{Duration, Instant};
@@ -37,10 +37,20 @@ pub struct State {
     customize: bool,
     import: String,
     styled: Option<(os_overlay::Style, Instant)>,
+    hotkeys: super::hotkeys::Hotkeys,
+    /// Capture and marker presses, for the recorder (S2b-09).
+    pub capture_requests: Vec<HotkeyAction>,
 }
 
-/// Every frame: draw the overlay when it's shown.
-pub fn overlay(mon: &mut Monitor, st: &mut State, ectx: &egui::Context) {
+/// Every frame: the hotkeys, and the overlay when it's shown. `live`: false
+/// in the screenshot run, which must not grab the user's shortcuts.
+pub fn overlay(mon: &mut Monitor, st: &mut State, ectx: &egui::Context, live: bool) {
+    if live {
+        st.hotkeys.sync(&mon.settings.overlay.hotkeys);
+        for a in st.hotkeys.poll() {
+            st.hotkey(a, mon);
+        }
+    }
     let o = mon.settings.overlay.clone();
     if !o.shown {
         st.styled = None;
@@ -136,6 +146,65 @@ pub fn live_pill(ui: &mut Ui, shown: bool) {
 }
 
 impl State {
+    fn hotkey(&mut self, a: HotkeyAction, mon: &mut Monitor) {
+        match a {
+            HotkeyAction::ToggleOverlay => {
+                let on = !mon.settings.overlay.shown;
+                mon.set_setting(move |s| s.overlay.shown = on);
+                if !on {
+                    self.edit_mode = false;
+                }
+            }
+            HotkeyAction::CycleStyle => {
+                let styles = presets::live::all(mon.tjmax());
+                let cur = mon.settings.overlay.style.clone();
+                let i = styles.iter().position(|l| Some(&l.name) == cur.as_ref()).map_or(0, |i| (i + 1) % styles.len());
+                let next = styles[i].clone();
+                mon.set_setting(move |s| {
+                    s.overlay.style = Some(next.name.clone());
+                    s.overlay.layout = next.clone();
+                });
+            }
+            HotkeyAction::EditMode => {
+                self.edit_mode = !self.edit_mode;
+                if self.edit_mode && !mon.settings.overlay.shown {
+                    mon.set_setting(|s| s.overlay.shown = true);
+                }
+            }
+            HotkeyAction::Capture | HotkeyAction::Marker => self.capture_requests.push(a),
+        }
+    }
+
+    fn hotkeys_card(&mut self, ui: &mut Ui, o: &mut model::Overlay) {
+        let p = theme::palette(ui);
+        widgets::card(ui, icon::KEYBOARD, tr("Hotkeys"), |ui| {
+            egui::Grid::new("live-hotkeys").num_columns(3).spacing([12.0, 4.0]).show(ui, |ui| {
+                for (a, keys) in o.hotkeys.iter_mut() {
+                    ui.label(tr(a.label()));
+                    ui.add(egui::TextEdit::singleline(keys).desired_width(140.0).hint_text(tr("off")));
+                    if let Some((_, why)) = self.hotkeys.problems.iter().find(|x| x.0 == *a) {
+                        ui.label(RichText::new(format!("{} {why}", icon::WARNING)).small().color(p.warning));
+                    } else if ui.small_button(tr("Default")).clicked() {
+                        *keys = a.default_keys().to_string();
+                    }
+                    ui.end_row();
+                }
+            });
+            ui.label(
+                RichText::new(tr("Empty turns a shortcut off. Example: Ctrl+Alt+F9.")).small().color(p.text_muted),
+            );
+            if cfg!(target_os = "linux") {
+                ui.label(
+                    RichText::new(tr(
+                        "On Wayland, shortcuts work only while CpuZeeZ has focus; use the tray menu instead.",
+                    ))
+                    .small()
+                    .color(p.text_muted),
+                );
+            }
+        });
+    }
+
     pub fn page(&mut self, ui: &mut Ui, mon: &mut Monitor) {
         let shown = mon.settings.overlay.shown;
         widgets::page_header(ui, "ZeeZ Live", tr("Overlay, capture and reports while you play or work."), |ui| {
@@ -229,7 +298,11 @@ impl State {
             }
             1 => {
                 ui.label(RichText::new(tr("Show or hide the overlay with this shortcut, from any app:")).color(p.text));
-                ui.label(RichText::new("Ctrl+Shift+O").monospace().strong().size(18.0));
+                let keys = mon.settings.overlay.keys(HotkeyAction::ToggleOverlay).to_string();
+                ui.label(RichText::new(keys).monospace().strong().size(18.0));
+                if let Some((_, why)) = self.hotkeys.problems.iter().find(|x| x.0 == HotkeyAction::ToggleOverlay) {
+                    ui.label(RichText::new(format!("{} {why}", icon::WARNING)).color(p.warning));
+                }
                 ui.horizontal(|ui| {
                     if ui.button(tr("Back")).clicked() {
                         self.first_step = 0;
@@ -316,6 +389,7 @@ impl State {
                 }
             });
         });
+        self.hotkeys_card(ui, &mut o);
         widgets::card(ui, icon::GEAR_SIX, tr("Behaviour"), |ui| {
             if cfg!(windows) {
                 ui.checkbox(&mut o.hide_from_capture, tr("Hide from screenshots, recordings and streams"));
@@ -354,6 +428,22 @@ fn limits() -> Vec<&'static str> {
 }
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Same shortcut as another action", "Mesmo atalho de outra ação"),
+    ("Taken by another app", "Usado por outro app"),
+    ("Not a shortcut CpuZeeZ understands", "Atalho não reconhecido pelo CpuZeeZ"),
+    ("Hotkeys", "Atalhos"),
+    ("off", "desligado"),
+    ("Default", "Padrão"),
+    ("Empty turns a shortcut off. Example: Ctrl+Alt+F9.", "Vazio desliga o atalho. Exemplo: Ctrl+Alt+F9."),
+    (
+        "On Wayland, shortcuts work only while CpuZeeZ has focus; use the tray menu instead.",
+        "No Wayland, os atalhos só funcionam com o CpuZeeZ em foco; use o menu da bandeja.",
+    ),
+    ("Show/hide overlay", "Mostrar/ocultar overlay"),
+    ("Next style", "Próximo estilo"),
+    ("Start/stop capture", "Iniciar/parar captura"),
+    ("Marker during capture", "Marcador durante a captura"),
+    ("Overlay edit mode", "Modo de edição do overlay"),
     ("Minimal", "Mínimo"),
     ("Benchmark", "Benchmark"),
     ("Overclocker", "Overclocker"),
@@ -436,6 +526,22 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Same shortcut as another action", "Mismo atajo que otra acción"),
+    ("Taken by another app", "Usado por otra app"),
+    ("Not a shortcut CpuZeeZ understands", "Atajo no reconocido por CpuZeeZ"),
+    ("Hotkeys", "Atajos"),
+    ("off", "desactivado"),
+    ("Default", "Predeterminado"),
+    ("Empty turns a shortcut off. Example: Ctrl+Alt+F9.", "Vacío desactiva el atajo. Ejemplo: Ctrl+Alt+F9."),
+    (
+        "On Wayland, shortcuts work only while CpuZeeZ has focus; use the tray menu instead.",
+        "En Wayland, los atajos solo funcionan con CpuZeeZ en foco; usa el menú de la bandeja.",
+    ),
+    ("Show/hide overlay", "Mostrar/ocultar overlay"),
+    ("Next style", "Siguiente estilo"),
+    ("Start/stop capture", "Iniciar/detener captura"),
+    ("Marker during capture", "Marcador durante la captura"),
+    ("Overlay edit mode", "Modo de edición del overlay"),
     ("Minimal", "Mínimo"),
     ("Benchmark", "Benchmark"),
     ("Overclocker", "Overclocker"),
