@@ -27,6 +27,7 @@ pub enum Tab {
     Live,
     Overlay,
     Sessions,
+    Bottleneck,
 }
 
 #[derive(Default)]
@@ -49,6 +50,7 @@ pub struct State {
     pub last_session: Option<PathBuf>,
     capture_error: Option<String>,
     pub sessions: super::live_sessions::Sessions,
+    pub detector: super::bottleneck_ui::Detector,
     /// Profile games running at the last check, and when it was.
     running: Vec<String>,
     checked: Option<Instant>,
@@ -87,12 +89,23 @@ struct Capture {
     game: (u32, String),
     markers: Vec<Marker>,
     throttling: Vec<Band>,
-    open_band: Option<(f64, String)>,
+    /// Throttling spans still open: (kind, start, label).
+    open_bands: Vec<(String, f64, String)>,
 }
 
 impl Capture {
     fn elapsed(&self) -> f64 {
         self.started.map_or(0.0, |s| s.elapsed().as_secs_f64())
+    }
+}
+
+/// The `Band.kind` of a throttling event (what the bottleneck detector reads back).
+fn throttle_kind(k: &crate::telemetry::ThrottleKind) -> &'static str {
+    use crate::telemetry::ThrottleKind::*;
+    match k {
+        Thermal => "cpu-thermal",
+        Power | Current => "cpu-power",
+        Gpu => "gpu-thermal",
     }
 }
 
@@ -108,8 +121,20 @@ fn timer(s: f64) -> String {
 
 /// Every frame: the hotkeys, and the overlay when it's shown. `live`: false
 /// in the screenshot run, which must not grab the user's shortcuts.
-pub fn overlay(mon: &mut Monitor, st: &mut State, ectx: &egui::Context, live: bool) {
+pub fn overlay(
+    mon: &mut Monitor,
+    st: &mut State,
+    ectx: &egui::Context,
+    live: bool,
+    sampler: &crate::procs::Sampler,
+    page_open: bool,
+) {
     if live {
+        // The bottleneck detector reads a second at a time while its tab is open,
+        // an analysis runs or the overlay shows its pill.
+        let pill_on = mon.settings.overlay.shown && mon.settings.overlay.bottleneck_pill;
+        let tab_open = page_open && st.tab == Tab::Bottleneck;
+        st.detector.tick(mon, sampler, pill_on || tab_open);
         st.hotkeys.sync(&mon.settings.overlay.hotkeys);
         for a in st.hotkeys.poll() {
             st.hotkey(a, mon);
@@ -132,6 +157,7 @@ pub fn overlay(mon: &mut Monitor, st: &mut State, ectx: &egui::Context, live: bo
         return;
     }
     let rec = st.capture.as_ref().map(|c| (c.started.is_some(), c.elapsed(), c.begins));
+    let pill = o.bottleneck_pill.then(|| st.detector.pill()).flatten();
     let tel = mon.tel();
     // A game's profile can bring its own layout and place.
     let target = crate::live_frames::target().map(|t| t.1);
@@ -169,8 +195,24 @@ pub fn overlay(mon: &mut Monitor, st: &mut State, ectx: &egui::Context, live: bo
                     .response
                     .rect
             });
+            // What limits the frame rate, in a word (never colour alone).
+            let pill_rect = pill.map(|(class, confidence)| {
+                let mut text = format!("{} {}", tr(class.label()), icon::ARROW_UP);
+                if confidence == cpuzeez_core::bottleneck::Confidence::Low {
+                    text.push('?');
+                }
+                egui::Frame::NONE
+                    .fill(egui::Color32::from_black_alpha(170))
+                    .corner_radius(egui::CornerRadius::same(4))
+                    .inner_margin(egui::Margin::symmetric(6, 2))
+                    .show(ui, |ui| {
+                        ui.label(RichText::new(text).strong().color(super::bottleneck_ui::class_color(class)))
+                    })
+                    .response
+                    .rect
+            });
             let mut drawn = super::layout_view::show(ui, &layout, &series, &|id| tel.points(id)).rect;
-            if let Some(r) = rec_rect {
+            for r in [rec_rect, pill_rect].into_iter().flatten() {
                 drawn = drawn.union(r);
             }
             if edit {
@@ -245,7 +287,7 @@ pub fn live_pill(ui: &mut Ui, shown: bool) {
 
 impl State {
     /// What the frame source is doing, and what the user can do about it.
-    fn frame_source(&mut self, ui: &mut Ui, access: &mut super::access_ui::Access) {
+    pub(super) fn frame_source(ui: &mut Ui, access: &mut super::access_ui::Access) {
         use crate::live_frames::Status;
         let p = theme::palette(ui);
         let (tone, text) = match crate::live_frames::status() {
@@ -527,7 +569,7 @@ impl State {
             game,
             markers: Vec::new(),
             throttling: Vec::new(),
-            open_band: None,
+            open_bands: Vec::new(),
         });
         self.tick_capture(mon);
     }
@@ -558,14 +600,22 @@ impl State {
             c.started = Some(Instant::now());
         }
         let t = c.elapsed();
-        let thr = tel.throttling();
-        match (&c.open_band, thr.first()) {
-            (None, Some(th)) => c.open_band = Some((t, format!("{}: {}", th.device, th.detail))),
-            (Some((from, label)), None) => {
-                c.throttling.push(Band { from_s: *from, to_s: t, label: label.clone() });
-                c.open_band = None;
+        // One span per kind of throttling, opened when it starts and closed when it ends.
+        let now: Vec<(String, String)> = tel
+            .throttling()
+            .into_iter()
+            .map(|th| (throttle_kind(&th.kind).to_string(), format!("{}: {}", th.device, th.detail)))
+            .collect();
+        for (kind, label) in &now {
+            if !c.open_bands.iter().any(|b| &b.0 == kind) {
+                c.open_bands.push((kind.clone(), t, label.clone()));
             }
-            _ => {}
+        }
+        let (still, ended): (Vec<_>, Vec<_>) =
+            std::mem::take(&mut c.open_bands).into_iter().partition(|b| now.iter().any(|n| n.0 == b.0));
+        c.open_bands = still;
+        for (kind, from, label) in ended {
+            c.throttling.push(Band { from_s: from, to_s: t, label, kind });
         }
         if c.length.is_some_and(|l| t >= l.as_secs_f64()) {
             self.stop_capture(mon);
@@ -584,8 +634,8 @@ impl State {
         }
         let frames = crate::live_frames::end_capture();
         let duration_s = c.elapsed();
-        if let Some((from, label)) = c.open_band.take() {
-            c.throttling.push(Band { from_s: from, to_s: duration_s, label });
+        for (kind, from, label) in std::mem::take(&mut c.open_bands) {
+            c.throttling.push(Band { from_s: from, to_s: duration_s, label, kind });
         }
         let ctx = mon.ctx().clone();
         let cpu = crate::cpu::get(&ctx).name.clone();
@@ -607,6 +657,7 @@ impl State {
                 gpu: gpu.as_ref().map(|g| g.name.clone()).unwrap_or_default(),
                 gpu_driver: gpu.and_then(|g| g.driver_version).unwrap_or_default(),
                 os: std::env::consts::OS.into(),
+                refresh_hz: super::bottleneck_ui::display_hz(&ctx),
                 ..Default::default()
             },
             markers: c.markers,
@@ -744,6 +795,7 @@ impl State {
                 (Tab::Live, icon::PULSE, tr("Live")),
                 (Tab::Overlay, icon::STACK, tr("Overlay")),
                 (Tab::Sessions, icon::FILM_STRIP, tr("Sessions")),
+                (Tab::Bottleneck, icon::GAUGE, tr("Bottleneck")),
             ],
         );
         ui.add_space(8.0);
@@ -762,6 +814,7 @@ impl State {
                 }
                 self.sessions.show(ui);
             }
+            Tab::Bottleneck => self.detector.page(ui, access),
         }
     }
 
@@ -772,7 +825,7 @@ impl State {
         tel.want("live-frames", &["frames"]);
         let series = tel.series_with(|id| id == "frames/ms");
         widgets::card(ui, icon::GAME_CONTROLLER, tr("Game"), |ui| {
-            self.frame_source(ui, access);
+            Self::frame_source(ui, access);
             let apps = crate::live_frames::apps();
             let target = crate::live_frames::target();
             ui.horizontal(|ui| {
@@ -994,6 +1047,7 @@ impl State {
             if cfg!(windows) {
                 ui.checkbox(&mut o.hide_from_capture, tr("Hide from screenshots, recordings and streams"));
             }
+            ui.checkbox(&mut o.bottleneck_pill, tr("Show what limits the frame rate (GPU, CPU…) on the overlay"));
             ui.horizontal(|ui| {
                 ui.label(tr("Text refresh"));
                 ui.add(egui::DragValue::new(&mut o.text_hz).range(1.0..=30.0).suffix(" Hz"));

@@ -248,6 +248,8 @@ pub(super) enum Nav {
     /// The Sensors page, filtered (a tile's metric).
     Sensors(String),
     Act(super::palette::Act),
+    /// ZeeZ Live › Bottleneck: what limits my FPS.
+    Bottleneck,
     /// Settings changed here (tiles, pins): save them.
     Save,
 }
@@ -554,6 +556,14 @@ fn health(ui: &mut Ui, ctx: &std::sync::Arc<Ctx>, r: &[Section], st: &mut State,
             && build.interact(egui::Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand).clicked()
         {
             st.health_open = !st.health_open;
+        }
+        if widgets::pill(ui, &format!("{}  {}", icon::GAUGE, tr("What limits my FPS?")), Tone::Neutral)
+            .interact(egui::Sense::click())
+            .on_hover_cursor(egui::CursorIcon::PointingHand)
+            .on_hover_text(tr("Open the bottleneck detector in ZeeZ Live"))
+            .clicked()
+        {
+            nav.push(Nav::Bottleneck);
         }
         match worst {
             Some((d, HealthLevel::Bad | HealthLevel::Caution)) => {

@@ -88,6 +88,16 @@ impl App {
                 // Let the sampler and the background queries (services, startup) answer.
                 !first && self.auto.as_ref().is_some_and(|a| a.since.elapsed() > Duration::from_secs(3))
             }
+            Step::Bottleneck => {
+                self.page = Page::Live;
+                self.live.tab = live::Tab::Bottleneck;
+                if first {
+                    // A real capture (PresentMon 2.6 on a Ryzen 9 7900X + RTX 4060, Deadlock).
+                    let csv = include_str!("../../crates/core/tests/fixtures/presentmon-2.6-deadlock.csv");
+                    self.live.detector = bottleneck_ui::Detector::from_capture(csv, "deadlock.exe");
+                }
+                true
+            }
             Step::AboutPt => {
                 i18n::set(i18n::Lang::PtBr);
                 self.page = Page::About;

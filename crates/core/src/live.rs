@@ -230,6 +230,8 @@ pub struct Overlay {
     /// Shortcut per action ("" = off).
     pub hotkeys: Vec<(HotkeyAction, String)>,
     pub profiles: Vec<Profile>,
+    /// A small "GPU", "CPU"… pill from the bottleneck detector on the overlay.
+    pub bottleneck_pill: bool,
 }
 
 impl Overlay {
@@ -263,6 +265,7 @@ impl Default for Overlay {
             graph_hz: 30.0,
             hotkeys: HotkeyAction::ALL.iter().map(|a| (*a, a.default_keys().to_string())).collect(),
             profiles: Vec::new(),
+            bottleneck_pill: true,
         }
     }
 }

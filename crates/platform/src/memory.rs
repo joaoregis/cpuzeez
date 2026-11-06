@@ -8,13 +8,39 @@ pub fn composition() -> Composition {
     imp::composition()
 }
 
+/// Hard page faults per second (pages read in from disk to resolve a fault):
+/// the rate since the previous call, so the first call has nothing to say.
+/// Windows `\Memory\Pages Input/sec`, Linux `pgmajfault` from `/proc/vmstat`.
+pub fn hard_faults_per_sec() -> Option<f64> {
+    imp::hard_faults_per_sec()
+}
+
+/// `pgmajfault` from `/proc/vmstat` text.
+pub fn parse_major_faults(vmstat: &str) -> Option<u64> {
+    vmstat.lines().find_map(|l| l.strip_prefix("pgmajfault ")?.trim().parse().ok())
+}
+
 #[cfg(any(windows, target_os = "macos"))]
 const MB: f64 = 1024.0 * 1024.0;
 
 #[cfg(target_os = "linux")]
 mod imp {
+    use std::sync::Mutex;
+    use std::time::Instant;
+
     pub fn composition() -> super::Composition {
         std::fs::read_to_string("/proc/meminfo").map(|t| cpuzeez_core::memory::parse_meminfo(&t)).unwrap_or_default()
+    }
+
+    static LAST: Mutex<Option<(Instant, u64)>> = Mutex::new(None);
+
+    pub fn hard_faults_per_sec() -> Option<f64> {
+        let now = super::parse_major_faults(&std::fs::read_to_string("/proc/vmstat").ok()?)?;
+        let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+        let prev = last.replace((Instant::now(), now));
+        let (at, was) = prev?;
+        let dt = at.elapsed().as_secs_f64();
+        (dt > 0.2).then(|| now.saturating_sub(was) as f64 / dt)
     }
 }
 
@@ -49,6 +75,43 @@ mod imp {
     unsafe impl Send for Query {}
 
     static QUERY: Mutex<Option<Query>> = Mutex::new(None);
+
+    /// A query of its own for the rate counter: a rate is measured since that
+    /// query's previous collection, so it can't share the gauges' query.
+    struct Handles(PDH_HQUERY, PDH_HCOUNTER);
+    // SAFETY: PDH handles may be used from any thread; access is serialized by the Mutex.
+    unsafe impl Send for Handles {}
+
+    pub fn hard_faults_per_sec() -> Option<f64> {
+        static H: Mutex<Option<Handles>> = Mutex::new(None);
+        let mut g = H.lock().unwrap_or_else(|e| e.into_inner());
+        if g.is_none() {
+            let mut q: PDH_HQUERY = std::ptr::null_mut();
+            let mut c: PDH_HCOUNTER = std::ptr::null_mut();
+            let w: Vec<u16> = r"\Memory\Pages Input/sec".encode_utf16().chain([0]).collect();
+            // SAFETY: out-params; the path is a NUL-terminated wide string.
+            let ok = unsafe {
+                PdhOpenQueryW(std::ptr::null(), 0, &mut q) == 0 && PdhAddEnglishCounterW(q, w.as_ptr(), 0, &mut c) == 0
+            };
+            if !ok {
+                return None;
+            }
+            // SAFETY: our query; the first collection primes the rate.
+            unsafe { PdhCollectQueryData(q) };
+            *g = Some(Handles(q, c));
+            return None;
+        }
+        let h = g.as_ref()?;
+        // SAFETY: our live query; the value is read into a local.
+        unsafe {
+            if PdhCollectQueryData(h.0) != 0 {
+                return None;
+            }
+            let mut v = PDH_FMT_COUNTERVALUE::default();
+            (PdhGetFormattedCounterValue(h.1, PDH_FMT_DOUBLE, std::ptr::null_mut(), &mut v) == 0 && v.CStatus == 0)
+                .then_some(v.Anonymous.doubleValue)
+        }
+    }
 
     fn open() -> Option<Query> {
         let mut q: PDH_HQUERY = std::ptr::null_mut();
@@ -127,6 +190,10 @@ mod imp {
 mod imp {
     use super::{Composition, MB};
 
+    pub fn hard_faults_per_sec() -> Option<f64> {
+        None
+    }
+
     pub fn composition() -> Composition {
         let mut total = 0u64;
         let mut len = size_of::<u64>();
@@ -191,6 +258,10 @@ mod imp {
 
 #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 mod imp {
+    pub fn hard_faults_per_sec() -> Option<f64> {
+        None
+    }
+
     pub fn composition() -> super::Composition {
         super::Composition::default()
     }
@@ -206,6 +277,26 @@ mod tests {
             if let Some(v) = v {
                 assert!((0.0..=total * 1.01).contains(&v), "{name} = {v} of {total} MB");
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod fault_tests {
+    #[test]
+    fn major_faults_from_vmstat() {
+        let t = "pgfault 1000\npgmajfault 42\npgrefill 1\n";
+        assert_eq!(super::parse_major_faults(t), Some(42));
+        assert_eq!(super::parse_major_faults("nr_free_pages 3\n"), None);
+    }
+
+    /// The rate needs two reads; neither panics on any OS.
+    #[test]
+    fn hard_fault_rate_after_two_reads() {
+        let _ = super::hard_faults_per_sec();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        if let Some(v) = super::hard_faults_per_sec() {
+            assert!(v >= 0.0 && v.is_finite(), "{v}");
         }
     }
 }

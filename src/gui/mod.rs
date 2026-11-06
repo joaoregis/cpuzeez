@@ -7,6 +7,7 @@
 mod access_ui;
 mod bench_tab;
 mod bmp;
+mod bottleneck_ui;
 pub mod detail;
 mod devices;
 pub mod i18n;
@@ -134,11 +135,13 @@ enum Step {
     Bench(BenchView),
     Tool(ToolView),
     System(system::SysTab),
+    /// ZeeZ Live › Bottleneck, on a recorded capture.
+    Bottleneck,
     /// The About page in Brazilian Portuguese, to show the translations.
     AboutPt,
 }
 
-const SHOTS: [(&str, Step); 24] = [
+const SHOTS: [(&str, Step); 25] = [
     ("overview", Step::Page(Page::Overview)),
     ("processor", Step::Page(Page::Processor)),
     ("mainboard", Step::Page(Page::Mainboard)),
@@ -159,6 +162,7 @@ const SHOTS: [(&str, Step); 24] = [
     ("system-users", Step::System(system::SysTab::Users)),
     ("system-services", Step::System(system::SysTab::Services)),
     ("live", Step::Page(Page::Live)),
+    ("bottleneck", Step::Bottleneck),
     ("settings", Step::Page(Page::Settings)),
     ("about", Step::Page(Page::About)),
     ("about-pt", Step::AboutPt),
@@ -385,7 +389,14 @@ impl eframe::App for App {
         if self.auto.is_none() {
             self.system.background(&self.mon.settings);
         }
-        live::overlay(&mut self.mon, &mut self.live, &ectx, self.auto.is_none());
+        live::overlay(
+            &mut self.mon,
+            &mut self.live,
+            &ectx,
+            self.auto.is_none(),
+            &self.system.sampler,
+            self.page == Page::Live,
+        );
         self.hotkeys(&ectx);
         self.window_title(&ectx);
         self.access.frame(&ectx);
@@ -639,6 +650,10 @@ impl App {
                             self.mon.focus(filter);
                         }
                         overview::Nav::Act(a) => self.run_palette(palette::Target::Act(a)),
+                        overview::Nav::Bottleneck => {
+                            self.page = Page::Live;
+                            self.live.tab = live::Tab::Bottleneck;
+                        }
                         overview::Nav::Save if self.auto.is_none() => self.mon.settings.save(),
                         overview::Nav::Save => {}
                     }

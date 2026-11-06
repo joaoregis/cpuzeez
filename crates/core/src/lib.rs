@@ -15,6 +15,7 @@ pub mod acpi;
 pub mod actions;
 pub mod alerts;
 pub mod availability;
+pub mod bottleneck;
 pub mod config;
 pub mod detail;
 pub mod diskio;

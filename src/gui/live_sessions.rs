@@ -24,6 +24,8 @@ struct Loaded {
     session: Session,
     frames: Vec<Frame>,
     hw: HwLog,
+    /// What limited the frame rate, worked out when the session is opened.
+    analysis: cpuzeez_core::bottleneck::Analysis,
 }
 
 #[derive(Default)]
@@ -75,7 +77,10 @@ fn load(dir: &Path) -> Option<Loaded> {
         .and_then(|t| frames::parse_presentmon(&t).ok())
         .unwrap_or_default();
     let hw = std::fs::read_to_string(dir.join("hw.csv")).map(|t| session::parse_hw_csv(&t)).unwrap_or_default();
-    Some(Loaded { dir: dir.to_path_buf(), session, frames, hw })
+    let windows =
+        cpuzeez_core::bottleneck::windows_from_session(&frames, &hw, session.system.refresh_hz, &session.throttling);
+    let analysis = cpuzeez_core::bottleneck::analyze(&windows, &Default::default());
+    Some(Loaded { dir: dir.to_path_buf(), session, frames, hw, analysis })
 }
 
 /// Import a PresentMon / CapFrameX CSV or a MangoHud log as a session.
@@ -245,6 +250,7 @@ impl Sessions {
                     session: Default::default(),
                     frames: Vec::new(),
                     hw: Default::default(),
+                    analysis: Default::default(),
                 })
             }),
         ));
@@ -504,6 +510,11 @@ impl Sessions {
                 }
             }
         });
+        if o.analysis.seconds > 0 {
+            widgets::card(ui, icon::GAUGE, tr("What limited the frame rate"), |ui| {
+                super::bottleneck_ui::draw_analysis(ui, &o.analysis);
+            });
+        }
         let ms: Vec<f64> = o.frames.iter().map(|f| f.ms).collect();
         widgets::card(ui, icon::CHART_BAR, tr("Distribution"), |ui| {
             ui.label(RichText::new(tr("Frame time at each percentile")).small().color(p.text_secondary));

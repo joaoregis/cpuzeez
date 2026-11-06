@@ -16,6 +16,8 @@ pub struct System {
     pub os: String,
     /// "2560x1440" when known.
     pub resolution: String,
+    /// The display's refresh rate, when every display runs the same one.
+    pub refresh_hz: Option<f64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -30,6 +32,9 @@ pub struct Band {
     pub from_s: f64,
     pub to_s: f64,
     pub label: String,
+    /// "cpu-thermal", "cpu-power", "gpu-thermal" or "gpu-power" (empty in old sessions).
+    #[serde(default)]
+    pub kind: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -323,6 +328,8 @@ h1{font-size:22px}h2{font-size:16px;margin-top:28px}table{border-collapse:collap
     }
     out += "<h2>Frame-time percentiles (ms)</h2>";
     out += &svg_chart(&[("Percentile", "#f59e0b", &curve)], 960.0, 180.0, "ms", &[]);
+    let windows = crate::bottleneck::windows_from_session(frames, hw, s.system.refresh_hz, &s.throttling);
+    out += &crate::bottleneck::html_section(&crate::bottleneck::analyze(&windows, &Default::default()));
     out += "<h2>FPS histogram</h2>";
     let bars: Vec<(String, f64, &str)> = hist.iter().map(|(b, v)| (format!("{b:.0}"), v * 100.0, "#8b5cf6")).collect();
     out += &svg_bars(&bars, 960.0, 160.0);
@@ -358,7 +365,7 @@ mod tests {
         let s = Session {
             game: "<game>".into(),
             summary: crate::frames::summarize(&frames, Default::default()),
-            throttling: vec![Band { from_s: 0.2, to_s: 0.4, label: "CPU".into() }],
+            throttling: vec![Band { from_s: 0.2, to_s: 0.4, label: "CPU".into(), kind: String::new() }],
             ..Default::default()
         };
         let html = html_report(&s, &frames, &h);

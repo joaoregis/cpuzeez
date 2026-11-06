@@ -239,6 +239,10 @@ fn memory(o: &mut Out) {
     {
         o.add("mem/load/used", "Memory", "Memory load", Unit::Percent, used * 100.0 / total);
     }
+    // Pages read from disk to resolve faults, per second: paging, for the bottleneck detector.
+    if let Some(v) = cpuzeez_platform::memory::hard_faults_per_sec() {
+        o.add("mem/rate/pages_in", "Memory", "Hard page faults", Unit::PerSec, v);
+    }
     if let (Some(commit), Some(limit)) = (c.commit, c.commit_limit)
         && limit > 0.0
     {
@@ -555,7 +559,7 @@ impl Source for Memory {
         "memory"
     }
     fn prefixes(&self) -> &'static [&'static str] {
-        &["mem/load", "mem/size"]
+        &["mem/load", "mem/size", "mem/rate"]
     }
     fn read(&mut self, out: &mut Vec<Reading>) {
         let mut o = Out::default();

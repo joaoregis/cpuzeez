@@ -60,6 +60,8 @@ struct Hub {
     captured: Option<Vec<Frame>>,
     /// The running sidecar's PID (Windows), to stop it on exit.
     child: Option<u32>,
+    /// When the target last presented a frame.
+    last_frame: Option<Instant>,
 }
 
 /// At most this many frames per capture (about 2.3 h at 240 FPS).
@@ -117,6 +119,11 @@ pub fn pin_target(pid: Option<u32>) {
     h.frames.clear();
 }
 
+/// How long ago the target last presented a frame (None: never).
+pub fn frame_age() -> Option<Duration> {
+    lock().last_frame.map(|t| t.elapsed())
+}
+
 /// (pid, name) of the app being measured.
 pub fn target() -> Option<(u32, String)> {
     lock().target.clone()
@@ -143,6 +150,13 @@ pub fn recent(secs: f64) -> Vec<Frame> {
     let h = lock();
     let Some(end) = h.frames.back().map(|f| f.t_s) else { return Vec::new() };
     h.frames.iter().filter(|f| f.t_s >= end - secs).cloned().collect()
+}
+
+/// Only the frame times of the last `secs` seconds (cheap: no strings copied).
+pub fn recent_ms(secs: f64) -> Vec<f64> {
+    let h = lock();
+    let Some(end) = h.frames.back().map(|f| f.t_s) else { return Vec::new() };
+    h.frames.iter().filter(|f| f.t_s >= end - secs).map(|f| f.ms).collect()
 }
 
 /// Processes that present but are never the game.
@@ -183,6 +197,7 @@ pub fn push(batch: Vec<Frame>, foreground: Option<u32>) {
                 c.push(f.clone());
             }
             h.frames.push_back(f);
+            h.last_frame = Some(Instant::now());
         }
     }
     let end = h.frames.back().map_or(0.0, |f| f.t_s);

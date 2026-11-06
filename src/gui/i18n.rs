@@ -74,6 +74,7 @@ fn tables() -> &'static [(Table, Table)] {
         (super::drivehealth_view::PT_BR, super::drivehealth_view::ES),
         (super::mini::PT_BR, super::mini::ES),
         (super::live::PT_BR, super::live::ES),
+        (super::bottleneck_ui::PT_BR, super::bottleneck_ui::ES),
         (super::live_sessions::PT_BR, super::live_sessions::ES),
         (super::layout_editor::PT_BR, super::layout_editor::ES),
         (super::system::PT_BR, super::system::ES),
@@ -246,5 +247,26 @@ mod tests {
         }
         assert!(seen > 500, "the scan found only {seen} literals");
         assert!(missing.is_empty(), "untranslated:\n{}", missing.join("\n"));
+    }
+
+    /// The bottleneck detector's texts come from the core as keys (evidence,
+    /// advice, class names): each has a pt-BR and an es translation.
+    #[test]
+    fn bottleneck_texts_are_translated() {
+        use cpuzeez_core::bottleneck::{Class, Confidence, keys};
+        let have: std::collections::HashSet<&str> = tables().iter().flat_map(|t| t.0.iter().map(|e| e.0)).collect();
+        let mut want: Vec<&str> = keys();
+        want.extend(Class::ALL.iter().flat_map(|c| [c.label(), c.headline()]));
+        want.extend([Confidence::Low, Confidence::Medium, Confidence::High].map(Confidence::label));
+        let missing: Vec<&&str> = want.iter().filter(|k| !have.contains(**k)).collect();
+        assert!(
+            missing.is_empty(),
+            "untranslated:
+{}",
+            missing.iter().map(|k| format!("{k:?}")).collect::<Vec<_>>().join(
+                "
+"
+            )
+        );
     }
 }
