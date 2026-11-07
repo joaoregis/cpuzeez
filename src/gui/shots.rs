@@ -61,12 +61,20 @@ impl App {
                 self.page = Page::Tools;
                 self.tool_view = v;
                 if v == ToolView::Compare && first {
-                    let path = std::env::temp_dir().join(format!("{}-screenshot-report.json", crate::NAME));
-                    let _ = std::fs::write(&path, report.map(report::to_json).unwrap_or_default());
+                    // Masked (serials, MAC/IP addresses and raw dumps removed)
+                    // and into this run's own output dir — never a fixed name
+                    // in shared /tmp, where every local user could read the
+                    // machine's full unmasked inventory, and where a planted
+                    // symlink would redirect the write. The README promises
+                    // masking for everything this mode produces.
+                    let masked = report.map(report::masked);
+                    let dir = self.auto.as_ref().map_or_else(|| std::env::temp_dir(), |a| a.dir.clone());
+                    let path = dir.join(format!("{}-screenshot-report.json", crate::NAME));
+                    let _ = std::fs::write(&path, masked.as_deref().map(report::to_json).unwrap_or_default());
                     self.compare.current = true;
                     self.compare.b = path.display().to_string();
-                    self.compare.run(report);
-                    // Published image: no user name from the temp path.
+                    self.compare.run(masked.as_deref());
+                    // Published image: no user name from the path.
                     self.compare.b = path.file_name().map_or(String::new(), |n| n.to_string_lossy().into());
                 }
                 true

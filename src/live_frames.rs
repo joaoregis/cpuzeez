@@ -257,6 +257,27 @@ mod imp {
 
     const SESSION: &str = "CpuZeeZ-PresentMon";
 
+    /// The verified PresentMon.exe, held open with read-only sharing for the
+    /// whole session. In a user-writable (portable) install folder nobody can
+    /// modify, rename or delete the file while we hold it, so nothing can be
+    /// swapped in between the SHA-256 check and any later run of it — the
+    /// reader loop, a restart after idle, or the
+    /// `--terminate_existing_session` call at stop. The same pattern as the
+    /// PawnIO installer (src/executor.rs): this runs elevated, so a swapped
+    /// binary would run with the administrator token.
+    fn held_file() -> &'static std::sync::Mutex<Option<std::fs::File>> {
+        static H: std::sync::OnceLock<std::sync::Mutex<Option<std::fs::File>>> = std::sync::OnceLock::new();
+        H.get_or_init(|| std::sync::Mutex::new(None))
+    }
+
+    fn hold(f: std::fs::File) {
+        *held_file().lock().unwrap_or_else(|e| e.into_inner()) = Some(f);
+    }
+
+    fn release() {
+        *held_file().lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+
     /// A killed PresentMon leaves its ETW session running: end it by name.
     fn end_session(exe: &std::path::Path) {
         use std::os::windows::process::CommandExt;
@@ -276,6 +297,8 @@ mod imp {
                 end_session(&exe);
             }
         }
+        // Release the verified sidecar only after the last run of it.
+        release();
     }
 
     /// Where the packages put the sidecar (next to cpuzeez.exe); a dev
@@ -289,12 +312,23 @@ mod imp {
     }
 
     pub fn start() {
+        use std::os::windows::fs::OpenOptionsExt;
         let Some(exe) = sidecar() else {
             set_status(Status::Missing);
             return;
         };
-        // Checked every start: a swapped binary next to us is never run.
-        match crate::update::sha256_file(&exe) {
+        // Held open without write/delete sharing from the hash check until
+        // stop(): a swapped binary next to us is never run — not even at the
+        // session teardown, which the hash check used to skip entirely.
+        const FILE_SHARE_READ: u32 = 1;
+        let mut held = match std::fs::OpenOptions::new().read(true).share_mode(FILE_SHARE_READ).open(&exe) {
+            Ok(f) => f,
+            Err(e) => {
+                set_status(Status::Failed(e.to_string()));
+                return;
+            }
+        };
+        match crate::update::sha256_of(&mut held) {
             Ok(h) if h.eq_ignore_ascii_case(crate::executor::pin("PRESENTMON_SHA256")) => {}
             _ => {
                 set_status(Status::BadChecksum);
@@ -305,6 +339,7 @@ mod imp {
             set_status(Status::NeedsAdmin);
             return;
         }
+        hold(held);
         super::lock().running = true;
         set_status(Status::Starting);
         let spawned = std::thread::Builder::new().name("cz-presentmon".into()).spawn(move || {
@@ -313,6 +348,7 @@ mod imp {
         });
         if spawned.is_err() {
             super::lock().running = false;
+            release();
             set_status(Status::Failed("no thread".into()));
         }
     }
