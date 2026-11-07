@@ -265,17 +265,73 @@ mod imp {
     /// `--terminate_existing_session` call at stop. The same pattern as the
     /// PawnIO installer (src/executor.rs): this runs elevated, so a swapped
     /// binary would run with the administrator token.
-    fn held_file() -> &'static std::sync::Mutex<Option<std::fs::File>> {
-        static H: std::sync::OnceLock<std::sync::Mutex<Option<std::fs::File>>> = std::sync::OnceLock::new();
+    ///
+    /// Scope: this pins the sidecar *binary*. An install folder writable by
+    /// other users remains unsupported — such a user could plant a DLL beside
+    /// either exe or replace cpuzeez.exe itself; only a per-user (or
+    /// administrator-owned) install folder is a supported configuration.
+    /// (verified handle, resolved final path) — the handle and the path are
+    /// set together and only replaced by a later verified `start()`.
+    fn held() -> &'static std::sync::Mutex<Option<(std::fs::File, std::path::PathBuf)>> {
+        static H: std::sync::OnceLock<std::sync::Mutex<Option<(std::fs::File, std::path::PathBuf)>>> =
+            std::sync::OnceLock::new();
         H.get_or_init(|| std::sync::Mutex::new(None))
     }
 
-    fn hold(f: std::fs::File) {
-        *held_file().lock().unwrap_or_else(|e| e.into_inner()) = Some(f);
+    fn hold(f: std::fs::File, run_path: std::path::PathBuf) {
+        *held().lock().unwrap_or_else(|e| e.into_inner()) = Some((f, run_path));
     }
 
     fn release() {
-        *held_file().lock().unwrap_or_else(|e| e.into_inner()) = None;
+        *held().lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+
+    /// The resolved path of the verified sidecar — what every later run uses.
+    fn verified() -> Option<std::path::PathBuf> {
+        held().lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|(_, p)| p.clone())
+    }
+
+    /// The file's final path from the held handle itself, so later executions
+    /// cannot be redirected by retargeting a junction (reparse point) that
+    /// sits in the original path: the handle pins the real file, and this
+    /// returns the real location it pinned — not whatever the original path
+    /// resolves to now.
+    fn final_path_of(f: &std::fs::File) -> Option<std::path::PathBuf> {
+        use std::os::windows::ffi::OsStringExt;
+        use std::os::windows::io::AsRawHandle;
+        // SAFETY: kernel32 is always loaded on Windows; the declaration
+        // matches GetFinalPathNameByHandleW (HANDLE, PWSTR buffer, DWORD
+        // length in chars, DWORD flags; returns chars written, or the needed
+        // length when the buffer is too small, or 0 on failure).
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn GetFinalPathNameByHandleW(
+                hfile: *mut core::ffi::c_void,
+                lpszfile: *mut u16,
+                cchfile: u32,
+                dwflags: u32,
+            ) -> u32;
+        }
+        const CAP: u32 = 1024;
+        let mut buf = vec![0u16; CAP as usize];
+        // SAFETY: `f` owns a valid file handle; buf/CAP describe a writable
+        // buffer of CAP wide chars; flags 0 = DOS volume name + normalized.
+        let n = unsafe { GetFinalPathNameByHandleW(f.as_raw_handle(), buf.as_mut_ptr(), CAP, 0) };
+        if n == 0 || n >= CAP {
+            return None;
+        }
+        let s =
+            std::path::PathBuf::from(std::ffi::OsString::from_wide(&buf[..n as usize])).to_string_lossy().into_owned();
+        // \\?\C:\… → C:\… and \\?\UNC\server\share → \\server\share
+        // (CreateProcess prefers the plain drive form).
+        let plain = if let Some(p) = s.strip_prefix(r"\\?\UNC\") {
+            format!(r"\\{p}")
+        } else if let Some(p) = s.strip_prefix(r"\\?\") {
+            p.to_string()
+        } else {
+            s
+        };
+        Some(std::path::PathBuf::from(plain))
     }
 
     /// A killed PresentMon leaves its ETW session running: end it by name.
@@ -293,19 +349,26 @@ mod imp {
         let pid = super::lock().child.take();
         if let Some(pid) = pid {
             let _ = cpuzeez_platform::proc_ops::kill(pid);
-            if let Some(exe) = sidecar() {
+            // Teardown runs the *verified* path from the held handle, not a
+            // fresh lookup of the original (junction-able) path.
+            if let Some(exe) = verified() {
                 end_session(&exe);
             }
         }
-        // Release the verified sidecar only after the last run of it.
-        release();
+        // The verified sidecar stays held until process exit (the OS then
+        // closes it): the reader thread may run its own end_session after us,
+        // and that run must be protected by the same verified handle.
     }
 
     /// Where the packages put the sidecar (next to cpuzeez.exe); a dev
-    /// build can point `CPUZEEZ_PRESENTMON` at one.
+    /// build can point `CPUZEEZ_PRESENTMON` at one — absolute paths only:
+    /// a bare or relative name would resolve differently for the hash open
+    /// (current directory) than for CreateProcess (app dir, System32, PATH),
+    /// so the file that was verified and the file that runs could differ.
     fn sidecar() -> Option<std::path::PathBuf> {
         if let Some(p) = std::env::var_os("CPUZEEZ_PRESENTMON") {
-            return Some(p.into());
+            let p = std::path::PathBuf::from(p);
+            return p.is_absolute().then_some(p);
         }
         let p = std::env::current_exe().ok()?.with_file_name("PresentMon.exe");
         p.exists().then_some(p)
@@ -339,11 +402,18 @@ mod imp {
             set_status(Status::NeedsAdmin);
             return;
         }
-        hold(held);
+        // Resolve what the handle actually pinned and run that from now on:
+        // re-resolving the original path on every spawn would re-traverse any
+        // junction in it, which an attacker with write access to that part of
+        // the path could retarget between the check and a later run. Falls
+        // back to the (already absolute) original path only if the OS cannot
+        // answer.
+        let run_path = final_path_of(&held).unwrap_or_else(|| exe.clone());
+        hold(held, run_path.clone());
         super::lock().running = true;
         set_status(Status::Starting);
         let spawned = std::thread::Builder::new().name("cz-presentmon".into()).spawn(move || {
-            run(&exe);
+            run(&run_path);
             super::lock().running = false;
         });
         if spawned.is_err() {
@@ -488,6 +558,30 @@ mod tests {
         push((0..10).map(|i| f(10, "game.exe", 2.5 + i as f64 * 0.01)).collect(), Some(30));
         assert_eq!(target().map(|t| t.0), Some(10));
         pin_target(None);
+    }
+
+    /// A file held the way the sidecar is held (read + FILE_SHARE_READ) can
+    /// neither be written nor renamed by anyone else until it is dropped —
+    /// the guarantee the verify→execute fix rests on.
+    #[test]
+    #[cfg(windows)]
+    fn held_handle_blocks_writes_and_renames() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let dir = std::env::temp_dir().join(format!("cz-share-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("held.exe");
+        std::fs::write(&p, b"MZ").unwrap();
+        const FILE_SHARE_READ: u32 = 1;
+        let held = std::fs::OpenOptions::new().read(true).share_mode(FILE_SHARE_READ).open(&p).unwrap();
+        assert!(
+            std::fs::OpenOptions::new().write(true).open(&p).is_err(),
+            "a write open must be refused while the verified file is held"
+        );
+        assert!(std::fs::rename(&p, dir.join("gone.exe")).is_err(), "renaming the held file away must be refused");
+        drop(held);
+        assert!(std::fs::OpenOptions::new().write(true).open(&p).is_ok(), "after release the file is writable again");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The real sidecar end to end (Windows, administrator, a GPU presenting):
