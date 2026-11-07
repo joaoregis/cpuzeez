@@ -7,6 +7,15 @@ generated from its section below.
 
 ## [Unreleased]
 
+## [1.0.0-beta.9] - 2026-11-07
+
+The new name and icon, and fixes to what beta.8 showed in *About*.
+
+### Fixed
+
+- *About ▸ Third-party components* now lists PresentMon (and, on Linux, says MangoHud is optional and not bundled).
+- *About ▸ Full list and licenses* and the PawnIO guide linked to a file on the `main` branch that does not exist until the branch is merged (a 404). They open the document at the tag of the version you run.
+
 ### Changed
 
 - **A new name and icon: CPU ZeeZ.** The window, About, tray, installer, shortcut, reports and docs say "CPU ZeeZ". The icon is new: a gauge arc, an area chart and a two-tone Z, in the app's violet. What stays as it was so nothing breaks: the `cpuzeez` command and file names, the install folder (`C:\Program Files\CpuZeeZ`), the data folder (`%APPDATA%\CpuZeeZ`, so your settings, history and sessions are found), the `cpuzeez.ini` file and the repository name. Windows shows the new name in *Installed apps* after the next upgrade.
