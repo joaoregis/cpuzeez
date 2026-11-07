@@ -1,6 +1,6 @@
 [package]
 name = "cpuzeez"
-version = "1.0.0-beta.9"
+version = "1.0.0-beta.10"
 edition = "2024"
 rust-version = "1.95"
 description = "Clean-room, cross-platform reimplementation of CPU-Z's hardware information features"

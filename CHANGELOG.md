@@ -7,6 +7,12 @@ generated from its section below.
 
 ## [Unreleased]
 
+## [1.0.0-beta.10] - 2026-11-08
+
+### Fixed
+
+- **The one-click update failed** with "curl: The handle is invalid. (os error 6)" when the app was opened by double-click. Windows hands such an app a console that CpuZeeZ then drops, and every program it started inherited the dead standard handles. The standard handles now point at `NUL` once the console is dropped, and the update's own helpers never inherit stdin. The same problem affected *Open file location* and *Open folder*. A test starts a real child process under those conditions. **If you are on beta.8 or beta.9, install this one by hand once** (the MSI upgrades in place); after that the in-app update works.
+
 ## [1.0.0-beta.9] - 2026-11-07
 
 The new name and icon, and fixes to what beta.8 showed in *About*.

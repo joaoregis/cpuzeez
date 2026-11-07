@@ -258,6 +258,8 @@ impl Installer {
 fn command(prog: &str) -> std::process::Command {
     #[allow(unused_mut)]
     let mut c = std::process::Command::new(prog);
+    // Never inherit stdin: from a GUI whose console was dropped it is not a valid handle.
+    c.stdin(std::process::Stdio::null());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;

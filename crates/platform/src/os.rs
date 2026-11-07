@@ -225,6 +225,23 @@ pub fn hide_own_console() {
         let mut pids = [0u32; 2];
         if win::GetConsoleProcessList(pids.as_mut_ptr(), 2) == 1 {
             win::FreeConsole();
+            nul_std_handles();
+        }
+    }
+}
+
+/// After `FreeConsole` the standard handles are dead, and a child process that
+/// inherits them fails to start with "The handle is invalid" (os error 6): that
+/// broke the update download, "open folder" and the like when the app was
+/// double-clicked. Point all three at `NUL` so every spawn works.
+#[cfg(windows)]
+fn nul_std_handles() {
+    use std::os::windows::io::IntoRawHandle;
+    // STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE
+    for (which, write) in [(-10i32 as u32, false), (-11i32 as u32, true), (-12i32 as u32, true)] {
+        if let Ok(f) = std::fs::OpenOptions::new().read(!write).write(write).open("NUL") {
+            // SAFETY: SetStdHandle takes ownership of a valid handle that we hand over (not closed here).
+            unsafe { win::SetStdHandle(which, f.into_raw_handle()) };
         }
     }
 }
@@ -245,6 +262,7 @@ pub mod win {
 
     #[link(name = "kernel32")]
     unsafe extern "system" {
+        pub fn SetStdHandle(which: u32, handle: *mut c_void) -> i32;
         pub fn GetActiveProcessorGroupCount() -> u16;
         pub fn GetActiveProcessorCount(group: u16) -> u32;
         pub fn GetCurrentThread() -> *mut c_void;
@@ -444,5 +462,52 @@ mod stamp_tests {
         assert_eq!(s.as_bytes()[8], b'-');
         assert!(s.bytes().enumerate().all(|(i, b)| i == 8 || b.is_ascii_digit()), "{s}");
         assert!(s.starts_with("20"), "{s}");
+    }
+}
+
+#[cfg(all(test, windows))]
+mod console_tests {
+    use std::process::Command;
+
+    /// The child half: only does anything when the parent started it with `CZ_CONSOLE_RESULT`.
+    #[test]
+    fn child_after_hiding_the_console() {
+        let Some(out) = std::env::var_os("CZ_CONSOLE_RESULT") else { return };
+        super::hide_own_console(); // the sole process on its own console: frees it
+        // Everything inherited, like most of the app's spawns.
+        let r = Command::new("cmd").args(["/C", "exit", "0"]).spawn().and_then(|mut c| c.wait());
+        let _ = std::fs::write(
+            out,
+            match r {
+                Ok(s) if s.success() => "ok".to_string(),
+                Ok(s) => format!("exit {s}"),
+                Err(e) => format!("spawn failed: {e}"),
+            },
+        );
+    }
+
+    /// Double-clicked from Explorer, the app owns a console it then frees; a child that
+    /// inherits the (now dead) standard handles used to fail with os error 6.
+    #[test]
+    fn a_child_can_start_after_the_console_is_hidden() {
+        if std::env::var_os("CZ_CONSOLE_RESULT").is_some() {
+            return; // we are the child; the other test does the work
+        }
+        let exe = std::env::current_exe().unwrap();
+        let out = std::env::temp_dir().join(format!("cz-console-{}.txt", std::process::id()));
+        let _ = std::fs::remove_file(&out);
+        // Start-Process gives the child a console of its own, with console (not pipe) handles.
+        let st = Command::new("powershell")
+            .args(["-NoProfile", "-Command"])
+            .arg(format!(
+                "Start-Process -FilePath '{}' -ArgumentList 'child_after_hiding_the_console','--test-threads=1' -WindowStyle Hidden -Wait",
+                exe.display()
+            ))
+            .env("CZ_CONSOLE_RESULT", &out)
+            .status();
+        assert!(st.is_ok_and(|s| s.success()), "powershell ran");
+        let got = std::fs::read_to_string(&out).unwrap_or_else(|e| format!("no result: {e}"));
+        let _ = std::fs::remove_file(&out);
+        assert_eq!(got, "ok", "a spawn after hide_own_console");
     }
 }
