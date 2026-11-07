@@ -7,7 +7,9 @@ generated from its section below.
 
 ## [Unreleased]
 
-Hardening: tests, security, accessibility, installers and the leftovers of ZeeZ Live. (Becomes `1.0.0-beta.8`.)
+## [1.0.0-beta.8] - 2026-11-07
+
+Hardening: tests, security, accessibility, installers and the leftovers of ZeeZ Live.
 
 ### Added
 
