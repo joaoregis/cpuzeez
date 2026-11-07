@@ -120,6 +120,7 @@ pub fn show_all(mon: &mut Monitor, ectx: &egui::Context) {
         false
     };
     let tjmax = mon.tjmax();
+    let app_ctx = mon.ctx().clone();
     let tel = mon.tel();
     let ws: Vec<_> = minis.iter().filter(|m| m.open).flat_map(|m| m.layout.widgets.clone()).collect();
     let lease = super::layout_view::prefixes(&ws);
@@ -171,9 +172,8 @@ pub fn show_all(mon: &mut Monitor, ectx: &egui::Context) {
                     ui.input(|i| (i.viewport().outer_rect, i.viewport().monitor_size, i.pointer.any_down()));
                 if let (Some(r), Some(scr), false) = (outer, screen, down) {
                     let pos = [r.min.x, r.min.y];
-                    // ponytail: snaps against the monitor size from the origin, so
-                    // only on the primary display; per-monitor origins need winit.
-                    let snapped = mini::snap(pos, [r.width(), r.height()], [scr.x, scr.y], SNAP);
+                    let screens = super::screens::points(ui.ctx(), &app_ctx, scr);
+                    let snapped = cpuzeez_core::screens::snap_on(&screens, pos, [r.width(), r.height()], SNAP);
                     if snapped != pos {
                         ui.ctx().send_viewport_cmd(egui::ViewportCommand::OuterPosition(snapped.into()));
                     }

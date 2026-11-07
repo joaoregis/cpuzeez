@@ -33,6 +33,12 @@ pub fn foreground_pid() -> Option<u32> {
     imp::foreground_pid()
 }
 
+/// The centre of the foreground window, in physical pixels on the virtual
+/// desktop, when it belongs to process `pid` (the game being played).
+pub fn window_centre_of(pid: u32) -> Option<[i32; 2]> {
+    imp::window_centre_of(pid)
+}
+
 /// A window action (no privilege: windows of this desktop).
 pub fn window_op(handle: isize, op: WindowOp) -> bool {
     imp::window_op(handle, op)
@@ -91,6 +97,20 @@ mod imp {
         }
     }
 
+    pub fn window_centre_of(pid: u32) -> Option<[i32; 2]> {
+        use windows_sys::Win32::Foundation::RECT;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowRect};
+        // SAFETY: plain queries on the foreground window; the RECT is ours.
+        unsafe {
+            let h = GetForegroundWindow();
+            let mut owner = 0u32;
+            GetWindowThreadProcessId(h, &mut owner);
+            let mut r = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+            (owner == pid && owner != 0 && GetWindowRect(h, &mut r) != 0)
+                .then_some([(r.left + r.right) / 2, (r.top + r.bottom) / 2])
+        }
+    }
+
     pub fn window_op(handle: isize, op: WindowOp) -> bool {
         let h = handle as HWND;
         // SAFETY: plain window calls; a stale handle just fails.
@@ -118,6 +138,9 @@ mod imp {
         false
     }
     pub fn foreground_pid() -> Option<u32> {
+        None
+    }
+    pub fn window_centre_of(_: u32) -> Option<[i32; 2]> {
         None
     }
 }

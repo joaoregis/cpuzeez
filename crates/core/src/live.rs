@@ -274,6 +274,8 @@ pub struct Overlay {
     pub layout: Layout,
     pub anchor: Anchor,
     pub offset: [f32; 2],
+    /// Which monitor it lives on.
+    pub screen: crate::screens::Which,
     /// Windows: keep the HUD out of screenshots, recordings and streams.
     pub hide_from_capture: bool,
     /// The three-step first use is done.
@@ -313,6 +315,7 @@ impl Default for Overlay {
             layout: crate::layout::presets::live::compact(100.0),
             anchor: Anchor::TopLeft,
             offset: [0.0, 0.0],
+            screen: Default::default(),
             hide_from_capture: false,
             first_use_done: false,
             text_hz: 4.0,

@@ -175,8 +175,9 @@ pub fn overlay(
         .with_taskbar(false)
         .with_active(false)
         .with_mouse_passthrough(!edit);
-    let mut moved: Option<([f32; 2], [f32; 2], [f32; 2])> = None;
+    let mut moved: Option<([f32; 2], [f32; 2])> = None;
     let mut end_edit = false;
+    let app_ctx = mon.ctx().clone();
     ectx.show_viewport_immediate(egui::ViewportId::from_hash_of("zeez-live-overlay"), builder, |ui, _| {
         egui::CentralPanel::default().frame(egui::Frame::NONE).show(ui, |ui| {
             // ● REC is always on the overlay while capturing (zeez-live §7).
@@ -239,17 +240,20 @@ pub fn overlay(
             let (outer, screen, down) =
                 ui.input(|i| (i.viewport().outer_rect, i.viewport().monitor_size, i.pointer.any_down()));
             if let (Some(r), Some(scr)) = (outer, screen) {
-                let (size, scr) = ([r.width(), r.height()], [scr.x, scr.y]);
+                let size = [r.width(), r.height()];
                 if edit {
                     if !down {
-                        moved = Some(([r.min.x, r.min.y], size, scr));
+                        moved = Some(([r.min.x, r.min.y], size));
                     }
                 } else {
-                    // ponytail: placed on the monitor the window is on, from its
-                    // origin, so the primary display; per-monitor origins need winit.
-                    let pos = model::place(anchor, offset, size, scr);
-                    if (pos[0] - r.min.x).abs() + (pos[1] - r.min.y).abs() > 1.0 {
-                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::OuterPosition(pos.into()));
+                    // On the chosen monitor, or the game's, or the primary one.
+                    let screens = super::screens::points(ui.ctx(), &app_ctx, scr);
+                    let game = super::screens::game_centre(ui.ctx());
+                    if let Some(i) = cpuzeez_core::screens::choose(&screens, o.screen, game) {
+                        let pos = cpuzeez_core::screens::place_on(&screens[i], anchor, offset, size);
+                        if (pos[0] - r.min.x).abs() + (pos[1] - r.min.y).abs() > 1.0 {
+                            ui.ctx().send_viewport_cmd(egui::ViewportCommand::OuterPosition(pos.into()));
+                        }
                     }
                 }
             }
@@ -263,14 +267,22 @@ pub fn overlay(
     {
         st.styled = Some((want, Instant::now()));
     }
-    if let Some((pos, size, scr)) = moved {
-        let anchor = model::nearest_anchor(pos, size, scr);
-        let offset = model::offset_for(anchor, pos, size, scr).map(|v| v.round());
-        if anchor != o.anchor || offset != o.offset {
-            mon.set_setting(move |s| {
-                s.overlay.anchor = anchor;
-                s.overlay.offset = offset;
-            });
+    if let Some((pos, size)) = moved {
+        let fallback = ectx.input(|i| i.viewport().monitor_size).unwrap_or(egui::vec2(1920.0, 1080.0));
+        let screens = super::screens::points(ectx, mon.ctx(), fallback);
+        // Dropped on another monitor: it lives there from now on. On the one it
+        // would have been on anyway, "Automatic" stays automatic.
+        if let Some((i, anchor, offset)) = cpuzeez_core::screens::locate(&screens, pos, size) {
+            let offset = offset.map(f32::round);
+            let auto = cpuzeez_core::screens::choose(&screens, o.screen, super::screens::game_centre(ectx));
+            let screen = if auto == Some(i) { o.screen } else { cpuzeez_core::screens::Which::Index(i) };
+            if anchor != o.anchor || offset != o.offset || screen != o.screen {
+                mon.set_setting(move |s| {
+                    s.overlay.anchor = anchor;
+                    s.overlay.offset = offset;
+                    s.overlay.screen = screen;
+                });
+            }
         }
     }
     if end_edit {
@@ -994,6 +1006,9 @@ impl State {
         let p = theme::palette(ui);
         let tjmax = mon.tjmax();
         let mut o = mon.settings.overlay.clone();
+        let fallback = ui.ctx().input(|i| i.viewport().monitor_size).unwrap_or(egui::vec2(1920.0, 1080.0));
+        let screens = super::screens::points(ui.ctx(), mon.ctx(), fallback);
+        let ppp = ui.ctx().pixels_per_point();
         widgets::card(ui, icon::STACK, tr("Style"), |ui| {
             ui.horizontal_wrapped(|ui| {
                 for l in presets::live::all(tjmax) {
@@ -1017,6 +1032,27 @@ impl State {
             }
         });
         widgets::card(ui, icon::ARROWS_OUT_CARDINAL, tr("Position"), |ui| {
+            if screens.len() > 1 {
+                use cpuzeez_core::screens::Which;
+                ui.horizontal(|ui| {
+                    ui.label(tr("Monitor"));
+                    let shown = match o.screen {
+                        Which::Auto => tr("Where the game is").to_string(),
+                        Which::Primary => tr("Primary monitor").to_string(),
+                        Which::Index(i) => screens.get(i).map_or_else(
+                            || tr("Primary monitor").to_string(),
+                            |s| super::screens::label(i + 1, s, ppp),
+                        ),
+                    };
+                    egui::ComboBox::from_id_salt("overlay-monitor").selected_text(shown).show_ui(ui, |ui| {
+                        ui.selectable_value(&mut o.screen, Which::Auto, tr("Where the game is"));
+                        ui.selectable_value(&mut o.screen, Which::Primary, tr("Primary monitor"));
+                        for (i, s) in screens.iter().enumerate() {
+                            ui.selectable_value(&mut o.screen, Which::Index(i), super::screens::label(i + 1, s, ppp));
+                        }
+                    });
+                });
+            }
             egui::Grid::new("overlay-anchors").spacing([4.0, 4.0]).show(ui, |ui| {
                 for (i, a) in Anchor::ALL.into_iter().enumerate() {
                     if ui.selectable_label(o.anchor == a, tr(a.label())).clicked() {
@@ -1271,6 +1307,9 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Taken by another app", "Usado por outro app"),
     ("Not a shortcut CpuZeeZ understands", "Atalho não reconhecido pelo CpuZeeZ"),
     ("Hotkeys", "Atalhos"),
+    ("Monitor", "Monitor"),
+    ("Where the game is", "Onde o jogo está"),
+    ("Primary monitor", "Monitor principal"),
     ("off", "desligado"),
     ("Default", "Padrão"),
     ("Empty turns a shortcut off. Example: Ctrl+Alt+F9.", "Vazio desliga o atalho. Exemplo: Ctrl+Alt+F9."),
@@ -1491,6 +1530,9 @@ pub const ES: &[(&str, &str)] = &[
     ("Taken by another app", "Usado por otra app"),
     ("Not a shortcut CpuZeeZ understands", "Atajo no reconocido por CpuZeeZ"),
     ("Hotkeys", "Atajos"),
+    ("Monitor", "Monitor"),
+    ("Where the game is", "Donde está el juego"),
+    ("Primary monitor", "Monitor principal"),
     ("off", "desactivado"),
     ("Default", "Predeterminado"),
     ("Empty turns a shortcut off. Example: Ctrl+Alt+F9.", "Vacío desactiva el atajo. Ejemplo: Ctrl+Alt+F9."),

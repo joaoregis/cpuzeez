@@ -33,6 +33,7 @@ pub mod query;
 pub mod report;
 #[cfg(test)]
 mod robustness;
+pub mod screens;
 pub mod services;
 pub mod session;
 pub mod smbios;

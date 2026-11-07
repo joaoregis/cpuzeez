@@ -7,6 +7,9 @@
 //! logged-in user has it on a normal desktop). The byte decoding is plain
 //! code, tested everywhere on fixtures; only the ioctls are Linux-only.
 
+// Only Linux calls the decoding; the other targets compile it for its tests.
+#![cfg_attr(not(target_os = "linux"), allow(dead_code))]
+
 /// `struct drm_mode_modeinfo`: one video mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ModeInfo {

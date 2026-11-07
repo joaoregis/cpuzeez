@@ -17,6 +17,7 @@ pub mod overview;
 mod pages;
 mod palette;
 pub mod pins;
+mod screens;
 mod settings_ui;
 mod shots;
 #[cfg(feature = "soak")]

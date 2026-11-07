@@ -172,19 +172,8 @@ pub fn show(
         }
         let p = theme::palette(ui);
         let bg = p.card.gamma_multiply(st.opacity.clamp(0.0, 1.0));
-        // ponytail: "outline" is a dark plate behind each reading, not a glyph
-        // stroke; it reads over any background. A real stroke needs painted text.
-        let one = |ui: &mut Ui, w: &Widget| {
-            if st.outline {
-                Frame::default()
-                    .fill(Color32::from_black_alpha(150))
-                    .corner_radius(CornerRadius::same(4))
-                    .inner_margin(Margin::symmetric(4, 1))
-                    .show(ui, |ui| widget(ui, w, series, points, st.scale));
-            } else {
-                widget(ui, w, series, points, st.scale);
-            }
-        };
+        // "Outline" strokes the glyphs themselves, so the text reads over any picture.
+        let one = |ui: &mut Ui, w: &Widget| widget(ui, w, series, points, st.scale, st.outline);
         Frame::default()
             .fill(bg)
             .corner_radius(CornerRadius::same(st.corner))
@@ -220,7 +209,14 @@ pub fn show(
     .inner
 }
 
-fn widget(ui: &mut Ui, w: &Widget, series: &[Series], points: &dyn Fn(&str) -> Vec<(f64, f64)>, scale: f32) {
+fn widget(
+    ui: &mut Ui,
+    w: &Widget,
+    series: &[Series],
+    points: &dyn Fn(&str) -> Vec<(f64, f64)>,
+    scale: f32,
+    outline: bool,
+) {
     let p = theme::palette(ui);
     let size = ui.text_style_height(&egui::TextStyle::Body) * scale;
     let s = w.metric.as_deref().and_then(|m| resolve(m, series));
@@ -237,18 +233,18 @@ fn widget(ui: &mut Ui, w: &Widget, series: &[Series], points: &dyn Fn(&str) -> V
     let label_text = || RichText::new(&label).size(size * 0.9).color(p.text_secondary);
     match w.kind {
         Kind::Value => {
-            ui.label(value());
+            lbl(ui, value(), outline);
         }
         Kind::LabelValue => {
             ui.horizontal(|ui| {
-                ui.label(label_text());
-                ui.label(value());
+                lbl(ui, label_text(), outline);
+                lbl(ui, value(), outline);
             });
         }
         Kind::Bar => {
             ui.horizontal(|ui| {
-                ui.label(label_text());
-                ui.label(value());
+                lbl(ui, label_text(), outline);
+                lbl(ui, value(), outline);
             });
             if let Some(s) = s {
                 let c = if tone == Tone::Normal { p.accent } else { color };
@@ -257,8 +253,8 @@ fn widget(ui: &mut Ui, w: &Widget, series: &[Series], points: &dyn Fn(&str) -> V
         }
         Kind::Sparkline => {
             ui.horizontal(|ui| {
-                ui.label(label_text());
-                ui.label(value());
+                lbl(ui, label_text(), outline);
+                lbl(ui, value(), outline);
             });
             if let Some(s) = s {
                 let pts: Vec<f64> = points(&s.id).iter().rev().take(60).rev().map(|p| p.1).collect();
@@ -271,17 +267,19 @@ fn widget(ui: &mut Ui, w: &Widget, series: &[Series], points: &dyn Fn(&str) -> V
             }
         }
         Kind::Header => {
-            ui.label(RichText::new(label).size(size).strong().color(p.text));
+            lbl(ui, RichText::new(label).size(size).strong().color(p.text), outline);
         }
         Kind::Separator => {
             ui.separator();
         }
         Kind::Clock => {
-            ui.label(
+            lbl(
+                ui,
                 RichText::new(format!("{} {}", icon::CLOCK, sensors::local_time()))
                     .size(size)
                     .monospace()
                     .color(p.text),
+                outline,
             );
         }
         Kind::Throttle => {
@@ -312,6 +310,35 @@ fn widget(ui: &mut Ui, w: &Widget, series: &[Series], points: &dyn Fn(&str) -> V
     }
 }
 
+/// A label; with `outline` its glyphs get a 1 px dark stroke (the text drawn
+/// eight times offset in black, then once in colour), so it reads over a bright
+/// game as well as a dark one. The text stays visible to assistive technology.
+fn lbl(ui: &mut Ui, text: RichText, outline: bool) -> egui::Response {
+    if !outline {
+        return ui.label(text);
+    }
+    let galley = egui::WidgetText::from(text).into_galley(
+        ui,
+        Some(egui::TextWrapMode::Extend),
+        f32::INFINITY,
+        egui::TextStyle::Body,
+    );
+    let (rect, resp) = ui.allocate_exact_size(galley.size() + egui::vec2(2.0, 2.0), egui::Sense::hover());
+    let shown = galley.text().to_string();
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, shown.clone()));
+    if ui.is_rect_visible(rect) {
+        let at = rect.min + egui::vec2(1.0, 1.0);
+        let black = Color32::from_black_alpha(230);
+        for (dx, dy) in
+            [(-1.0, 0.0), (1.0, 0.0), (0.0, -1.0), (0.0, 1.0), (-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)]
+        {
+            ui.painter().galley_with_override_text_color(at + egui::vec2(dx, dy), galley.clone(), black);
+        }
+        ui.painter().galley(at, galley, ui.visuals().text_color());
+    }
+    resp
+}
+
 fn bar(ui: &mut Ui, frac: f32, color: Color32, h: f32) {
     let (rect, _) =
         ui.allocate_exact_size(egui::vec2(ui.available_width().clamp(60.0, 160.0), h), egui::Sense::hover());
@@ -339,6 +366,32 @@ mod tests {
             max: v,
             avg: v,
         }
+    }
+
+    /// The outline strokes the glyphs and keeps the text readable to assistive
+    /// technology; the plate it replaced is gone.
+    #[test]
+    fn the_outline_keeps_text_findable_and_adds_strokes() {
+        use egui_kittest::{Harness, kittest::Queryable};
+        let series = vec![s("cpu/temp/package", "CPU", "Package", Unit::Celsius, 71.0)];
+        let mut count = [0usize; 2];
+        for (i, outline) in [false, true].into_iter().enumerate() {
+            let mut layout = Layout {
+                widgets: vec![Widget::metric(Kind::LabelValue, "@cpu_temp", "CPU temp")],
+                ..Default::default()
+            };
+            layout.style.outline = outline;
+            let series = series.clone();
+            let mut h = Harness::new_ui(move |ui| {
+                show(ui, &layout, &series, &|_| vec![]);
+            });
+            h.run();
+            assert!(h.query_all_by_label_contains("CPU temp").count() > 0, "outline={outline}: the label is on screen");
+            assert!(h.query_all_by_label_contains("71").count() > 0, "outline={outline}: so is the value");
+            count[i] = h.output().shapes.len();
+        }
+        // Nine text shapes per string instead of one, so the outlined layout draws more.
+        assert!(count[1] > count[0] + 8, "{count:?}");
     }
 
     /// Throttle pills carry an icon as well as colour; with none on, it says so.

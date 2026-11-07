@@ -25,6 +25,22 @@ pub fn modes() -> Vec<Mode> {
     imp::modes()
 }
 
+/// One monitor's rectangle on the virtual desktop, in physical pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScreenRect {
+    pub x: i32,
+    pub y: i32,
+    pub w: i32,
+    pub h: i32,
+    pub primary: bool,
+}
+
+/// Where each monitor sits on the desktop (empty where the OS gives no
+/// positions here: the GUI then assumes one screen at the origin).
+pub fn screens() -> Vec<ScreenRect> {
+    imp::screens()
+}
+
 /// The OS is set to save power at the CPU's expense: Windows' "Power saver"
 /// plan, or Linux's `powersave` governor under acpi-cpufreq (under
 /// intel_pstate/amd-pstate "powersave" is the normal, dynamic default).
@@ -38,8 +54,42 @@ mod imp {
     use windows_sys::Win32::Foundation::LocalFree;
     use windows_sys::Win32::Graphics::Gdi::{
         DEVMODEW, DISPLAY_DEVICE_ATTACHED_TO_DESKTOP, DISPLAY_DEVICEW, ENUM_CURRENT_SETTINGS, EnumDisplayDevicesW,
-        EnumDisplaySettingsW,
+        EnumDisplayMonitors, EnumDisplaySettingsW, GetMonitorInfoW, HDC, HMONITOR, MONITORINFO,
     };
+
+    unsafe extern "system" fn each_monitor(
+        h: HMONITOR,
+        _: HDC,
+        _: *mut windows_sys::Win32::Foundation::RECT,
+        l: isize,
+    ) -> i32 {
+        // SAFETY: `l` is the &mut Vec passed by `screens` below, alive for the whole enumeration.
+        let out = unsafe { &mut *(l as *mut Vec<super::ScreenRect>) };
+        // SAFETY: the struct is zeroed with its size field set, as the API requires.
+        let mut mi: MONITORINFO = unsafe { std::mem::zeroed() };
+        mi.cbSize = size_of::<MONITORINFO>() as u32;
+        // SAFETY: `h` was handed to us by the enumeration.
+        if unsafe { GetMonitorInfoW(h, &mut mi) } != 0 {
+            let r = mi.rcMonitor;
+            out.push(super::ScreenRect {
+                x: r.left,
+                y: r.top,
+                w: r.right - r.left,
+                h: r.bottom - r.top,
+                primary: mi.dwFlags & 1 != 0, // MONITORINFOF_PRIMARY
+            });
+        }
+        1
+    }
+
+    pub fn screens() -> Vec<super::ScreenRect> {
+        let mut v: Vec<super::ScreenRect> = Vec::new();
+        // SAFETY: documented enumeration; the callback only touches `v`, which outlives the call.
+        unsafe {
+            EnumDisplayMonitors(std::ptr::null_mut(), std::ptr::null(), Some(each_monitor), &mut v as *mut _ as isize);
+        }
+        v
+    }
     use windows_sys::Win32::System::Power::PowerGetActiveScheme;
 
     fn wstr(b: &[u16]) -> String {
@@ -201,6 +251,10 @@ mod imp {
 
 #[cfg(target_os = "linux")]
 mod imp {
+    pub fn screens() -> Vec<super::ScreenRect> {
+        Vec::new() // KMS gives sizes, not where the compositor put them
+    }
+
     pub fn modes() -> Vec<super::Mode> {
         crate::display_drm::modes() // KMS query ioctls, no root (display_drm.rs)
     }
@@ -214,6 +268,10 @@ mod imp {
 
 #[cfg(not(any(windows, target_os = "linux")))]
 mod imp {
+    pub fn screens() -> Vec<super::ScreenRect> {
+        Vec::new()
+    }
+
     pub fn modes() -> Vec<super::Mode> {
         Vec::new()
     }
@@ -254,6 +312,19 @@ pub fn fullscreen_app() -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn screens_are_sane() {
+        let s = super::screens();
+        for r in &s {
+            assert!(r.w > 0 && r.h > 0, "{r:?}");
+        }
+        if !s.is_empty() {
+            assert_eq!(s.iter().filter(|r| r.primary).count(), 1, "exactly one primary: {s:?}");
+        }
+        // Asking about a window that is not there is not an error.
+        assert_eq!(crate::desktop::window_centre_of(0), None);
+    }
+
     #[test]
     fn modes_are_sane() {
         for m in super::modes() {
