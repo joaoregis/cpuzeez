@@ -430,7 +430,18 @@ mod tests {
     fn handoff_marker_reports_started() {
         #[cfg(target_os = "linux")]
         let marker = handoff_marker().expect("a private handoff directory");
-        #[cfg(not(target_os = "linux"))]
+        // macOS/BSD: signal_handoff's disciplined write only accepts a marker
+        // inside a fresh 0700 `cpuzeez-handoff-*` directory — build the test
+        // one by hand, so this platform exercises the validation, not skip it.
+        #[cfg(all(unix, not(target_os = "linux")))]
+        let marker = {
+            use std::os::unix::fs::DirBuilderExt;
+            let d = std::env::temp_dir().join(format!("cpuzeez-handoff-test-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&d);
+            std::fs::DirBuilder::new().mode(0o700).create(&d).unwrap();
+            d.join("up")
+        };
+        #[cfg(not(unix))]
         let marker = std::env::temp_dir().join("cpuzeez-handoff-test");
         #[cfg(target_os = "linux")]
         let child = std::process::Command::new("sleep").arg("5").spawn().unwrap();
@@ -450,6 +461,8 @@ mod tests {
             let _ = p.child.kill();
             let _ = std::fs::remove_dir_all(marker.parent().unwrap());
         }
+        #[cfg(all(unix, not(target_os = "linux")))]
+        let _ = std::fs::remove_dir_all(marker.parent().unwrap());
     }
 
     /// The root-side write is disciplined: nothing outside a fresh private
