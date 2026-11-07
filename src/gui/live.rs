@@ -211,6 +211,7 @@ pub fn overlay(
                     .response
                     .rect
             });
+            super::layout_view::publish_throttling(ui.ctx(), &tel);
             let mut drawn = super::layout_view::show(ui, &layout, &series, &|id| tel.points(id)).rect;
             for r in [rec_rect, pill_rect].into_iter().flatten() {
                 drawn = drawn.union(r);
@@ -917,6 +918,7 @@ impl State {
             tel.want("live-tab", &lease.iter().map(String::as_str).collect::<Vec<_>>());
             let series = tel.series_with(|_| false);
             ui.add_space(6.0);
+            super::layout_view::publish_throttling(ui.ctx(), &tel);
             super::layout_view::show(ui, &o.layout, &series, &|id| tel.points(id));
         });
     }

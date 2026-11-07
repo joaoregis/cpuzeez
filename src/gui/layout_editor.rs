@@ -31,6 +31,10 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Header", "Título"),
     ("Separator", "Separador"),
     ("Clock", "Relógio"),
+    ("Throttling", "Redução de clock"),
+    ("CPU and GPU", "CPU e GPU"),
+    ("CPU only", "Só a CPU"),
+    ("GPU only", "Só a GPU"),
     ("Label", "Rótulo"),
     ("Add reading", "Adicionar leitura"),
     ("Copy as JSON", "Copiar como JSON"),
@@ -61,6 +65,10 @@ pub const ES: &[(&str, &str)] = &[
     ("Header", "Título"),
     ("Separator", "Separador"),
     ("Clock", "Reloj"),
+    ("Throttling", "Reducción de reloj"),
+    ("CPU and GPU", "CPU y GPU"),
+    ("CPU only", "Solo la CPU"),
+    ("GPU only", "Solo la GPU"),
     ("Label", "Etiqueta"),
     ("Add reading", "Añadir lectura"),
     ("Copy as JSON", "Copiar como JSON"),
@@ -68,7 +76,11 @@ pub const ES: &[(&str, &str)] = &[
     ("Paste a layout's JSON here", "Pegue aquí el JSON de un diseño"),
 ];
 
-const KINDS: [(Kind, &str); 7] = [
+/// What a Throttle widget watches: (metric, label).
+const THROTTLE_DEVICES: [(&str, &str); 3] =
+    [("", "CPU and GPU"), ("@throttle_cpu", "CPU only"), ("@throttle_gpu", "GPU only")];
+
+const KINDS: [(Kind, &str); 8] = [
     (Kind::Value, "Value"),
     (Kind::LabelValue, "Label + value"),
     (Kind::Bar, "Bar"),
@@ -76,6 +88,7 @@ const KINDS: [(Kind, &str); 7] = [
     (Kind::Header, "Header"),
     (Kind::Separator, "Separator"),
     (Kind::Clock, "Clock"),
+    (Kind::Throttle, "Throttling"),
 ];
 
 /// Edits `l` in place; `import` holds the JSON box's text between frames.
@@ -135,7 +148,23 @@ pub fn editor(
                     ui.selectable_value(&mut w.kind, k, tr(name));
                 }
             });
-            if !matches!(w.kind, Kind::Header | Kind::Separator | Kind::Clock) {
+            if w.kind == Kind::Throttle {
+                // Which device to watch; the metric is only a filter here.
+                let m = w.metric.clone().unwrap_or_default();
+                let shown = THROTTLE_DEVICES.iter().find(|a| a.0 == m).map_or(THROTTLE_DEVICES[0].1, |a| a.1);
+                egui::ComboBox::from_id_salt((salt, "throttle", i)).selected_text(tr(shown)).width(220.0).show_ui(
+                    ui,
+                    |ui| {
+                        for (alias, what) in THROTTLE_DEVICES {
+                            ui.selectable_value(
+                                &mut w.metric,
+                                Some(alias.to_string()).filter(|a| !a.is_empty()),
+                                tr(what),
+                            );
+                        }
+                    },
+                );
+            } else if !matches!(w.kind, Kind::Header | Kind::Separator | Kind::Clock) {
                 let m = w.metric.clone().unwrap_or_default();
                 let shown = ALIASES.iter().find(|a| a.0 == m).map_or(m.clone(), |a| tr(a.1).to_string());
                 egui::ComboBox::from_id_salt((salt, "metric", i)).selected_text(shown).width(220.0).show_ui(ui, |ui| {

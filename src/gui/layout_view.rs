@@ -11,6 +11,11 @@ use eframe::egui::{self, Color32, CornerRadius, Frame, Margin, RichText, Ui};
 
 pub const PT_BR: &[(&str, &str)] = &[
     ("Clock", "Clock"),
+    ("No throttling", "Sem redução de clock"),
+    ("CPU thermal", "CPU: temperatura"),
+    ("CPU power", "CPU: potência"),
+    ("GPU thermal", "GPU: temperatura"),
+    ("GPU power", "GPU: potência"),
     ("Power", "Consumo"),
     ("Load", "Carga"),
     ("Temperature", "Temperatura"),
@@ -18,6 +23,11 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 pub const ES: &[(&str, &str)] = &[
     ("Clock", "Reloj"),
+    ("No throttling", "Sin reducción de reloj"),
+    ("CPU thermal", "CPU: temperatura"),
+    ("CPU power", "CPU: potencia"),
+    ("GPU thermal", "GPU: temperatura"),
+    ("GPU power", "GPU: potencia"),
     ("Power", "Consumo"),
     ("Load", "Carga"),
     ("Temperature", "Temperatura"),
@@ -93,21 +103,52 @@ pub fn value_text(w: &Widget, s: &Series) -> String {
     u.format(s.current, s.unit)
 }
 
+/// Which throttles are on now, for the Throttle widgets of this frame.
+/// Published once per frame by whoever draws a layout, read by `widget`.
+pub fn publish_throttling(ctx: &egui::Context, tel: &crate::telemetry::Telemetry) {
+    use crate::telemetry::ThrottleKind::*;
+    let mut on: Vec<&'static str> = Vec::new();
+    for th in tel.throttling() {
+        on.push(match th.kind {
+            Thermal => "cpu-thermal",
+            Power | Current => "cpu-power",
+            Gpu => "gpu-thermal",
+        });
+    }
+    if let Some(reasons) = tel.gpu_live().first().and_then(|l| l.throttle.clone()) {
+        let (thermal, power) = cpuzeez_core::bottleneck::gpu_throttle_flags(&reasons);
+        if thermal {
+            on.push("gpu-thermal");
+        }
+        if power {
+            on.push("gpu-power");
+        }
+    }
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new("throttling-now"), on));
+}
+
 /// The metric prefixes `widgets` read (aliases included), for a telemetry lease.
 pub fn prefixes(widgets: &[Widget]) -> Vec<String> {
     let mut v: Vec<String> = widgets
         .iter()
-        .filter_map(|w| w.metric.as_deref())
-        .map(|m| match m {
-            m if m.starts_with("@cpu") => "cpu/".to_string(),
-            m if m.starts_with("@gpu") => "gpu".to_string(),
-            "@chipset_temp" => "chipset/".to_string(),
-            "@mem_load" => "mem/".to_string(),
-            m if m.starts_with("@battery") => "battery".to_string(),
-            "@disk_active" => "disk".to_string(),
-            "@net_rx" => "net".to_string(),
-            exact => exact.to_string(),
+        .filter(|w| w.kind == Kind::Throttle)
+        .flat_map(|w| match w.metric.as_deref() {
+            Some("@throttle_cpu") => vec!["cpu/".to_string()],
+            Some("@throttle_gpu") => vec!["gpu".to_string()],
+            _ => vec!["cpu/".to_string(), "gpu".to_string()],
         })
+        .chain(widgets.iter().filter_map(|w| w.metric.as_deref()).filter(|m| !m.starts_with("@throttle")).map(|m| {
+            match m {
+                m if m.starts_with("@cpu") => "cpu/".to_string(),
+                m if m.starts_with("@gpu") => "gpu".to_string(),
+                "@chipset_temp" => "chipset/".to_string(),
+                "@mem_load" => "mem/".to_string(),
+                m if m.starts_with("@battery") => "battery".to_string(),
+                "@disk_active" => "disk".to_string(),
+                "@net_rx" => "net".to_string(),
+                exact => exact.to_string(),
+            }
+        }))
         .collect();
     v.sort();
     v.dedup();
@@ -243,6 +284,31 @@ fn widget(ui: &mut Ui, w: &Widget, series: &[Series], points: &dyn Fn(&str) -> V
                     .color(p.text),
             );
         }
+        Kind::Throttle => {
+            let on: Vec<&'static str> =
+                ui.ctx().data(|d| d.get_temp(egui::Id::new("throttling-now"))).unwrap_or_default();
+            let shown = cpuzeez_core::layout::throttle_pills(&on, w.metric.as_deref());
+            if shown.is_empty() {
+                ui.label(
+                    RichText::new(format!("{} {}", icon::CHECK, tr("No throttling")))
+                        .size(size * 0.9)
+                        .color(p.text_muted),
+                );
+            } else {
+                ui.horizontal_wrapped(|ui| {
+                    for key in shown {
+                        let text = match key {
+                            "cpu-thermal" => tr("CPU thermal"),
+                            "cpu-power" => tr("CPU power"),
+                            "gpu-thermal" => tr("GPU thermal"),
+                            _ => tr("GPU power"),
+                        };
+                        // Colour and icon together: the pill never relies on colour alone.
+                        widgets::pill(ui, &format!("{}{text}", tone_mark(Tone::Warning)), widgets::Tone::Warning);
+                    }
+                });
+            }
+        }
     }
 }
 
@@ -272,6 +338,30 @@ mod tests {
             min: v,
             max: v,
             avg: v,
+        }
+    }
+
+    /// Throttle pills carry an icon as well as colour; with none on, it says so.
+    #[test]
+    fn the_throttle_widget_names_what_throttles() {
+        use egui_kittest::{Harness, kittest::Queryable};
+        let layout =
+            Layout { widgets: vec![Widget { kind: Kind::Throttle, ..Default::default() }], ..Default::default() };
+        for (on, wanted) in [(vec![], "No throttling"), (vec!["cpu-thermal", "gpu-power"], "CPU thermal")] {
+            let layout = layout.clone();
+            let mut h = Harness::new_ui(move |ui| {
+                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("throttling-now"), on.clone()));
+                show(ui, &layout, &[], &|_| vec![]);
+            });
+            h.run();
+            let found = h.query_all_by_label_contains(wanted).count();
+            assert!(found > 0, "{wanted:?} is on screen");
+            if wanted == "CPU thermal" {
+                assert!(h.query_all_by_label_contains("GPU power").count() > 0);
+                assert!(h.query_all_by_label_contains("No throttling").count() == 0);
+                let marked = format!("{}CPU thermal", tone_mark(Tone::Warning));
+                assert!(h.query_all_by_label_contains(&marked).count() > 0, "the mark is part of the text");
+            }
         }
     }
 

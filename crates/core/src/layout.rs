@@ -49,6 +49,25 @@ pub enum Kind {
     Separator,
     /// Local time (no metric).
     Clock,
+    /// One pill per throttle that is on now ("CPU thermal", "GPU power"), or a
+    /// quiet "no throttling". `metric` may be `@throttle_cpu` or `@throttle_gpu`
+    /// to watch one device; empty or `@throttle` watches both.
+    Throttle,
+}
+
+/// The throttles to show: `active` holds `cpu-thermal`, `cpu-power`,
+/// `gpu-thermal` and `gpu-power`; `metric` is the widget's (see [`Kind::Throttle`]).
+/// Returned in a fixed order, so pills do not jump around.
+pub fn throttle_pills<'a>(active: &[&str], metric: Option<&str>) -> Vec<&'a str> {
+    let device = match metric {
+        Some("@throttle_cpu") => "cpu-",
+        Some("@throttle_gpu") => "gpu-",
+        _ => "",
+    };
+    ["cpu-thermal", "cpu-power", "gpu-thermal", "gpu-power"]
+        .into_iter()
+        .filter(|k| k.starts_with(device) && active.contains(k))
+        .collect()
 }
 
 /// How a value reads against its thresholds (the GUI maps it to colours, and
@@ -371,6 +390,7 @@ pub mod presets {
                     Widget::metric(Kind::Sparkline, "frames/ms", "Frame time"),
                     Widget::metric(Kind::LabelValue, "frames/gpu_busy", "GPU Busy"),
                     Widget::metric(Kind::LabelValue, "@cpu_max_core", "Busiest core"),
+                    Widget { kind: Kind::Throttle, ..Default::default() },
                     Widget { kind: Kind::Clock, ..Widget::header("") },
                 ],
                 ..Default::default()
@@ -392,6 +412,7 @@ pub mod presets {
                     Widget::metric(Kind::LabelValue, "@gpu_temp", "GPU").with_thresholds(&temp_thresholds(90.0)),
                     Widget::metric(Kind::LabelValue, "@gpu_power", "GPU power"),
                     fps("FPS"),
+                    Widget { kind: Kind::Throttle, ..Default::default() },
                 ],
                 ..Default::default()
             }
@@ -577,6 +598,28 @@ pub mod tray {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn throttle_pills_follow_the_filter_in_a_fixed_order() {
+        let on = ["gpu-power", "cpu-thermal", "gpu-thermal"];
+        assert_eq!(throttle_pills(&on, None), ["cpu-thermal", "gpu-thermal", "gpu-power"]);
+        assert_eq!(throttle_pills(&on, Some("@throttle")), throttle_pills(&on, None));
+        assert_eq!(throttle_pills(&on, Some("@throttle_cpu")), ["cpu-thermal"]);
+        assert_eq!(throttle_pills(&on, Some("@throttle_gpu")), ["gpu-thermal", "gpu-power"]);
+        assert!(throttle_pills(&[], None).is_empty());
+        assert!(throttle_pills(&["bogus"], None).is_empty(), "unknown keys never show");
+    }
+
+    #[test]
+    fn a_throttle_widget_survives_json_and_the_live_presets_have_one() {
+        let w = Widget { kind: Kind::Throttle, metric: Some("@throttle_gpu".into()), ..Default::default() };
+        let back: Widget = serde_json::from_str(&serde_json::to_string(&w).unwrap()).unwrap();
+        assert_eq!((back.kind, back.metric.as_deref()), (Kind::Throttle, Some("@throttle_gpu")));
+        for name in ["Benchmark", "Overclocker"] {
+            let l = presets::live::all(95.0).into_iter().find(|l| l.name == name).unwrap();
+            assert!(l.widgets.iter().any(|w| w.kind == Kind::Throttle), "{name} shows throttling");
+        }
+    }
 
     #[test]
     fn overview_presets_have_four_tiles_each() {
