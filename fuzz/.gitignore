@@ -1,5 +1,4 @@
 target/
-corpus/
 artifacts/
 coverage/
-Cargo.lock
+# corpus/ is committed: seeds from `write_fuzz_seeds` (crates/core/src/robustness.rs); runs add to it locally.

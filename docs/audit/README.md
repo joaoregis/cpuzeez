@@ -94,6 +94,7 @@ The soak in GUI mode opens a window and runs for hours: see [soak.md](../testing
 - The FPS-impact budget (≤ 1%) needs a game and PresentMon; it is measured by hand.
 - Releases are unsigned.
 - Wayland has no global hotkeys without the GlobalShortcuts portal.
+- Known partial items (a large `gui/mod.rs`, `unsafe` in the older hardware modules, tests missing on some pages, no long fuzz campaign yet) are listed with a plan in [docs/v1.1/](../v1.1/README.md).
 
 ## 7. Suggested prompts
 

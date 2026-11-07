@@ -1085,6 +1085,14 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Project page", "Página do projeto"),
     ("Third-party components", "Componentes de terceiros"),
     ("PawnIO driver installer {}, by namazso (pawnio.eu)", "Instalador do driver PawnIO {}, de namazso (pawnio.eu)"),
+    (
+        "PresentMon {}, by Intel, MIT (ZeeZ Live frame timing)",
+        "PresentMon {}, da Intel, MIT (tempo de quadros do ZeeZ Live)",
+    ),
+    (
+        "MangoHud (optional, not bundled): installed by your package manager when you ask for it.",
+        "MangoHud (opcional, não incluído): instalado pelo gerenciador de pacotes do sistema quando você pede.",
+    ),
     ("PawnIO modules {}, LGPL-2.1-or-later", "Módulos do PawnIO {}, LGPL-2.1-or-later"),
     (
         "Rust crates under MIT, Apache-2.0 and compatible licenses.",
@@ -1321,6 +1329,14 @@ pub const ES: &[(&str, &str)] = &[
     (
         "PawnIO driver installer {}, by namazso (pawnio.eu)",
         "Instalador del controlador PawnIO {}, de namazso (pawnio.eu)",
+    ),
+    (
+        "PresentMon {}, by Intel, MIT (ZeeZ Live frame timing)",
+        "PresentMon {}, de Intel, MIT (tiempos de fotogramas de ZeeZ Live)",
+    ),
+    (
+        "MangoHud (optional, not bundled): installed by your package manager when you ask for it.",
+        "MangoHud (opcional, no incluido): lo instala el gestor de paquetes del sistema cuando lo pides.",
     ),
     ("PawnIO modules {}, LGPL-2.1-or-later", "Módulos de PawnIO {}, LGPL-2.1-or-later"),
     (

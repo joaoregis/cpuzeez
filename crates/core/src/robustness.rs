@@ -375,3 +375,71 @@ fn small_text_parsers() {
         let _ = crate::procs::anti_cheat(&r.mutate_text("vgc.exe"));
     }
 }
+
+/// Writes the starting corpus for `fuzz/` (one folder per target), so a fuzzing
+/// run starts from valid inputs of each kind instead of from nothing. Seeds are
+/// small and deterministic; run it again to refresh them:
+/// `cargo test -p cpuzeez-core --lib write_fuzz_seeds -- --ignored`
+#[test]
+#[ignore = "writes files; run on demand"]
+fn write_fuzz_seeds() {
+    use std::fs;
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fuzz/corpus");
+    let put = |target: &str, name: &str, bytes: &[u8]| {
+        let dir = root.join(target);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(name), bytes).unwrap();
+    };
+    let mut r = Rng(0x5EED);
+
+    // Text and JSON formats.
+    put("presentmon_csv", "deadlock.csv", FIXTURE.as_bytes());
+    put("presentmon_csv", "header-only.csv", FIXTURE.lines().next().unwrap_or("").as_bytes());
+    let hw = "time,cpu/load/total,gpu0/load/core\n# units,%,%\n2026-11-05T23:59:59.000Z,10,50\n2026-11-06T00:00:01.500Z,20,\n";
+    put("hw_csv", "midnight.csv", hw.as_bytes());
+    put("hw_csv", "mangohud.csv", b"os,cpu\nLinux,x\nfps,frametime,elapsed\n144,6.9,1000000000\n143,7.0,1007000000\n");
+    for (i, l) in crate::layout::presets::live::all(95.0).iter().enumerate() {
+        put("layout_json", &format!("live-{i}.json"), l.to_json().as_bytes());
+    }
+    for q in ["name:chrome cpu>=10", "mem>1GB \"my app\"", "-pid:4 status:running"] {
+        put("layout_json", &format!("query-{}", q.len()), q.as_bytes());
+    }
+    let session = serde_json::to_vec(&Session {
+        game: "cs2.exe".into(),
+        markers: vec![session::Marker { t_s: 1.0, label: "m".into() }],
+        throttling: vec![Band { from_s: 0.0, to_s: 1.0, label: "x".into(), kind: "cpu-thermal".into() }],
+        ..Default::default()
+    })
+    .unwrap();
+    put("session_json", "one-marker.json", &session);
+    for (i, a) in [actions::Action::InstallPawnIo].iter().enumerate() {
+        put("elevated_op", &format!("action-{i}"), actions::encode(a).as_bytes());
+    }
+
+    // Binary formats.
+    let mut smbios = vec![0u8, 0x18, 0, 0, 1, 2, 0, 0, 3, 0x80];
+    smbios.resize(0x18, 0);
+    smbios.extend(b"Vendor\0v1.0\0\0");
+    smbios.extend([127, 4, 1, 0, 0, 0]);
+    put("smbios", "bios-only", &smbios);
+    let mut edid = vec![0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00];
+    edid.resize(128, 0);
+    put("edid", "header-only", &edid);
+    for (name, kind) in [("ddr4", 0x0C), ("ddr5", 0x12)] {
+        let mut b = r.bytes(1024);
+        b.resize(1024, 0);
+        b[2] = kind;
+        put("spd", name, &b);
+    }
+    let mut pci = r.bytes(256);
+    pci.resize(256, 0);
+    pci[0x06] |= 0x10;
+    pci[0x34] = 0x40;
+    put("pci_config", "capabilities", &pci);
+
+    // Targets that read their own byte stream.
+    put("detector", "random-a", &r.bytes(400));
+    put("detector", "random-b", &r.bytes(400));
+    put("output_lines", "lines", b"first,second\r\n1,2\r\n3,4\nlast without newline");
+    put("output_lines", "split-utf8", "caf\u{e9},\u{1F600}\n".as_bytes());
+}

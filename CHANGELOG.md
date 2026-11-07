@@ -7,6 +7,12 @@ generated from its section below.
 
 ## [Unreleased]
 
+### Changed
+
+- The minimum Rust version is now `1.95` and CI builds with it (it said `1.89`, which the GUI toolkit does not build on).
+- A starting corpus for the fuzz targets is committed (`fuzz/corpus/`).
+- [docs/v1.1/README.md](docs/v1.1/README.md) plans the 1.1.0 corrections that 1.0.0 leaves partly done.
+
 ## [1.0.0-beta.8] - 2026-11-07
 
 Hardening: tests, security, accessibility, installers and the leftovers of ZeeZ Live.

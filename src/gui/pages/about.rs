@@ -73,9 +73,17 @@ impl App {
                 use crate::executor::pin;
                 ui.label(trf("PawnIO driver installer {}, by namazso (pawnio.eu)", &[&pin("PAWNIO_SETUP_VERSION")]));
                 ui.label(trf("PawnIO modules {}, LGPL-2.1-or-later", &[&pin("PAWNIO_MODULES_VERSION")]));
+                ui.label(trf("PresentMon {}, by Intel, MIT (ZeeZ Live frame timing)", &[&pin("PRESENTMON_VERSION")]));
+            } else if cfg!(target_os = "linux") {
+                ui.label(tr(
+                    "MangoHud (optional, not bundled): installed by your package manager when you ask for it.",
+                ));
             }
             ui.label(tr("Rust crates under MIT, Apache-2.0 and compatible licenses."));
-            ui.hyperlink_to(tr("Full list and licenses"), format!("{}/blob/main/THIRD_PARTY.md", crate::REPO_URL));
+            ui.hyperlink_to(
+                tr("Full list and licenses"),
+                format!("{}/blob/v{}/THIRD_PARTY.md", crate::REPO_URL, crate::VERSION),
+            );
         });
         ui.label(RichText::new(tr("Not affiliated with CPUID. CPU-Z is a trademark of CPUID.")).small().weak());
     }

@@ -209,6 +209,20 @@ jobs:
           sudo apt-get remove -y cpuzeez
           test ! -e /usr/bin/cpuzeez  # not `command -v`: bash's hash table still remembers it
 
+  msrv:
+    name: Builds on the declared minimum Rust (rust-version)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Read rust-version from Cargo.toml
+        id: v
+        run: echo "rust=$(grep -m1 '^rust-version' Cargo.toml | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: ${{ steps.v.outputs.rust }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - run: cargo check --workspace --locked
+
   deny:
     name: Dependencies (licenses, advisories, sources)
     runs-on: ubuntu-latest

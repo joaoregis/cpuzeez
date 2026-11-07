@@ -1,0 +1,4 @@
+time,cpu/load/total,gpu0/load/core
+# units,%,%
+2026-11-05T23:59:59.000Z,10,50
+2026-11-06T00:00:01.500Z,20,

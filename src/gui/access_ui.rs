@@ -98,7 +98,11 @@ pub const ES: &[(&str, &str)] = &[
     ("not supported on this OS", "no compatible con este sistema"),
 ];
 
-const PAWNIO_DOC: &str = "https://github.com/joaoregis/cpuzeez/blob/main/docs/windows-pawnio.md";
+/// The document at the tag of this version, so the link works for a pre-release too
+/// (a branch name or `main` may not have the file yet).
+fn pawnio_doc() -> String {
+    format!("{}/blob/v{}/docs/windows-pawnio.md", crate::REPO_URL, crate::VERSION)
+}
 
 /// Banner state shared by every page.
 #[derive(Default)]
@@ -275,7 +279,7 @@ impl Access {
                         }
                     }
                     if !driver.is_empty() && ui.button(tr("How to install PawnIO")).clicked() {
-                        ui.ctx().open_url(egui::OpenUrl::new_tab(PAWNIO_DOC)); // opens only on this click (P1)
+                        ui.ctx().open_url(egui::OpenUrl::new_tab(pawnio_doc())); // opens only on this click (P1)
                     }
                 });
                 if let Some(m) = &self.message {

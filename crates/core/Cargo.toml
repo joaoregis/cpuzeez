@@ -2,7 +2,7 @@
 name = "cpuzeez-core"
 version = "1.0.0-beta.8"
 edition = "2024"
-rust-version = "1.89"
+rust-version = "1.95"
 description = "CpuZeeZ domain types and pure logic: decoders and the report model. No OS calls, no GUI."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/joaoregis/cpuzeez"
