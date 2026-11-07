@@ -248,10 +248,10 @@ impl Installer {
                     // install failed for good): reclaim the space. msiexec,
                     // macOS `open` and the OpenedFolder fallback still need
                     // the file after we return, so those stages keep it.
-                    if matches!(end, Stage::Installed | Stage::Failed(_)) {
-                        if let Some(d) = p.parent() {
-                            let _ = std::fs::remove_dir_all(d);
-                        }
+                    if matches!(end, Stage::Installed | Stage::Failed(_))
+                        && let Some(d) = p.parent()
+                    {
+                        let _ = std::fs::remove_dir_all(d);
                     }
                     end
                 }
@@ -356,6 +356,8 @@ fn private_download_dir(version: &str) -> Result<PathBuf, String> {
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') { c } else { '_' })
         .collect();
+    // The /tmp fallback, push and retain below are Unix-only.
+    #[allow(unused_mut)]
     let mut bases = vec![std::env::temp_dir()];
     #[cfg(unix)]
     bases.push(PathBuf::from("/tmp")); // fallback when TMPDIR is unusable
@@ -379,6 +381,8 @@ fn private_download_dir(version: &str) -> Result<PathBuf, String> {
 /// already exists. `Ok` means it exists, is ours, and is private; on failure
 /// returns the message and whether another name might still succeed.
 fn create_exclusive_private(dir: &Path) -> Result<(), (String, bool)> {
+    // mode() is Unix-only; create() takes &self.
+    #[allow(unused_mut)]
     let mut b = std::fs::DirBuilder::new();
     #[cfg(unix)]
     {
