@@ -62,7 +62,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
-        with: { targets: "x86_64-apple-darwin,aarch64-apple-darwin" }
+          targets: "x86_64-apple-darwin,aarch64-apple-darwin"
       - run: |
           cargo build --release --locked --target aarch64-apple-darwin
           cargo build --release --locked --target x86_64-apple-darwin
