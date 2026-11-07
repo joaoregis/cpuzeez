@@ -22,6 +22,8 @@ pub struct Timings {
     /// Command rate in clocks (1T/2T), when known.
     pub cr: Option<u32>,
     pub trfc: Option<u32>,
+    /// Secondary and tertiary timings by name ("tFAW"), in clocks (S1-G05).
+    pub extra: Vec<(&'static str, u32)>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -107,6 +109,9 @@ pub fn collect(ctx: &Ctx) -> Vec<Section> {
         }
         if let Some(rfc) = t.trfc {
             v.push(f("Row Refresh Cycle Time (tRFC)", rfc));
+        }
+        for (k, x) in &t.extra {
+            v.push(f(*k, x));
         }
     }
     if let Some(u) = m.mc_mhz {
@@ -414,8 +419,56 @@ fn amd_umc(ctx: &Ctx, ddr5: bool) -> Option<Umc> {
     let ch = *active.first()?;
     let (cfg, t1, t2) = (rd(ch, 0x200)?, rd(ch, 0x204)?, rd(ch, 0x208)?);
     let trfc = if ddr5 { None } else { rd(ch, 0x260) };
-    let (ratio, timings) = decode_umc(cfg, t1, t2, trfc, ddr5)?;
+    let (ratio, mut timings) = decode_umc(cfg, t1, t2, trfc, ddr5)?;
+    if let Some(t) = &mut timings {
+        let regs = [0x20C, 0x210, 0x214, 0x218, 0x230].map(|o| rd(ch, o).unwrap_or(0));
+        let rfc_sets = [0x260, 0x264, 0x268, 0x26C].map(|o| rd(ch, o).unwrap_or(0));
+        let (extra, rfc1) = decode_umc_more(t1, regs, ddr5.then_some(rfc_sets));
+        t.extra = extra;
+        if ddr5 {
+            t.trfc = rfc1;
+        }
+    }
     Some(Umc { channels: active.len(), ratio, timings })
+}
+
+/// Secondary/tertiary timings from DramTiming1 (tRCDWR 29:24) and
+/// DramTiming3..6 (+0x20C tRRD_S 4:0, tRRD_L 12:8, tRTP 28:24; +0x210 tFAW
+/// 7:0; +0x214 tCWL 5:0, tWTR_S 12:8, tWTR_L 22:16; +0x218 tWR 7:0) and the
+/// refresh interval (+0x230 tREFI 15:0). DDR5 keeps four refresh sets at
+/// +0x260..+0x26C (tRFC1 15:0, tRFC2 31:16); the one in use holds the
+/// largest values, the others the defaults. Checked against a 7900X with
+/// DDR5-6000 EXPO (tRFC1 884, tRFC2 480 at 16 Gb). Out-of-range fields are
+/// left out, not guessed. Returns (fields, DDR5 tRFC1).
+fn decode_umc_more(t1: u32, r: [u32; 5], rfc_sets: Option<[u32; 4]>) -> (Vec<(&'static str, u32)>, Option<u32>) {
+    let bits = |v: u32, hi: u32, lo: u32| (v >> lo) & ((1 << (hi - lo + 1)) - 1);
+    let mut v = Vec::new();
+    let mut put = |k: &'static str, x: u32, ok: std::ops::RangeInclusive<u32>| {
+        if ok.contains(&x) {
+            v.push((k, x));
+        }
+    };
+    put("RAS# to CAS# write (tRCDWR)", bits(t1, 29, 24), 5..=120);
+    put("tRRD_S", bits(r[0], 4, 0), 2..=31);
+    put("tRRD_L", bits(r[0], 12, 8), 2..=31);
+    put("tRTP", bits(r[0], 28, 24), 2..=31);
+    put("tFAW", bits(r[1], 7, 0), 8..=255);
+    put("tCWL", bits(r[2], 5, 0), 5..=63);
+    put("tWTR_S", bits(r[2], 12, 8), 1..=31);
+    put("tWTR_L", bits(r[2], 22, 16), 1..=127);
+    put("tWR", bits(r[3], 7, 0), 5..=255);
+    put("tREFI", bits(r[4], 15, 0), 1000..=65535);
+    let mut rfc1 = None;
+    if let Some(sets) = rfc_sets
+        && let Some(best) = sets.iter().copied().max_by_key(|s| s & 0xFFFF)
+    {
+        let (a, b) = (best & 0xFFFF, best >> 16);
+        if (100..=2000).contains(&a) {
+            rfc1 = Some(a);
+            put("tRFC2", b, 50..=2000);
+        }
+    }
+    (v, rfc1)
 }
 
 /// Pure decode of one UMC channel's DramConfiguration/DramTiming1/2 (+ DDR4 refresh).
@@ -433,6 +486,7 @@ fn decode_umc(cfg: u32, t1: u32, t2: u32, trfc: Option<u32>, ddr5: bool) -> Opti
         trp: (t2 >> 16) & 0x3F,
         cr: (!ddr5).then_some(if cfg & (1 << 10) != 0 { 2 } else { 1 }),
         trfc: trfc.map(|r| r & 0x7FF).filter(|&r| r > 0),
+        extra: Vec::new(),
     };
     Some((ratio, sane(&t).then_some(t)))
 }
@@ -476,6 +530,27 @@ mod tests {
         let t = t.unwrap();
         assert_eq!((t.cl, t.cr, t.trfc), (16, Some(2), Some(560)));
         assert!(decode_umc(0, 0, 0, None, true).is_none());
+    }
+
+    #[test]
+    fn umc_secondary_timings() {
+        // The same 7900X / DDR5-6000 EXPO kit, registers as read over SMN.
+        let regs = [0x1700_0F08, 0x0000_0020, 0x001E_081C, 0x0000_005A, 0x0030_2D9D];
+        let sets = [0x00C0_0138, 0x00C0_0138, 0x01E0_0374, 0x00C0_0138];
+        let (v, rfc1) = decode_umc_more(0x2424_4C1E, regs, Some(sets));
+        let get = |k: &str| v.iter().find(|x| x.0 == k).map(|x| x.1);
+        assert_eq!(rfc1, Some(884));
+        assert_eq!(
+            (get("RAS# to CAS# write (tRCDWR)"), get("tRRD_S"), get("tRRD_L"), get("tRTP")),
+            (Some(36), Some(8), Some(15), Some(23))
+        );
+        assert_eq!(
+            (get("tFAW"), get("tCWL"), get("tWTR_S"), get("tWTR_L"), get("tWR")),
+            (Some(32), Some(28), Some(8), Some(30), Some(90))
+        );
+        assert_eq!((get("tREFI"), get("tRFC2")), (Some(11677), Some(480)));
+        let (none, rfc) = decode_umc_more(0, [0; 5], None);
+        assert!(none.is_empty() && rfc.is_none(), "unprogrammed registers say nothing");
     }
 
     #[test]

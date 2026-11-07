@@ -28,6 +28,21 @@ pub fn chart(
 ) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::hover());
     let painter = ui.painter_at(rect);
+    // The drawing is invisible to assistive technology: say what it shows.
+    let t_from = now - span;
+    resp.widget_info(|| {
+        let parts: Vec<String> = lines
+            .iter()
+            .filter_map(|l| {
+                let v: Vec<f64> = l.points.iter().filter(|p| p.0 >= t_from).map(|p| p.1).collect();
+                let last = v.last()?;
+                let (lo, hi) = v.iter().fold((f64::MAX, f64::MIN), |(a, b), x| (a.min(*x), b.max(*x)));
+                Some(format!("{}: {} (min {}, max {})", l.label, fmt(*last), fmt(lo), fmt(hi)))
+            })
+            .collect();
+        let what = if parts.is_empty() { "no data yet".to_string() } else { parts.join("; ") };
+        egui::WidgetInfo::labeled(egui::WidgetType::Other, true, format!("Chart, last {span:.0} s. {what}"))
+    });
     let p = super::theme::palette(ui);
     let (grid, cursor, text) = (p.border, p.text_muted, p.text_secondary);
     painter.rect_filled(rect, RADIUS, ui.visuals().extreme_bg_color);

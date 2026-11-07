@@ -6,7 +6,7 @@
 //! (privileged), then whatever the OS exposes without privileges (Linux
 //! hwmon/powercap/cpufreq, Windows PDH counters + power status, Apple SMC).
 
-mod amd_pm;
+use cpuzeez_core::sensors::amd_pm;
 mod cpu;
 mod hwmon;
 #[cfg(target_os = "macos")]
@@ -86,6 +86,16 @@ fn chips(ctx: &Ctx) -> &'static [superio::Chip] {
 /// once a second: chip detection is cached and energy counters are diffed
 /// against the previous call.
 pub fn monitors(ctx: &Ctx) -> Vec<Monitor> {
+    let mut v = board_monitors(ctx);
+    v.extend(dimm_monitors(ctx));
+    v.extend(cpu_monitors(ctx));
+    v
+}
+
+/// The OS's own monitors (WMI, hwmon, SMC), the Super I/O and the chipset.
+/// Separate from the CPU and DIMMs so a page that shows only one of them
+/// doesn't pay for the others (S1-D05): this one is the port I/O.
+pub fn board_monitors(ctx: &Ctx) -> Vec<Monitor> {
     if !ctx.cfg.sensor {
         return Vec::new();
     }
@@ -97,17 +107,33 @@ pub fn monitors(ctx: &Ctx) -> Vec<Monitor> {
         v.extend(chips(ctx).iter().filter_map(|c| superio::read(ctx.hw.as_ref(), c, vendor, model)));
     }
     v.extend(os);
-    // DIMM thermal sensors (DDR5 SPD5118 hub / DDR4 TSOD), one monitor per module like CPU-Z.
-    if ctx.cfg.spd {
-        for (_addr, c) in crate::spd::dimm_temps(ctx) {
+    v.push(chipset(ctx.hw.pch_temp_c(), &v));
+    v.retain(|m| !m.readings.is_empty());
+    v
+}
+
+/// DIMM thermal sensors (DDR5 SPD5118 hub / DDR4 TSOD), one monitor per
+/// module like CPU-Z. SMBus transactions: a few ms per module.
+pub fn dimm_monitors(ctx: &Ctx) -> Vec<Monitor> {
+    if !ctx.cfg.sensor || !ctx.cfg.spd {
+        return Vec::new();
+    }
+    crate::spd::dimm_temps(ctx)
+        .into_iter()
+        .map(|(_addr, c)| {
             let mut m = Monitor::new("DIMM");
             m.push(Kind::Temperature, "Core", c, None);
-            v.push(m);
-        }
+            m
+        })
+        .collect()
+}
+
+/// The CPU's own sensors (MSRs, SMU PM table).
+pub fn cpu_monitors(ctx: &Ctx) -> Vec<Monitor> {
+    if !ctx.cfg.sensor {
+        return Vec::new();
     }
-    v.extend(cpu::monitor(ctx));
-    v.extend(cpu::pm_monitor(ctx));
-    v.push(chipset(ctx.hw.pch_temp_c(), &v));
+    let mut v: Vec<Monitor> = cpu::monitor(ctx).into_iter().chain(cpu::pm_monitor(ctx)).collect();
     v.retain(|m| !m.readings.is_empty());
     v
 }

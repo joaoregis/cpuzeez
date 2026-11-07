@@ -125,6 +125,9 @@ pub struct State {
     mem_done: bool,
     mem_label: String,
     mem_saved: String,
+    /// Conditions at the start of the last CPU / memory run (S1-K01).
+    cond: crate::benchkit::Conditions,
+    mem_cond: crate::benchkit::Conditions,
 }
 
 impl Default for State {
@@ -146,6 +149,8 @@ impl Default for State {
             mem_done: false,
             mem_label: String::new(),
             mem_saved: String::new(),
+            cond: Default::default(),
+            mem_cond: Default::default(),
         }
     }
 }
@@ -170,7 +175,7 @@ fn bar(ui: &mut egui::Ui, label: &str, score: Option<Score>, best: f64, progress
 }
 
 /// Label field + "Save to history" button; true when clicked.
-fn save_row(ui: &mut egui::Ui, label: &mut String, status: &str, enabled: bool) -> bool {
+pub(super) fn save_row(ui: &mut egui::Ui, label: &mut String, status: &str, enabled: bool) -> bool {
     let mut clicked = false;
     ui.horizontal_wrapped(|ui| {
         ui.add(egui::TextEdit::singleline(label).hint_text(tr("Label (optional)")).desired_width(160.0));
@@ -193,18 +198,6 @@ pub fn bytes_text(b: f64) -> String {
 }
 
 impl State {
-    pub fn ui(&mut self, ui: &mut egui::Ui, ctx: &Ctx, mon: &mut super::sensors::Monitor) {
-        ui.horizontal(|ui| {
-            ui.selectable_value(&mut self.mode, Mode::Cpu, tr("CPU"));
-            ui.selectable_value(&mut self.mode, Mode::Memory, tr("Memory"));
-        });
-        ui.separator();
-        match self.mode {
-            Mode::Cpu => self.cpu_page(ui, ctx, mon),
-            Mode::Memory => self.memory_page(ui, ctx),
-        }
-    }
-
     /// CPU benchmark (existing CPU-Z style layout) with the monitored stress.
     pub fn cpu_page(&mut self, ui: &mut egui::Ui, ctx: &Ctx, mon: &mut super::sensors::Monitor) {
         ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
@@ -261,6 +254,7 @@ impl State {
                     self.mt = None;
                     self.saved.clear();
                     self.queue_mt = true;
+                    self.cond = crate::benchkit::conditions(super::benchkit_view::cpu_temp(mon), 1);
                     self.running = Some((false, self.spawn(ctx, 1)));
                 }
             } else if ui.button(tr("Stop")).clicked() {
@@ -278,7 +272,7 @@ impl State {
             }
         });
         if mon.stress.running() {
-            super::stress::page(ui, mon, false);
+            super::stress::page(ui, mon, false, &[]);
         }
         // ---- end monitored stress ----
         let have = idle && (self.st.is_some() || self.mt.is_some());
@@ -289,6 +283,7 @@ impl State {
                 e.label = self.label.clone();
                 e.threads = s.threads;
                 e.variant = s.variant.label().to_string();
+                e.details = serde_json::json!({ "conditions": self.cond });
                 crate::history::add(e);
             }
             self.saved = tr("Saved to history.").into();
@@ -299,7 +294,7 @@ impl State {
 
     /// Memory benchmark: quick/full run, progress + stage, latency chart,
     /// bandwidth table, save to history.
-    pub fn memory_page(&mut self, ui: &mut egui::Ui, ctx: &Ctx) {
+    pub fn memory_page(&mut self, ui: &mut egui::Ui, ctx: &Ctx, start_temp: Option<f64>) {
         if let Some(m) = &self.mem {
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
             if m.finished() {
@@ -319,6 +314,7 @@ impl State {
                 if idle {
                     if widgets::primary_button(ui, &format!("{} {}", icon::PLAY, tr("Run memory benchmark"))).clicked()
                     {
+                        self.mem_cond = crate::benchkit::conditions(start_temp, 1);
                         self.start_mem(ctx);
                     }
                 } else if ui.button(format!("{} {}", icon::STOP, tr("Stop"))).clicked()
@@ -385,6 +381,7 @@ impl State {
             e.threads = r.bandwidth.iter().map(|b| b.threads).max().unwrap_or(1);
             e.variant = if self.mem_quick { "Quick" } else { "Full" }.to_string();
             e.details = serde_json::to_value(r).unwrap_or_default();
+            e.details["conditions"] = serde_json::to_value(&self.mem_cond).unwrap_or_default();
             crate::history::add(e);
             self.mem_saved = tr("Saved to history.").into();
         }

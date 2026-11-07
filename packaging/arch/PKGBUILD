@@ -1,6 +1,8 @@
 # Repackages the prebuilt release binary (see .github/workflows/release.yml).
 pkgname=cpuzeez-bin
 pkgver=@VERSION@
+# SemVer of the release tarball (differs from pkgver for pre-releases: 1.0.0-beta.2 vs 1.0.0beta2).
+_srcver=@SRCVER@
 pkgrel=1
 pkgdesc="Clean-room, cross-platform reimplementation of CPU-Z's hardware information features"
 arch=('x86_64')
@@ -15,7 +17,7 @@ conflicts=('cpuzeez')
 options=('!debug' '!strip')
 
 package() {
-  cd "$startdir/cpuzeez-$pkgver"
+  cd "$startdir/cpuzeez-$_srcver"
   install -Dm755 cpuzeez "$pkgdir/usr/bin/cpuzeez"
   install -Dm644 cpuzeez.desktop "$pkgdir/usr/share/applications/cpuzeez.desktop"
   install -Dm644 icon.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/cpuzeez.svg"

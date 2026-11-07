@@ -14,6 +14,58 @@ pub struct UsbDevice {
     pub subclass: u8,
     pub vendor: u16,
     pub product: u16,
+    /// Negotiated speed (Mbit/s): 1.5, 12, 480, 5000 (Windows: "5000 or more").
+    pub speed_mbps: Option<f64>,
+    /// bcdUSB: the USB version the device supports (0x0320 = 3.2).
+    pub usb_bcd: Option<u16>,
+    /// This device's id and its parent's (a hub), for the tree view.
+    pub id: String,
+    pub parent: Option<String>,
+}
+
+/// (depth, index) in tree order: each device after its hub, roots first.
+pub fn tree(devs: &[UsbDevice]) -> Vec<(usize, usize)> {
+    fn walk(
+        devs: &[UsbDevice],
+        parent: Option<&str>,
+        depth: usize,
+        out: &mut Vec<(usize, usize)>,
+        seen: &mut Vec<bool>,
+    ) {
+        for (i, d) in devs.iter().enumerate() {
+            let under = match parent {
+                None => d.parent.as_deref().is_none_or(|p| !devs.iter().any(|x| x.id == p)),
+                Some(p) => d.parent.as_deref() == Some(p),
+            };
+            if under && !seen[i] && depth < 8 {
+                seen[i] = true;
+                out.push((depth, i));
+                walk(devs, Some(&d.id), depth + 1, out, seen);
+            }
+        }
+    }
+    let (mut out, mut seen) = (Vec::new(), vec![false; devs.len()]);
+    walk(devs, None, 0, &mut out, &mut seen);
+    out
+}
+
+impl UsbDevice {
+    /// A USB 3 device running at USB 2 speed: a USB 2 port, hub or cable.
+    pub fn slowed(&self) -> bool {
+        self.usb_bcd.is_some_and(|b| b >= 0x0300) && self.speed_mbps.is_some_and(|s| s < 5000.0)
+    }
+
+    pub fn speed_text(&self) -> String {
+        match self.speed_mbps {
+            Some(s) if s >= 1000.0 => format!("{} Gbps", s / 1000.0),
+            Some(s) => format!("{s} Mbps"),
+            None => String::new(),
+        }
+    }
+
+    pub fn version_text(&self) -> String {
+        self.usb_bcd.map(|b| format!("USB {}.{}", b >> 8, (b >> 4) & 0xF)).unwrap_or_default()
+    }
 }
 
 pub fn line(d: &UsbDevice) -> String {
@@ -93,17 +145,22 @@ mod imp {
 
     const IOCTL_USB_GET_NODE_CONNECTION_INFORMATION_EX: u32 = 0x220448;
 
-    /// bDeviceClass/SubClass from the parent hub's view of this port.
-    fn hub_class(dn: u32) -> Option<(u8, u8)> {
+    /// (bDeviceClass, bDeviceSubClass, bcdUSB, negotiated Mbit/s) from the
+    /// parent hub's view of this port.
+    fn hub_info(dn: u32) -> Option<(u8, u8, u16, f64)> {
         let port = reg_u32(dn, DRP_ADDRESS)?;
         let hub = dev_id(parent(dn)?)?;
         let path = interfaces(&GUID_USB_HUB, Some(&hub)).into_iter().next()?;
         let h = Handle::open(&path)?;
         let mut q = [0u8; 64];
         q[..4].copy_from_slice(&port.to_le_bytes());
-        // Packed struct: ConnectionIndex(4) then USB_DEVICE_DESCRIPTOR.
+        // Packed struct: ConnectionIndex(4), USB_DEVICE_DESCRIPTOR(18),
+        // CurrentConfigurationValue(1), Speed(1): 0 low, 1 full, 2 high, 3 super.
         let b = h.ioctl(IOCTL_USB_GET_NODE_CONNECTION_INFORMATION_EX, &q, 512)?;
-        (b.len() >= 16 && b[5] == 1).then(|| (b[8], b[9]))
+        (b.len() >= 24 && b[5] == 1).then(|| {
+            let speed = [1.5, 12.0, 480.0, 5000.0].get(b[23] as usize).copied().unwrap_or(0.0);
+            (b[8], b[9], u16::from_le_bytes([b[6], b[7]]), speed)
+        })
     }
 
     pub fn devices() -> Vec<UsbDevice> {
@@ -115,14 +172,21 @@ mod imp {
             }
             let (Some(vendor), Some(product)) = (id_field(&id, "VID_"), id_field(&id, "PID_")) else { continue };
             let Some(dn) = locate(&id) else { continue };
-            let (class, subclass) =
-                hub_class(dn).or_else(|| class_from_compat(&reg_strs(dn, DRP_COMPATIBLEIDS))).unwrap_or((0, 0));
+            let hub = hub_info(dn);
+            let (class, subclass) = hub
+                .map(|h| (h.0, h.1))
+                .or_else(|| class_from_compat(&reg_strs(dn, DRP_COMPATIBLEIDS)))
+                .unwrap_or((0, 0));
             out.push(UsbDevice {
+                id: id.to_ascii_uppercase(),
+                parent: parent(dn).and_then(dev_id).map(|p| p.to_ascii_uppercase()),
                 name: reg_str(dn, DRP_DEVICEDESC).unwrap_or_else(|| "USB Device".into()),
                 class,
                 subclass,
                 vendor: vendor as u16,
                 product: product as u16,
+                speed_mbps: hub.map(|h| h.3).filter(|&s| s > 0.0),
+                usb_bcd: hub.map(|h| h.2).filter(|&b| b > 0),
             });
         }
         out
@@ -155,12 +219,24 @@ mod imp {
                     .or_else(|| db.as_deref().and_then(|d| ids_lookup(d, vendor, product)))
                     .or_else(|| read_trim(p.join("manufacturer")))
                     .unwrap_or_else(|| "USB Device".into());
+                // `version` is " 3.20"; `speed` is in Mbit/s.
+                let bcd = read_trim(p.join("version")).and_then(|v| {
+                    let (a, b) = v.trim().split_once('.')?;
+                    Some((a.parse::<u16>().ok()? << 8) | u16::from_str_radix(&format!("{b:0<2}")[..2], 16).ok()?)
+                });
+                // "1-2.3" hangs off the hub "1-2"; "1-2" off the root hub.
+                let id = p.file_name()?.to_string_lossy().into_owned();
+                let parent = id.rsplit_once('.').map(|x| x.0.to_string());
                 Some(UsbDevice {
+                    id,
+                    parent,
                     name,
                     class: hex(p, "bDeviceClass").unwrap_or(0) as u8,
                     subclass: hex(p, "bDeviceSubClass").unwrap_or(0) as u8,
                     vendor,
                     product,
+                    speed_mbps: read_trim(p.join("speed")).and_then(|s| s.parse().ok()),
+                    usb_bcd: bcd,
                 })
             })
             .collect()
@@ -184,6 +260,7 @@ mod imp {
                     subclass: n("bDeviceSubClass").unwrap_or(0) as u8,
                     vendor: n("idVendor")? as u16,
                     product: n("idProduct")? as u16,
+                    ..Default::default()
                 })
             })
             .collect()
@@ -209,7 +286,14 @@ mod tests {
         assert_eq!(c(&[r"USB\Class_E0&SubClass_01&Prot_01", r"USB\Class_E0"]), Some((0xE0, 1)));
         assert_eq!(c(&[r"USB\DevClass_00&SubClass_00&Prot_00", r"USB\COMPOSITE"]), Some((0, 0)));
         assert_eq!(c(&[]), None);
-        let d = UsbDevice { name: "Generic USB Hub".into(), class: 9, subclass: 0, vendor: 0x05E3, product: 0x0608 };
+        let d = UsbDevice {
+            name: "Generic USB Hub".into(),
+            class: 9,
+            subclass: 0,
+            vendor: 0x05E3,
+            product: 0x0608,
+            ..Default::default()
+        };
         assert_eq!(line(&d), "Generic USB Hub, class=0x09, subclass=0x00, vendor=0x05E3, product=0x0608");
     }
 
@@ -230,5 +314,25 @@ mod tests {
         assert_eq!(n[1].0, "USB3.1 Hub");
         assert_eq!(n[1].1.get("idVendor").map(String::as_str), Some("3034"));
         assert_eq!(n[1].1.get("USB Product Name").map(String::as_str), Some("USB3.1 Hub"));
+    }
+
+    #[test]
+    fn usb3_device_at_usb2_speed() {
+        let d = UsbDevice { usb_bcd: Some(0x0320), speed_mbps: Some(480.0), ..Default::default() };
+        assert!(d.slowed());
+        assert_eq!((d.version_text(), d.speed_text()), ("USB 3.2".to_string(), "480 Mbps".to_string()));
+        assert!(!UsbDevice { speed_mbps: Some(5000.0), ..d.clone() }.slowed());
+        assert!(!UsbDevice { usb_bcd: Some(0x0200), ..d }.slowed(), "a USB 2 device at USB 2 speed is fine");
+    }
+
+    #[test]
+    fn tree_order() {
+        let d = |id: &str, parent: Option<&str>| super::UsbDevice {
+            id: id.into(),
+            parent: parent.map(Into::into),
+            ..Default::default()
+        };
+        let devs = vec![d("1-2.1", Some("1-2")), d("1-2", None), d("1-3", Some("usb1")), d("1-2.1.4", Some("1-2.1"))];
+        assert_eq!(super::tree(&devs), vec![(0, 1), (1, 0), (2, 3), (0, 2)]);
     }
 }

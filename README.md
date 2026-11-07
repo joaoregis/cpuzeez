@@ -25,6 +25,8 @@ Processor, caches, mainboard, memory and SPD, graphics, sensors, drives, network
 - [Install](#install)
 - [Updates](#updates)
 - [Privileged hardware access](#privileged-hardware-access)
+- [Quality, accessibility and security](#quality-accessibility-and-security)
+- [Performance budget](#performance-budget)
 - [Usage](#usage)
 - [Feature coverage](#feature-coverage)
 - [Accuracy: side by side with CPU-Z](#accuracy-side-by-side-with-cpu-z)
@@ -37,7 +39,9 @@ Processor, caches, mainboard, memory and SPD, graphics, sensors, drives, network
 ## Highlights
 
 - **A modern interface.**
-  - Sidebar navigation and a live **Overview** dashboard: CPU, GPU and chipset temperatures with sparklines, plus health and throttling status.
+  - Sidebar navigation and a live **Overview**: a one-line summary of the build, health pills, tiles you choose (with presets), quick actions and opt-in local alerts.
+  - **Build health:** common setup mistakes and how to fix them (single memory module, XMP/EXPO off, GPU on fewer lanes, Resizable BAR off, power-saving plan, monitor below its refresh rate or plugged into the motherboard).
+  - A **command palette** (`Ctrl+K`) that finds any field, page or action; **Basic / Advanced / Expert** detail levels; copy or **pin** any row to the Overview; units of your choice (°C/°F, MHz/GHz, MB/MiB).
   - Card-based pages in light and dark themes, using the OS's own UI font.
   - Available in English, Português (Brasil) and Español.
 - **Everything CPU-Z reports.**
@@ -50,27 +54,40 @@ Processor, caches, mainboard, memory and SPD, graphics, sensors, drives, network
 - **A hardware monitor.**
   - Every sensor with min/max/average, live charts and CSV logging.
   - Thermal, power and current **throttling detection**.
-  - A **monitored stress test** that stops automatically at a temperature limit.
-  - A tray / menu-bar icon with the CPU temperature, and an always-on-top mini monitor.
+  - **Tray icons**, one per metric you pick, as a number, bar, mini graph or ring.
+  - **Mini monitors:** as many small always-on-top windows as you like, each with its own layout (list, bar, grid, one big number or your own), lockable (click-through), hidden while a full-screen game runs.
   - Sensor sources:
     - **CPU:** AMD SMU per-core temperatures, rails and PPT/TDC/EDC; Intel and AMD RAPL; per-core effective clocks.
     - **GPU:** temperature, hot spot, memory junction, fans, power, load.
     - **Mainboard:** Super I/O voltages, temperatures and fans, with maps for more than 150 board models.
     - **Chipset, DIMMs and drives.**
-- **Benchmarks.**
-  - CPU single- and multi-threaded, in Scalar, AVX2, AVX-512 and NEON variants.
-  - **Memory and cache latency and bandwidth.**
-  - A local **benchmark history** to compare before and after an overclock or a BIOS update.
-- **Devices.** Full **SMART** for NVMe and SATA, **battery health** (wear, cycles), and **network adapters** (link, IPs, DNS, driver, Wi-Fi).
+- **ZeeZ Live: an overlay, FPS and capture, without touching the game.**
+  - **Overlay:** a transparent, always-on-top, click-through window of its own. Nothing is injected into the game. Five styles, nine places plus an offset (or drag it), on the monitor the game is on, with a real outline on the text. **Throttling pills** name what throttles (CPU or GPU, thermal or power).
+  - **FPS:** PresentMon on Windows (bundled; needs administrator), MangoHud on Linux, Metal HUD on macOS (experimental). FPS, frame time, 1% and 0.1% lows, GPU Busy.
+  - **Capture** a session by hand, on a timer, from a hotkey or per game; it is saved as `frames.csv` (PresentMon's columns, so CapFrameX opens it), `hw.csv` and `session.json`. **Reports** with charts, comparison between sessions and HTML export.
+  - **Global hotkeys** (on Wayland through the desktop's shortcuts portal), per-game profiles, and an **anti-cheat safe mode** that stops all driver reads while a chosen game runs.
+- **What limits your frame rate, measured.** The bottleneck detector says *GPU at its limit*, *CPU at its limit (core 4)*, *held back on purpose* (V-Sync, a cap), *thermal throttling*, *video memory full*, *paging*, *disk* or *another program*, with the numbers behind it, live and over a whole session. It never ranks parts and never guesses.
+- **A Task Manager under *System*.** Processes (grouped, with network, power, GPU, command line, integrity and more), Performance, **App history** (opt-in, kept locally), Startup with its boot timeline, Users and Services (recovery, triggers, accounts). Ending or changing anything asks first and warns when the target is critical to the system; a change that needs rights asks for them for that one action.
+- **Benchmarks** (our own workloads; 1000 points = the reference Ryzen 9 7900X / RTX 4060):
+  - **CPU suite:** compression, n-body, SIMD matrix math, AES with and without the AES instructions, SHA-256, a ray tracer and sorting, single- and multi-threaded; thread scaling, P- vs E-cores, and a sustained run that shows throttling.
+  - **Memory:** latency and bandwidth per cache level, STREAM triad, GUPS, the cost of TLB misses, latency per CCD.
+  - **GPU** (DX12/Vulkan/Metal): FP32/FP16, VRAM bandwidth, the PCIe link both ways, a raster scene.
+  - **Storage:** sequential and 4K random, uncached, plus a sustained write that finds the SSD's cache size.
+  - **Core-to-core latency** heat map, and a **stability test** (CPU light/heavy/mixed, a memory test, GPU stress, or all at once) that stops itself at temperature limits.
+  - Every result records its conditions and can be saved to a local **history** and compared sub-test by sub-test.
+- **Devices.**
+  - **Drives:** full **SMART**, SMART self-tests, a read-only surface scan, written data against the rated endurance, partition alignment, TRIM, encryption, and the decoded Identify data.
+  - **Displays** (refresh rate, HDR, refresh range), **USB** as a tree with negotiated speed, **Thunderbolt/USB4**, **audio** devices with their format, **Bluetooth** battery levels.
+  - **Battery health** (wear, cycles) and **network adapters** (link, IPs, DNS, driver, Wi-Fi).
 - **Tools.**
   - **Compare reports**: what changed after a hardware or BIOS change.
   - Live clocks of every core and GPU, timers, and TXT/HTML/JSON export.
 - **CPU-Z's command line**:
   - CPU-Z's own flags: `-txt=`, `-html=`, `-json=`, `-console`, `-bench`, `-core=`, `-coremask=`.
-  - New flags: `-sensors`, `-log=`, `-membench`, `-diff=`, `-checkupdate`.
+  - New flags: `-sensors`, `-log=`, `-membench`, `-diff=`, `-checkupdate[=stable|beta|alpha]`.
   - A `cpuzeez.ini` with the same keys as `cpuz.ini`.
-- **One-click updates.** The app finds new releases and installs the right package for your OS, after verifying its SHA-256.
-- **A single native binary**, about 8 MB, with no runtime dependencies.
+- **One-click updates**, on the channel you choose (Stable, Beta or Alpha). The app finds new releases and installs the right package for your OS, after verifying its SHA-256.
+- **A single native binary**, about 20 MB (most of it the GPU renderer and the GPU benchmark), with no runtime dependencies.
 
 ## Screenshots
 
@@ -120,14 +137,29 @@ Every [release](https://github.com/joaoregis/cpuzeez/releases) ships an installe
 | Arch Linux | `cpuzeez-bin-<ver>-1-x86_64.pkg.tar.zst` | `sudo pacman -U cpuzeez-bin-*.pkg.tar.zst` |
 | Any Linux (glibc 2.35+) | `cpuzeez-<ver>-linux-<arch>.tar.gz` | Binary, `.desktop` file and icons |
 
-> **No publisher certificate.** The installers are not signed with a publisher certificate, because that needs a paid certificate. macOS executables use ad-hoc signatures, which neither identify the developer nor provide Apple notarization.
-> - **Windows:** SmartScreen may say "Windows protected your PC". Click *More info → Run anyway*.
-> - **macOS:** Gatekeeper may block the app or the `.pkg` because Apple cannot verify the developer.
->   1. Check your download against `SHA256SUMS.txt`.
->   2. Try to open it once and dismiss the alert.
->   3. Go to *System Settings → Privacy & Security → Open Anyway* and confirm *Open*.
->
->   For the `.pkg`, finish installing and repeat for the app if prompted. On macOS 11–12 this setting is under *System Preferences → Security & Privacy → General*. Right-click → *Open* no longer bypasses this check on macOS 15 and later; see [Apple's instructions](https://support.apple.com/en-us/102445).
+### Why Windows or macOS shows a security warning
+
+**CpuZeeZ is not signed with a publisher certificate.** On Windows, removing the warning needs a code-signing certificate. On macOS it needs a paid Apple Developer membership (US$ 99/year) for notarization. Both cost money every year, and CpuZeeZ is a free project with no budget for that yet. macOS executables are ad-hoc signed, which keeps them runnable but neither identifies the developer nor counts as notarization.
+
+**What the warning means.** Windows and macOS can't tell who published the file. **It doesn't mean malware was found.** SmartScreen is reputation-based and warns about unsigned downloads that few people have run yet.
+
+**How to check that your download is genuine:**
+1. Every release ships `SHA256SUMS.txt`. Compare your file's hash with the one listed:
+   - Windows (PowerShell): `Get-FileHash .\cpuzeez-<ver>-windows-x64.msi -Algorithm SHA256`
+   - macOS: `shasum -a 256 cpuzeez-<ver>-macos-universal.dmg`
+   - Linux: `sha256sum cpuzeez_<ver>_amd64.deb`
+2. Every release is built by the public [release workflow](.github/workflows/release.yml) on GitHub's servers, from the tagged commit of this open-source code. The build logs are public.
+3. The in-app updater checks the SHA-256 for you before it installs anything ([Updates](#updates)).
+
+**How to continue:**
+- **Windows:** when SmartScreen says "Windows protected your PC", click *More info → Run anyway*.
+- **macOS:** Gatekeeper may block the app or the `.pkg` because Apple cannot verify the developer.
+  1. Check your download against `SHA256SUMS.txt` (above).
+  2. Try to open it once and dismiss the alert.
+  3. Go to *System Settings → Privacy & Security → Open Anyway* and confirm *Open*.
+
+  For the `.pkg`, finish installing and repeat for the app if prompted. On macOS 11–12 this setting is under *System Preferences → Security & Privacy → General*. Right-click → *Open* no longer bypasses this check on macOS 15 and later; see [Apple's instructions](https://support.apple.com/en-us/102445).
+- **Linux:** packages installed with `apt`, `pacman` or from the tarball show no such warning.
 
 With Rust installed you can also run `cargo install --git https://github.com/joaoregis/cpuzeez`.
 
@@ -141,6 +173,11 @@ With Rust installed you can also run `cargo install --git https://github.com/joa
   - **Anywhere else:** it opens the download folder.
 - **What's new** opens the release notes.
 - You can also check from *About ▸ Check for updates*, or with `cpuzeez -checkupdate`.
+- **Update channels.** *Settings ▸ Updates ▸ Update channel* picks what the check may offer:
+  - **Stable:** releases only (the default for a release build).
+  - **Beta:** also betas and release candidates (the default when you run a beta).
+  - **Alpha:** everything that is published.
+  The startup check follows the channel you chose, once you have allowed it. `cpuzeez -checkupdate=beta` shows what a channel would offer without changing anything. Pre-releases can be unfinished; a *Beta report* issue template is there for what you find.
 - To turn the check off, set `CheckUpdates=0` in `cpuzeez.ini`.
 - It uses the system `curl`, which ships with Windows 10+, macOS and desktop Linux distros.
 
@@ -155,7 +192,7 @@ With Rust installed you can also run `cargo install --git https://github.com/joa
 
 ## Privileged hardware access
 
-Like CPU-Z, some information can only come from hardware registers: MSRs, the SMBus where the SPD EEPROMs live, the Super I/O sensor chip, the memory controller and the AMD SMU. CPU-Z installs its own kernel driver for this. **CpuZeeZ never ships a driver.** It uses what each OS already offers, and simply leaves out what it can't read.
+Like CPU-Z, some information can only come from hardware registers: MSRs, the SMBus where the SPD EEPROMs live, the Super I/O sensor chip, the memory controller and the AMD SMU. CPU-Z installs its own kernel driver for this. **CpuZeeZ has no driver of its own.** On Windows it uses [PawnIO](#windows-pawnio), a signed open-source driver that the packages include as an optional component; elsewhere it uses what the OS already offers. Whatever it can't read, it simply leaves out.
 
 | | Without privileges | With privileges |
 |---|---|---|
@@ -163,12 +200,31 @@ Like CPU-Z, some information can only come from hardware registers: MSRs, the SM
 | **Linux** | All of the above, plus hwmon sensors (`k10temp`, `coretemp`, `nct6775`, `it87`, `amdgpu`…), cpufreq clocks, RAPL power, and SPD when `ee1004`/`spd5118` are bound | **+ root**: MSRs (`modprobe msr`), full PCI config space, SPD over `i2c-dev`, Super I/O via `/dev/port`, AMD SMN/UMC, Intel MCHBAR, SMART via ioctls, and the SMU table via the optional `ryzen_smu` module |
 | **macOS** | CPU (sysctl / CPUID), caches, clusters, SMBIOS (Intel) or IODeviceTree (Apple Silicon), memory size and type, PCI (IOKit), GPU and Metal, displays (EDID), storage, USB, network, SMC temperatures/fans/power, battery health, benchmarks | Nothing more: macOS doesn't allow third-party register access, and Apple Silicon has no SPD, MSRs or Super I/O |
 
+### What else needs administrator or root
+
+Most of CpuZeeZ runs as a normal user. These are the exceptions, and each screen says so when it applies:
+
+| Feature | Windows | Linux | macOS |
+|---|---|---|---|
+| **FPS and GPU Busy** (ZeeZ Live) | administrator (PresentMon reads the graphics kernel's events); the Live tab offers the restart | MangoHud, no root | Metal HUD, no root; no frame times from other apps |
+| **Network per process** | administrator | TCP only; other users' processes need root | `nettop`, no root |
+| **Ending, suspending or changing a process or service** | one UAC prompt for that action | `pkexec` for that action | authorization for that action |
+| **Startup entries, service recovery and accounts** | one UAC prompt for that action | `pkexec`; recovery is a systemd drop-in you can delete | authorization for that action |
+| **Hardware registers** (see above) | PawnIO + administrator | root | not possible |
+
+An action that needs rights runs in a one-shot elevated copy of CpuZeeZ that accepts only a fixed list of operations ([threat model](docs/security/threat-model.md)). Everything it does is written to the local audit log.
+
 ### Windows: PawnIO
 
 [PawnIO](https://pawnio.eu) is a signed, open-source, scriptable kernel driver, also used by LibreHardwareMonitor and FanControl.
 
-1. Install it: `winget install namazso.PawnIO`, or get the installer from [pawnio.eu](https://pawnio.eu).
-2. Download the official modules ([PawnIO.Modules releases](https://github.com/namazso/PawnIO.Modules/releases), LGPL-2.1). Extract the `.bin` files into a `pawnio-modules` folder next to `cpuzeez.exe`, or into the PawnIO install folder.
+The Windows packages ship it, pinned and SHA-256-checked ([`packaging/pins.txt`](packaging/pins.txt)):
+
+1. Install it:
+   - **MSI:** *Hardware access (PawnIO driver)* is ticked by default under *Custom Setup*. Untick it to skip the driver. For a silent install without it, use `msiexec /i cpuzeez-….msi ADDLOCAL=Main`.
+   - **In the app:** press *Install hardware access* in the yellow banner. CpuZeeZ checks the bundled installer against the pinned hash, then Windows asks for permission.
+   - **Yourself:** `winget install namazso.PawnIO`, or the installer from [pawnio.eu](https://pawnio.eu).
+2. The official modules ([PawnIO.Modules](https://github.com/namazso/PawnIO.Modules/releases), LGPL-2.1) come in the `pawnio-modules` folder next to `cpuzeez.exe`. For a build from source, extract them there yourself.
 3. Run CpuZeeZ **as administrator**. *About* (and the report's *Binaries* section) then shows `Hardware access: PawnIO 2.2.0 (modules: …)`.
 
 Details are in [docs/windows-pawnio.md](docs/windows-pawnio.md).
@@ -184,6 +240,17 @@ sudo modprobe spd5118       # DDR5 SPD (kernel 6.11+), or ee1004 for DDR4
 ```bash
 sudo cpuzeez                # full detail; without sudo you still get most of it
 ```
+
+## Quality, accessibility and security
+
+- **Tested without a person.** Parsers and the detector run on random and corrupt input on every push, and 11 fuzz targets run on a schedule (`fuzz/`). A synthetic game drives a long **soak** run that checks memory, handles and threads stay flat ([how](docs/testing/soak.md)). Installers are checked in CI: install, upgrade from every published release, downgrade refused, optional driver, clean removal.
+- **Accessible.** Text reaches WCAG AA contrast in both themes, chart colours reach 3:1, nothing relies on colour alone (warnings carry an icon), pages hold together from 75% to 200% scale, tables and tabs work from the keyboard, and painted widgets and charts expose names and values to assistive technology. What is not covered yet is listed in [docs/accessibility.md](docs/accessibility.md).
+- **Security.** [Threat model](docs/security/threat-model.md), [SECURITY.md](SECURITY.md) to report a problem, actions pinned by commit, read-only workflow tokens, `cargo-deny` and Dependabot. Releases are unsigned for now ([ADR 0009](docs/adr/0009-releases-stay-unsigned-for-now.md)); each comes with `SHA256SUMS.txt`.
+- **An audit guide** for anyone reviewing the project: [docs/audit/](docs/audit/README.md).
+
+## Performance budget
+
+CpuZeeZ runs next to your game, so it is held to a budget: at most 2% of one core for the sampler at 1 s with the overlay at 4 Hz, at most 150 MB of memory, and no frame-time spikes caused by sampling. Measured numbers and how they are measured are in [docs/performance.md](docs/performance.md).
 
 ## Usage
 
@@ -202,7 +269,7 @@ Run `cpuzeez` with no arguments to open the app. All of CPU-Z's command-line opt
 | `-diff=OLD.json,NEW.json` | Compare two reports (`NEW` can be `now`; add `,all` to include live values) |
 | `-core=N` | Print core #N's clock and exit |
 | `-coremask=HEX` | Restrict `-bench` to these logical CPUs |
-| `-checkupdate` | Check GitHub for a newer release |
+| `-checkupdate[=channel]` | Checks GitHub for a newer release (`stable`, `beta` or `alpha`; without a value, the channel in Settings) |
 | `-screenshots=DIR` | Render every page to PNG and exit (docs/CI) |
 
 GUI keys, as in CPU-Z:
@@ -229,8 +296,8 @@ CheckUpdates=1  ; update notice at startup
 ```
 
 Interface preferences live in the per-user data folder, editable on the **Settings** page:
-- language, theme, tray icon, close to tray;
-- sensor sampling period, graph history, warning temperature.
+- language, theme, units, tray icons, close to tray, mini monitors and their layouts;
+- sensor sampling period, graph history, warning temperature, local alerts.
 
 The folder is `%APPDATA%\CpuZeeZ`, `~/Library/Application Support/CpuZeeZ` or `~/.config/cpuzeez`. It also holds the benchmark history (`history.json`) and the sensor logs.
 
@@ -280,7 +347,10 @@ Legend:
 | USB devices, NPU / AI devices | ✅ | ✅ | ☑️ |
 | Software: OS, edition, build, install date, DirectX / Vulkan / Metal | ✅ | ✅ | ☑️ |
 | Sensors page, CSV log, throttling detection, tray / mini monitor | ✅ | ✅ (mini monitor; tray needs a StatusNotifier host) | ☑️ |
-| CPU benchmark, memory/cache benchmark, history, stress test | ✅ | ✅ | ✅ (CI) |
+| CPU suite, memory, storage and core-to-core latency benchmarks, history, stability test | ✅ | ✅ | ✅ (CI; latency as a statistical spread) |
+| GPU benchmark (wgpu) | ✅ (DX12, Vulkan) | ☑️ (Vulkan) | ☑️ (Metal) |
+| Drive health: SMART self-tests, surface scan, endurance | ✅🔑 | ☑️🔑 | ❌ self-tests · ☑️🔑 scan |
+| Displays HDR / refresh range, audio formats, Thunderbolt/USB4, Bluetooth battery | ✅ | ☑️ | ☑️ |
 | Reports (TXT/HTML/JSON), compare reports, F5/F6/F7 | ✅ | ✅ | ✅ (CI) |
 
 ¹ No PawnIO module offers generic PCI configuration access on Windows. Device IDs, names and links still come from the OS.
@@ -367,25 +437,27 @@ Release ([`release.yml`](.github/workflows/release.yml)): pushing a `v*` tag bui
 
 ## Architecture
 
+A Cargo workspace ([ADR 0011](docs/adr/README.md)):
+
 ```
-src/
+crates/core/       pure logic, no OS calls, unit-tested everywhere:
+                   report tree, Metric Engine, Widget Engine layouts (overview, tray, mini monitors),
+                   SPD/EDID/SMART/Identify decoders, build health, alerts, units, detail levels
+crates/platform/   per-OS adapters: CPUID, privileged access (PawnIO / Linux kernel interfaces),
+                   disk/network/memory/GPU-engine counters, displays, firmware, partitions,
+                   C-states, uncached I/O, large pages, encryption
+src/               the app:
 ├── main.rs        CLI (CPU-Z options + -sensors/-log/-membench/-diff), Ctx, section order
-├── report.rs      report tree (Field / Group / Hex) → TXT, HTML, JSON (and back, for diffs)
-├── config.rs      cpuzeez.ini              settings.rs   per-user GUI preferences + data folder
-├── hw/            privileged access: trait Hw { rdmsr, pci_read, io, smn, smbus, smu, mchbar, pch }
-├── cpu/           CPUID (x86.rs), ARM (arm.rs), clocks, names database (db.rs)
-├── smbios.rs  bios.rs  chipset.rs (+ chipset/intel.rs, chipset/macos.rs)  pci/  spd/
-├── sensors/       Super I/O + board maps, AMD SMU (amd_pm.rs), RAPL, hwmon, SMC, PDH
-├── telemetry.rs   sampler: series, min/max/avg, CSV, throttling detection
-├── gpu/  npu.rs  storage.rs (+ storage/smart.rs)  battery.rs  network.rs  usb.rs  software.rs
-├── bench.rs  membench.rs  history.rs  diff.rs  timers.rs  update.rs
-└── gui/           egui front-end:
-                   theme.rs + widgets.rs  design system
-                   pages: overview, sensors, stress, devices, tools, settings_ui
-                   tray.rs, plot.rs, i18n.rs (en / pt-BR / es)
+├── cpu/  gpu/  pci/  spd/  sensors/  chipset.rs  smbios.rs  storage.rs  usb.rs  …   probes
+├── telemetry.rs   sampler on the Metric Engine: series, CSV, throttling detection
+├── benchkit.rs    benchmark principles (conditions, N runs, 1000-point score), background jobs
+├── bench.rs  cpusuite.rs  membench.rs  memplus.rs  gpubench.rs  diskbench.rs  latency.rs
+├── memtest.rs  drivetest.rs  history.rs  diff.rs  update.rs  executor.rs (audited actions)
+└── gui/           egui front-end: pages, benchmark views, tray, mini monitors, layout editor,
+                   command palette, i18n (en / pt-BR / es)
 ```
 
-Every probe returns report sections. The GUI, the TXT/HTML/JSON writers and `-console` all read that same tree, so the app and the report always agree.
+Every probe returns report sections. The GUI, the TXT/HTML/JSON writers and `-console` all read that same tree, so the app and the report always agree. The 1.0 plan and its roadmap are in [docs/v1/](docs/v1/README.md).
 
 ## Contributing
 
@@ -403,4 +475,4 @@ Thanks to [@vinicius741](https://github.com/vinicius741) for the macOS signing a
 
 Licensed under either of [Apache License 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT), at your option.
 
-PawnIO and its modules are separate projects under their own licenses. They are not bundled.
+PawnIO and its modules are separate projects under their own licenses. The Windows packages redistribute them unmodified; see [THIRD_PARTY.md](THIRD_PARTY.md).

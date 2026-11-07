@@ -212,6 +212,7 @@ pub fn line_chart(
 
 // ---------------------------------------------------------------- history
 
+/// The kinds older versions saved, always offered first.
 pub const KINDS: [&str; 3] = ["CPU Single Thread", "CPU Multi Thread", "Memory"];
 
 #[derive(Default)]
@@ -233,12 +234,23 @@ fn short_date(when: &str) -> String {
     when.get(..16).map_or(when.to_string(), |s| s.replace('T', " "))
 }
 
-/// Lower is better for latency.
+/// Lower is better for latency and for a sustained run's drop (%).
 fn lower_is_better(unit: &str) -> bool {
-    unit == "ns"
+    matches!(unit, "ns" | "%")
 }
 
 impl History {
+    /// Every kind in the history (S1-K09: one per benchmark type), oldest first.
+    fn kinds(&self) -> Vec<String> {
+        let mut v: Vec<String> = KINDS.iter().map(|k| k.to_string()).collect();
+        for (_, e) in &self.entries {
+            if !v.contains(&e.kind) {
+                v.push(e.kind.clone());
+            }
+        }
+        v
+    }
+
     pub fn reload(&mut self) {
         self.entries = history::load().into_iter().enumerate().collect();
         self.loaded = true;
@@ -268,8 +280,9 @@ impl History {
             let label = self.kind.as_deref().map_or(tr("All"), tr).to_string();
             egui::ComboBox::from_id_salt("hist-kind").selected_text(label).show_ui(ui, |ui| {
                 ui.selectable_value(&mut self.kind, None, tr("All"));
-                for k in KINDS {
-                    ui.selectable_value(&mut self.kind, Some(k.to_string()), tr(k));
+                for k in self.kinds() {
+                    let t = tr(&k).to_string();
+                    ui.selectable_value(&mut self.kind, Some(k), t);
                 }
             });
             ui.label(tr("Kind"));
@@ -421,12 +434,35 @@ impl History {
             ui.label(a.threads.to_string());
             ui.label(b.threads.to_string());
             ui.end_row();
+            // Sub-tests saved with the result (S1-K09), side by side.
+            if a.kind == b.kind {
+                for (name, x, y, unit, higher) in sub_pairs(a, b) {
+                    ui.label(super::benchkit_view::label(&name));
+                    ui.label(format!("{} {unit}", super::benchkit_view::num(x)));
+                    ui.label(format!("{} {unit}", super::benchkit_view::num(y)));
+                    if x != 0.0 {
+                        let pct = (y - x) / x * 100.0;
+                        let better = if higher { pct > 0.0 } else { pct < 0.0 };
+                        let c = if pct.abs() < 1.0 {
+                            p.text_muted
+                        } else if better {
+                            p.success
+                        } else {
+                            p.danger
+                        };
+                        ui.label(RichText::new(format!("{pct:+.1}%")).color(c));
+                    } else {
+                        ui.label("-");
+                    }
+                    ui.end_row();
+                }
+            }
         });
     }
 
     fn chart(&self, ui: &mut egui::Ui) {
         let p = theme::palette(ui);
-        for (n, kind) in KINDS.iter().enumerate() {
+        for (n, kind) in self.kinds().iter().enumerate() {
             if self.kind.as_ref().is_some_and(|k| k != kind) {
                 continue;
             }
@@ -449,6 +485,21 @@ impl History {
             );
         }
     }
+}
+
+/// (name, before, after, unit, higher is better) for every sub-test both
+/// entries saved.
+fn sub_pairs(a: &Entry, b: &Entry) -> Vec<(String, f64, f64, String, bool)> {
+    let subs = |e: &Entry| -> Vec<crate::benchkit::Sub> {
+        serde_json::from_value(e.details.get("subs").cloned().unwrap_or_default()).unwrap_or_default()
+    };
+    let (sa, sb) = (subs(a), subs(b));
+    sa.into_iter()
+        .filter_map(|x| {
+            let y = sb.iter().find(|y| y.name == x.name && y.unit == x.unit)?;
+            Some((x.name, x.value, y.value, x.unit, x.higher_better))
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------- compare
@@ -635,5 +686,39 @@ mod tests {
             "[Memory SPD]\n~ DIMM # 1 › Size: 8 -> 16\n+ DIMM # 1 › Size: x\n\n[DMI]\n- DIMM # 1 › Size: y\n"
         );
         assert_eq!(short_date("2026-10-14T10:20:00Z"), "2026-10-14 10:20");
+    }
+
+    #[test]
+    fn sub_tests_pair_up_for_compare() {
+        use crate::benchkit::Sub;
+        let e = |v: f64, extra: bool| {
+            let mut subs = vec![Sub::new("Integer ST", v, "MB/s", true)];
+            if extra {
+                subs.push(Sub::new("Only here", 1.0, "x", true));
+            }
+            let mut e = crate::history::Entry {
+                when: String::new(),
+                label: String::new(),
+                kind: "CPU suite".into(),
+                score: 0.0,
+                unit: "points".into(),
+                threads: 1,
+                variant: String::new(),
+                cpu: String::new(),
+                board: String::new(),
+                bios: String::new(),
+                memory: String::new(),
+                os: String::new(),
+                app_version: String::new(),
+                details: serde_json::Value::Null,
+            };
+            e.details = serde_json::json!({ "subs": subs });
+            e
+        };
+        assert_eq!(
+            sub_pairs(&e(100.0, true), &e(110.0, false)),
+            vec![("Integer ST".into(), 100.0, 110.0, "MB/s".into(), true)]
+        );
+        assert!(lower_is_better("%") && lower_is_better("ns") && !lower_is_better("MB/s"));
     }
 }

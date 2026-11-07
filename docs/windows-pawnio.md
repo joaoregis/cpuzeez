@@ -13,7 +13,21 @@ When PawnIO or its modules are missing, cpuzeez still runs and reports
 
 ## Installing PawnIO
 
-Install one of these (elevation is required):
+The Windows packages (MSI and portable zip) ship `PawnIO_setup.exe` 2.2.0 and
+the modules, pinned with their SHA-256 in `packaging/pins.txt`. Nothing is
+installed without consent:
+
+- **MSI:** the *Hardware access (PawnIO driver)* feature, ticked by default
+  and explained in *Custom Setup*, runs `PawnIO_setup.exe -install -silent`
+  during the install. A failure doesn't fail the install. Untick it to skip
+  the driver. Silent installs include it; `ADDLOCAL=Main` leaves it out.
+- **In the app:** *Install hardware access* in the banner runs the allow-listed
+  `install-pawn-io` action in an elevated one-shot copy. It holds the bundled
+  installer open without write or delete sharing, checks its SHA-256 against
+  the hash compiled into the app, and only then runs it. A mismatch is refused
+  and written to the audit log.
+
+Or install one of these yourself (elevation is required):
 
 - the official installer `PawnIO_setup.exe` from https://pawnio.eu, which
   links to https://github.com/namazso/PawnIO.Setup/releases

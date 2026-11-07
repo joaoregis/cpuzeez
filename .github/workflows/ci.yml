@@ -9,6 +9,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+# Read-only token: nothing here pushes, comments or publishes.
+permissions:
+  contents: read
+
 jobs:
   native:
     name: ${{ matrix.name }}
@@ -23,16 +27,28 @@ jobs:
           - { name: macOS arm64, os: macos-latest }
           - { name: macOS x64, os: macos-15-intel }
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
+          toolchain: stable
           components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --check
-      - run: cargo clippy --all-targets -- -D warnings -A dead_code  # module APIs are used per-OS
-      - run: cargo test --all-targets
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings -A dead_code  # module APIs are used per-OS
+      - run: cargo test --workspace --all-targets
+      - name: Workflow files GitHub would refuse (duplicate keys)
+        run: |
+          python -m pip install --quiet pyyaml
+          python .github/scripts/lint_workflows.py
+      - name: Soak hooks (the synthetic game) and the soak analysis itself
+        run: |
+          cargo test --bin cpuzeez --features soak soak
+          python .github/scripts/soak.py --selftest
       - name: Build release
         run: cargo build --release
+      - name: Static C runtime (starts without the VC++ redistributable)
+        if: runner.os == 'Windows'
+        run: python .github/scripts/check_no_crt.py target/release/cpuzeez.exe
       - name: Run every report format (real hardware of the runner)
         shell: bash
         run: |
@@ -43,6 +59,15 @@ jobs:
           $bin -core=0
           test -s out/report.txt && test -s out/report.html && test -s out/report.json
           python3 -c "import json,sys; d=json.load(open('out/report.json')); print(len(d), 'sections:', [s['title'] for s in d])"
+      - name: Works with no network at all (P1)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -e
+          # A network namespace with only loopback, down: any connection attempt fails.
+          sudo unshare -n -- target/release/cpuzeez -txt=out/nonet -json=out/nonet
+          sudo unshare -n -- target/release/cpuzeez -sensors | head -n 5
+          test -s out/nonet.txt && test -s out/nonet.json
       - name: Benchmark smoke test
         shell: bash
         run: target/release/cpuzeez -bench
@@ -58,7 +83,40 @@ jobs:
           else
             target/release/cpuzeez -screenshots=out/screenshots
           fi
-      - uses: actions/upload-artifact@v4
+      - name: GUI on Wayland (headless Weston)
+        if: runner.os == 'Linux'
+        # A normal run takes ~1 min. Rarely (5e49edf, da4c3e8) the app or headless
+        # Weston stalls and nothing gets logged, so each attempt is bounded, gets a
+        # fresh compositor, prints where it stopped, and is retried once.
+        timeout-minutes: 7
+        shell: bash
+        run: |
+          set -e
+          sudo apt-get install -y -qq weston mesa-vulkan-drivers libwayland-egl1 >/dev/null
+          attempt() {
+            export XDG_RUNTIME_DIR=$(mktemp -d); chmod 700 "$XDG_RUNTIME_DIR"
+            rm -rf out/wayland
+            weston --backend=headless --socket=wayland-cz --width=1280 --height=1024 &
+            local weston_pid=$!
+            for i in $(seq 50); do test -S "$XDG_RUNTIME_DIR/wayland-cz" && break; sleep 0.1; done
+            local rc=0
+            env -u DISPLAY WAYLAND_DISPLAY=wayland-cz \
+              timeout --kill-after=10 150 target/release/cpuzeez -screenshots=out/wayland \
+              > "out/wayland-attempt$1.log" 2>&1 || rc=$?
+            kill "$weston_pid" 2>/dev/null || true; wait "$weston_pid" 2>/dev/null || true
+            echo "::group::attempt $1 (exit $rc), last log lines"
+            tail -n 25 "out/wayland-attempt$1.log"
+            echo "screenshots: $(ls out/wayland 2>/dev/null | wc -l)"
+            echo "::endgroup::"
+            return $rc
+          }
+          mkdir -p out
+          if ! attempt 1; then
+            echo "::warning::Wayland GUI attempt 1 failed or stalled; retrying once with a fresh Weston"
+            attempt 2
+          fi
+          test -s out/wayland/overview.png
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: report-${{ matrix.os }}
           path: out/
@@ -79,54 +137,217 @@ jobs:
           else
             apt-get update && apt-get install -y --no-install-recommends build-essential curl ca-certificates git python3
           fi
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - run: cargo test --workspace
       - run: cargo build --release
       - name: Run
         run: |
           target/release/cpuzeez -txt=out/report -json=out/report
           target/release/cpuzeez -console | head -n 60
           python3 -c "import json; d=json.load(open('out/report.json')); print([s['title'] for s in d])"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: report-${{ strategy.job-index }}-distro
           path: out/
+
+  visual:
+    name: Visual regression (PR vs base, same machine)
+    if: github.event_name == 'pull_request'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { fetch-depth: 0 }
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Build this PR and its base
+        shell: bash
+        run: |
+          set -e
+          cargo build --release
+          cp target/release/cpuzeez.exe head.exe
+          git worktree add ../base "${{ github.event.pull_request.base.sha }}"
+          (cd ../base && cargo build --release --target-dir "$GITHUB_WORKSPACE/target-base")
+      - name: Same screens from both builds
+        shell: bash
+        timeout-minutes: 10
+        run: |
+          ./target-base/release/cpuzeez.exe -screenshots=out/base
+          ./head.exe -screenshots=out/head
+      - name: Compare (layout changes fail, live values don't)
+        # An intended visual change is declared with the 'visual-change' label;
+        # the diff is still produced and uploaded for review.
+        continue-on-error: ${{ contains(github.event.pull_request.labels.*.name, 'visual-change') }}
+        run: python .github/scripts/shotdiff.py out/base out/head --max-diff 0.05
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: visual-regression
+          path: out/
+
+  deb:
+    name: .deb builds, installs, runs and uninstalls
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - run: cargo install cargo-deb --locked
+      - run: cargo deb
+      - name: Install, run, uninstall
+        run: |
+          set -e
+          sudo apt-get install -y ./target/debian/cpuzeez_*.deb
+          cpuzeez -txt=/tmp/deb-report && test -s /tmp/deb-report.txt
+          test -f /usr/share/applications/cpuzeez.desktop
+          sudo apt-get remove -y cpuzeez
+          test ! -e /usr/bin/cpuzeez  # not `command -v`: bash's hash table still remembers it
+
+  deny:
+    name: Dependencies (licenses, advisories, sources)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
 
   headless:
     name: CLI-only build (no GUI feature)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
       - run: cargo build --no-default-features && ./target/debug/cpuzeez | head -n 20
 
   msi-upgrade:
-    name: MSI install / upgrade / downgrade-block
+    name: MSI install / upgrade chain / downgrade-block
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: cargo build --release
-      - name: Build two MSIs from the same binary (1.0.0 and 1.0.1)
+      - name: Version mapping self-test
+        run: python .github/scripts/pkgver.py --test
+      - name: Build MSIs for the chain beta.1 -> rc.1 -> 1.0.0 -> 1.0.1 (same binary)
         shell: bash
         run: |
+          bash .github/scripts/fetch_pawnio.sh pawnio
           dotnet tool install --global wix --version 5.0.2
-          for v in 1.0.0 1.0.1; do
-            wix build packaging/windows/cpuzeez.wxs -arch x64 -d Version=$v -d Bin=target/release/cpuzeez.exe -d IconFile=assets/cpuzeez.ico -o cz-$v.msi
+          wix extension add -g WixToolset.UI.wixext/5.0.2
+          for v in 1.0.0-beta.1 1.0.0-rc.1 1.0.0 1.0.1; do
+            msi=$(python .github/scripts/pkgver.py "$v" | sed -n 's/^MSI_VER=//p')
+            wix build packaging/windows/cpuzeez.wxs -wx -ext WixToolset.UI.wixext -arch x64 -d Version=$msi -d Bin=target/release/cpuzeez.exe -d IconFile=assets/cpuzeez.ico -d PawnIo="$(pwd -W)/pawnio" -o cz-$v.msi
           done
-      - name: Install 1.0.0, upgrade to 1.0.1 in place, refuse downgrade
+      - name: Upgrade in place along the chain, refuse downgrade, uninstall cleanly
         shell: pwsh
         run: |
           function Installed { Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object DisplayName -eq 'CpuZeeZ' }
-          $p = Start-Process msiexec -ArgumentList '/i cz-1.0.0.msi /qn /l*v i1.log' -Wait -PassThru; if ($p.ExitCode) { throw "install 1.0.0: $($p.ExitCode)" }
-          (Installed).DisplayVersion
-          $p = Start-Process msiexec -ArgumentList '/i cz-1.0.1.msi /qn /l*v i2.log' -Wait -PassThru; if ($p.ExitCode) { throw "upgrade: $($p.ExitCode)" }
-          $e = @(Installed); "$($e.Count) entry, version $($e.DisplayVersion)"
-          if ($e.Count -ne 1 -or $e[0].DisplayVersion -ne '1.0.1') { throw 'upgrade left the wrong entries' }
+          function PawnIo { Test-Path HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO }
+          if (PawnIo) { throw 'the runner already has PawnIO: the feature test would prove nothing' }
+          foreach ($v in '1.0.0-beta.1', '1.0.0-rc.1', '1.0.0', '1.0.1') {
+            # Hardware access is ticked by default, so a plain install brings PawnIO.
+            $p = Start-Process msiexec -ArgumentList "/i cz-$v.msi /qn /l*v i-$v.log" -Wait -PassThru; if ($p.ExitCode) { throw "install ${v}: $($p.ExitCode)" }
+            if ($v -eq '1.0.0-beta.1' -and -not (PawnIo)) { throw 'Hardware access is the default but PawnIO is not installed' }
+            $e = @(Installed); "$v -> $($e.Count) entry, version $($e.DisplayVersion)"
+            if ($e.Count -ne 1) { throw "after $v there are $($e.Count) entries" }
+          }
+          if ($e[0].DisplayVersion -ne '1.0.1') { throw 'upgrade chain ended on the wrong version' }
+          foreach ($f in 'pawnio-modules\AMDFamily17.bin', 'pawnio-modules\COPYING', 'PawnIO_setup.exe', 'PresentMon.exe', 'PresentMon-LICENSE.txt', 'THIRD_PARTY.md') {
+            if (-not (Test-Path "C:\Program Files\CpuZeeZ\$f")) { throw "missing $f" }
+          }
           & "C:\Program Files\CpuZeeZ\cpuzeez.exe" -core=0
           $p = Start-Process msiexec -ArgumentList '/i cz-1.0.0.msi /qn' -Wait -PassThru
           if ($p.ExitCode -eq 0) { throw 'downgrade was not blocked' } else { "downgrade blocked ($($p.ExitCode))" }
           $p = Start-Process msiexec -ArgumentList "/x $($e[0].PSChildName) /qn" -Wait -PassThru; if ($p.ExitCode) { throw "uninstall: $($p.ExitCode)" }
           if (Installed) { throw 'uninstall left an entry' } else { 'uninstalled cleanly' }
+          if (-not (PawnIo)) { throw 'uninstalling CpuZeeZ removed the shared PawnIO driver' }
+
+  msi-releases:
+    name: MSI upgrade from every published release, optional driver, clean removal
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - run: cargo build --release
+      - name: Build this commit's MSI and download the published ones
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          head=$(cargo pkgid | sed 's/.*[#@]//')
+          echo "head version $head"
+          bash .github/scripts/fetch_pawnio.sh pawnio
+          dotnet tool install --global wix --version 5.0.2
+          wix extension add -g WixToolset.UI.wixext/5.0.2
+          msi=$(python .github/scripts/pkgver.py "$head" | sed -n 's/^MSI_VER=//p')
+          wix build packaging/windows/cpuzeez.wxs -wx -ext WixToolset.UI.wixext -arch x64 -d Version=$msi -d Bin=target/release/cpuzeez.exe -d IconFile=assets/cpuzeez.ico -d PawnIo="$(pwd -W)/pawnio" -o head.msi
+          mkdir published
+          # Every 1.x pre-release or release with an MSI, oldest first, except this very version.
+          for tag in $(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName -q '.[].tagName' | grep '^v1\.' | sort -V); do
+            [ "$tag" = "v$head" ] && continue
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" -p '*-windows-x64.msi' -D published 2>/dev/null || echo "no MSI in $tag"
+          done
+          ls published
+      - name: Upgrade through every published release to this commit, then remove
+        shell: pwsh
+        run: |
+          function Installed { Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object DisplayName -eq 'CpuZeeZ' }
+          function PawnIo { Test-Path HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO }
+          function Msi($args_) { $p = Start-Process msiexec -ArgumentList $args_ -Wait -PassThru; $p.ExitCode }
+          $dir = 'C:\Program Files\CpuZeeZ'
+          if (PawnIo) { throw 'the runner already has PawnIO: the feature test would prove nothing' }
+
+          # 1. Optional component: leaving "Hardware access" out installs the app and no driver.
+          if (Msi '/i head.msi ADDLOCAL=Main /qn') { throw 'install without the driver failed' }
+          if (PawnIo) { throw 'ADDLOCAL=Main still installed the PawnIO driver' }
+          if (-not (Test-Path "$dir\cpuzeez.exe")) { throw 'the app is missing without the driver' }
+          & "$dir\cpuzeez.exe" -core=0
+          if (Msi "/x $((Installed).PSChildName) /qn") { throw 'removal failed' }
+
+          # 2. Clean removal: no folder, no shortcut, no PATH entry; the user's data stays.
+          New-Item -ItemType Directory -Force "$env:APPDATA\CpuZeeZ" | Out-Null
+          Set-Content "$env:APPDATA\CpuZeeZ\settings.json" '{}'
+          if (Msi '/i head.msi ADDLOCAL=Main /qn') { throw 'reinstall failed' }
+          $id = (Installed).PSChildName
+          if (Msi "/x $id /qn") { throw 'removal failed' }
+          if (Installed) { throw 'removal left an uninstall entry' }
+          if (Test-Path $dir) { throw "removal left $dir : $((Get-ChildItem $dir -Recurse -Name) -join ', ')" }
+          if (Get-ChildItem "$env:ProgramData\Microsoft\Windows\Start Menu\Programs" -Recurse -Filter 'CpuZeeZ*.lnk') { throw 'removal left the Start menu shortcut' }
+          if (([Environment]::GetEnvironmentVariable('Path', 'Machine') -split ';') -contains $dir) { throw 'removal left the PATH entry' }
+          if (-not (Test-Path "$env:APPDATA\CpuZeeZ\settings.json")) { throw 'removal deleted the user data' }
+
+          # 3. Upgrade in place from every published release, oldest first, ending on this commit.
+          # Numbers compare as numbers: beta.2 before beta.10.
+          $chain = @(Get-ChildItem published -Filter *.msi | Sort-Object { [regex]::Replace($_.Name, '\d+', { param($m) $m.Value.PadLeft(6, '0') }) })
+          foreach ($m in $chain + (Get-Item head.msi)) {
+            $code = Msi "/i $($m.FullName) ADDLOCAL=Main /qn /l*v i-$($m.BaseName).log"
+            if ($code) { throw "installing $($m.Name): exit $code" }
+            $e = @(Installed)
+            "$($m.Name) -> $($e.Count) entry, version $($e.DisplayVersion)"
+            if ($e.Count -ne 1) { throw "after $($m.Name) there are $($e.Count) entries" }
+          }
+          & "$dir\cpuzeez.exe" -core=0
+          if (Msi "/x $((Installed).PSChildName) /qn") { throw 'final removal failed' }
+          if (Installed) { throw 'final removal left an entry' }
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: msi-releases-logs
+          path: i-*.log
+          if-no-files-found: ignore

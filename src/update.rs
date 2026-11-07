@@ -5,11 +5,60 @@
 //! no HTTP/TLS stack), check it against the release's SHA256SUMS.txt, then
 //! hand it to the OS installer (msiexec / open / pkexec apt-get|pacman).
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-const API: &str = "https://api.github.com/repos/joaoregis/cpuzeez/releases/latest";
+/// The list, newest first. `/releases/latest` is no use here: GitHub leaves
+/// pre-releases out of it, and the betas are the point of the channels.
+const API: &str = "https://api.github.com/repos/joaoregis/cpuzeez/releases?per_page=30";
+
+/// Which releases the update check may offer. Each channel also offers
+/// everything steadier than itself: Beta sees stable releases too.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
+pub enum Channel {
+    /// Releases only (`1.0.0`).
+    #[default]
+    Stable,
+    /// Plus betas and release candidates (`1.0.0-beta.8`, `1.0.0-rc.1`).
+    Beta,
+    /// Plus alphas (`1.1.0-alpha.1`): everything that is published.
+    Alpha,
+}
+
+impl Channel {
+    pub const ALL: [Channel; 3] = [Channel::Stable, Channel::Beta, Channel::Alpha];
+
+    /// The channel a version belongs to, from its pre-release label.
+    pub fn of(version: &str) -> Channel {
+        let v = version.trim().trim_start_matches('v');
+        let v = v.split_once('+').map_or(v, |(c, _)| c);
+        match v.split_once('-').map(|(_, pre)| pre) {
+            None => Channel::Stable,
+            Some(pre) if pre.to_ascii_lowercase().starts_with("alpha") => Channel::Alpha,
+            Some(_) => Channel::Beta,
+        }
+    }
+
+    /// Whether this channel offers `version`.
+    pub fn sees(self, version: &str) -> bool {
+        Channel::of(version) <= self
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Channel::Stable => "Stable",
+            Channel::Beta => "Beta",
+            Channel::Alpha => "Alpha",
+        }
+    }
+
+    /// `stable`, `beta` or `alpha` (the `-checkupdate=` argument).
+    pub fn from_arg(s: &str) -> Option<Channel> {
+        Channel::ALL.into_iter().find(|c| c.name().eq_ignore_ascii_case(s.trim()))
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Asset {
@@ -30,23 +79,38 @@ pub struct Release {
     pub sums: Option<String>,
 }
 
-/// The latest release if it is newer than this build.
-pub fn check() -> Option<Release> {
-    latest().filter(|r| newer(crate::VERSION, &r.version))
+/// The newest release on `channel` if it is newer than this build.
+pub fn check(channel: Channel) -> Option<Release> {
+    latest(channel).filter(|r| newer(crate::VERSION, &r.version))
 }
 
-/// The latest published release, whatever its version.
-pub fn latest() -> Option<Release> {
+/// The newest published release on `channel`, whatever this build is.
+pub fn latest(channel: Channel) -> Option<Release> {
     let ua = format!("User-Agent: {}/{}", crate::NAME, crate::VERSION);
     let body = crate::os::cmd(
         "curl",
         &["-fsSL", "--max-time", "8", "-H", "Accept: application/vnd.github+json", "-H", &ua, API],
     )?;
-    parse(&body)
+    newest(&body, channel)
 }
 
-fn parse(body: &str) -> Option<Release> {
-    let v: Value = serde_json::from_str(body).ok()?;
+/// The newest release of a `/releases` listing that `channel` offers. Drafts
+/// are skipped; the tag, not GitHub's pre-release flag, decides the channel.
+pub(crate) fn newest(body: &str, channel: Channel) -> Option<Release> {
+    let list: Vec<Value> = serde_json::from_str(body).ok()?;
+    list.iter()
+        .filter(|v| v["draft"].as_bool() != Some(true))
+        .filter_map(release_from)
+        .filter(|r| channel.sees(&r.version))
+        .reduce(|best, r| if newer(&best.version, &r.version) { r } else { best })
+}
+
+#[cfg(test)]
+pub(crate) fn parse(body: &str) -> Option<Release> {
+    release_from(&serde_json::from_str(body).ok()?)
+}
+
+pub(crate) fn release_from(v: &Value) -> Option<Release> {
     let tag = v["tag_name"].as_str()?;
     let assets: Vec<Asset> = v["assets"]
         .as_array()
@@ -91,19 +155,46 @@ fn pick(assets: &[Asset], suffixes: &[String]) -> Option<Asset> {
     suffixes.iter().find_map(|s| assets.iter().find(|a| a.name.ends_with(s.as_str())).cloned())
 }
 
-/// Semver-ish compare of "major.minor.patch" (pre-release tags sort lower).
-pub fn newer(current: &str, latest: &str) -> bool {
-    fn key(v: &str) -> (Vec<u64>, bool) {
-        let (core, pre) = v.trim_start_matches('v').split_once('-').map_or((v, false), |(c, _)| (c, true));
-        (core.trim_start_matches('v').split('.').map(|p| p.parse().unwrap_or(0)).collect(), !pre)
-    }
-    key(latest) > key(current)
+/// The startup check runs only when cpuzeez.ini allows it and the user opted
+/// in on the first-run screen or in Settings (P1). Not asked yet = no check.
+pub fn startup_check_allowed(ini_allows: bool, opted_in: Option<bool>) -> bool {
+    ini_allows && opted_in == Some(true)
 }
 
-/// `-checkupdate`
-pub fn cli() {
-    match latest() {
-        None => eprintln!("Could not reach GitHub (is curl installed and the network up?)."),
+/// SemVer precedence: "major.minor.patch", then pre-releases below the release
+/// they precede, ordered identifier by identifier (`beta.2` > `beta.1`, `rc.1` > `beta.9`).
+pub fn newer(current: &str, latest: &str) -> bool {
+    use std::cmp::Ordering;
+    // Numeric identifiers sort before alphanumeric ones and compare as numbers (SemVer §11).
+    #[derive(PartialEq, Eq, PartialOrd, Ord)]
+    enum Id<'a> {
+        Num(u64),
+        Text(&'a str),
+    }
+    fn parse(v: &str) -> (Vec<u64>, Option<Vec<Id<'_>>>) {
+        let v = v.trim().trim_start_matches('v');
+        let v = v.split_once('+').map_or(v, |(c, _)| c); // build metadata never counts
+        let (core, pre) = v.split_once('-').map_or((v, None), |(c, p)| (c, Some(p)));
+        let core = core.split('.').map(|p| p.parse().unwrap_or(0)).collect();
+        let pre = pre.map(|p| p.split('.').map(|i| i.parse().map_or(Id::Text(i), Id::Num)).collect());
+        (core, pre)
+    }
+    let ((lc, lp), (cc, cp)) = (parse(latest), parse(current));
+    match lc.cmp(&cc) {
+        Ordering::Equal => match (lp, cp) {
+            (None, Some(_)) => true,     // the release beats its own pre-releases
+            (Some(l), Some(c)) => l > c, // Vec compares element-wise, then the longer wins
+            _ => false,
+        },
+        o => o == Ordering::Greater,
+    }
+}
+
+/// `-checkupdate[=stable|beta|alpha]`; without a channel, the one in Settings.
+pub fn cli(arg: &str) {
+    let channel = Channel::from_arg(arg).unwrap_or_else(|| crate::settings::Settings::load().channel());
+    match latest(channel) {
+        None => eprintln!("Could not find a {} release (is curl installed and the network up?).", channel.name()),
         Some(r) if !newer(crate::VERSION, &r.version) => {
             println!("{} {} is up to date (latest release: {}).", crate::DISPLAY_NAME, crate::VERSION, r.version)
         }
@@ -372,8 +463,11 @@ fn hex(b: &[u8]) -> String {
 }
 
 pub fn sha256_file(path: &Path) -> std::io::Result<String> {
-    use std::io::Read;
-    let mut f = std::fs::File::open(path)?;
+    sha256_of(&mut std::fs::File::open(path)?)
+}
+
+/// SHA-256 of everything `f` yields, as lowercase hex.
+pub fn sha256_of(f: &mut impl std::io::Read) -> std::io::Result<String> {
     let (mut h, mut buf) = (Sha256::new(), vec![0; 1 << 16]);
     loop {
         let n = f.read(&mut buf)?;
@@ -397,6 +491,114 @@ mod tests {
         assert!(!newer("0.1.0", "0.1.0"));
         assert!(newer("0.2.0-rc1", "0.2.0"));
         assert!(!newer("0.2.0", "0.2.0-rc1"));
+    }
+
+    #[test]
+    fn startup_check_is_opt_in() {
+        assert!(!startup_check_allowed(true, None), "not asked yet: no request");
+        assert!(!startup_check_allowed(true, Some(false)));
+        assert!(!startup_check_allowed(false, Some(true)), "CheckUpdates=0 wins");
+        assert!(startup_check_allowed(true, Some(true)));
+    }
+
+    /// P1: this module is the app's only network path. A socket, an HTTP
+    /// client or a `curl` call anywhere else fails this test.
+    #[test]
+    fn update_is_the_only_network_path() {
+        fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    walk(&p, out);
+                } else if p.extension().is_some_and(|x| x == "rs") {
+                    out.push(p);
+                }
+            }
+        }
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut files = Vec::new();
+        walk(&root.join("src"), &mut files);
+        walk(&root.join("crates"), &mut files);
+        assert!(files.len() > 50, "found the sources");
+        let net =
+            ["TcpStream", "UdpSocket", "TcpListener", "\"curl\"", "reqwest", "ureq::", "hyper::", "ToSocketAddrs"];
+        for f in files.iter().filter(|f| !f.ends_with("update.rs")) {
+            let src = std::fs::read_to_string(f).unwrap_or_default();
+            for n in net {
+                assert!(!src.contains(n), "{} uses {n}: only update.rs may reach the network", f.display());
+            }
+        }
+    }
+
+    #[test]
+    fn prerelease_order() {
+        // The 1.0 release chain: each step must be offered over the previous one.
+        let chain =
+            ["0.3.0", "1.0.0-beta.1", "1.0.0-beta.2", "1.0.0-beta.10", "1.0.0-rc.1", "1.0.0-rc.2", "1.0.0", "1.0.1"];
+        for w in chain.windows(2) {
+            assert!(newer(w[0], w[1]), "{} -> {}", w[0], w[1]);
+            assert!(!newer(w[1], w[0]), "{} -> {} must not be an update", w[1], w[0]);
+        }
+        assert!(!newer("1.0.0-beta.2", "1.0.0-beta.2"));
+        // SemVer §11 details: numeric < alphanumeric, a longer identifier set wins, build metadata is ignored.
+        assert!(newer("1.0.0-1", "1.0.0-alpha"));
+        assert!(newer("1.0.0-beta", "1.0.0-beta.1"));
+        assert!(!newer("1.0.0+abc", "1.0.0+def"));
+    }
+
+    fn listing() -> &'static str {
+        r#"[
+        {"tag_name":"v1.1.0-alpha.1","draft":false,"prerelease":true,"html_url":"u-a1","assets":[]},
+        {"tag_name":"v1.0.0-beta.8","draft":false,"prerelease":true,"html_url":"u-b8","assets":[]},
+        {"tag_name":"v1.0.0-rc.1","draft":false,"prerelease":true,"html_url":"u-rc1","assets":[]},
+        {"tag_name":"v0.9.0","draft":false,"prerelease":false,"html_url":"u-090","assets":[]},
+        {"tag_name":"v9.9.9","draft":true,"prerelease":false,"html_url":"u-draft","assets":[]}
+        ]"#
+    }
+
+    #[test]
+    fn channels_by_label() {
+        assert_eq!(Channel::of("1.0.0"), Channel::Stable);
+        assert_eq!(Channel::of("v1.0.0+build"), Channel::Stable);
+        assert_eq!(Channel::of("1.0.0-beta.7"), Channel::Beta);
+        assert_eq!(Channel::of("1.0.0-rc.1"), Channel::Beta);
+        assert_eq!(Channel::of("1.1.0-alpha.2"), Channel::Alpha);
+        assert!(
+            Channel::Beta.sees("1.0.0") && Channel::Beta.sees("1.0.0-rc.1") && !Channel::Beta.sees("1.1.0-alpha.1")
+        );
+        assert!(Channel::Alpha.sees("1.1.0-alpha.1") && Channel::Alpha.sees("0.9.0"));
+        assert!(Channel::Stable.sees("0.9.0") && !Channel::Stable.sees("1.0.0-rc.1"));
+        assert_eq!(Channel::from_arg("BETA"), Some(Channel::Beta));
+        assert_eq!(Channel::from_arg("nightly"), None);
+    }
+
+    /// Each channel offers the newest release it may see; drafts never.
+    #[test]
+    fn each_channel_gets_its_newest() {
+        let v = |c| newest(listing(), c).map(|r| r.version);
+        assert_eq!(v(Channel::Stable).as_deref(), Some("0.9.0"));
+        assert_eq!(v(Channel::Beta).as_deref(), Some("1.0.0-rc.1"));
+        assert_eq!(v(Channel::Alpha).as_deref(), Some("1.1.0-alpha.1"));
+        assert!(newest("[]", Channel::Alpha).is_none());
+        assert!(newest("not json", Channel::Alpha).is_none());
+        // The order of the listing does not matter.
+        let mut l: Vec<serde_json::Value> = serde_json::from_str(listing()).unwrap();
+        l.reverse();
+        let rev = serde_json::to_string(&l).unwrap();
+        assert_eq!(newest(&rev, Channel::Beta).unwrap().version, "1.0.0-rc.1");
+    }
+
+    /// A beta build follows betas, a release follows releases, unless chosen.
+    #[test]
+    fn the_channel_follows_the_build_unless_chosen() {
+        let mut s = crate::settings::Settings::default();
+        assert_eq!(s.channel(), Channel::of(crate::VERSION));
+        s.update_channel = Some(Channel::Alpha);
+        assert_eq!(s.channel(), Channel::Alpha);
+        let back: crate::settings::Settings = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(back.update_channel, Some(Channel::Alpha));
+        let old: crate::settings::Settings = serde_json::from_str("{}").unwrap();
+        assert_eq!(old.update_channel, None);
     }
 
     #[test]
@@ -457,7 +659,7 @@ mod tests {
     #[test]
     #[ignore]
     fn downloads_and_verifies_latest_release() {
-        let rel = latest().expect("GitHub reachable");
+        let rel = latest(Channel::Alpha).expect("GitHub reachable");
         let p = download_and_verify(&rel, &Mutex::new(Stage::Verifying)).unwrap();
         assert!(p.is_file());
         eprintln!("verified {}", p.display());

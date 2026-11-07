@@ -1,0 +1,95 @@
+# Coverage-guided fuzzing of the parsers that read untrusted input (S0-T07).
+# Needs nightly and cargo-fuzz:  cargo install cargo-fuzz
+#   cargo +nightly fuzz run elevated_op -- -max_total_time=60
+# Runs on a schedule in CI (.github/workflows/fuzz.yml). The quick,
+# deterministic version of the same checks is crates/core/src/robustness.rs.
+[package]
+name = "cpuzeez-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+cpuzeez-core = { path = "../crates/core" }
+serde_json = "1"
+
+[[bin]]
+name = "elevated_op"
+path = "fuzz_targets/elevated_op.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "layout_json"
+path = "fuzz_targets/layout_json.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "smbios"
+path = "fuzz_targets/smbios.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "spd"
+path = "fuzz_targets/spd.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "edid"
+path = "fuzz_targets/edid.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pci_config"
+path = "fuzz_targets/pci_config.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "presentmon_csv"
+path = "fuzz_targets/presentmon_csv.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "output_lines"
+path = "fuzz_targets/output_lines.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "hw_csv"
+path = "fuzz_targets/hw_csv.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "session_json"
+path = "fuzz_targets/session_json.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "detector"
+path = "fuzz_targets/detector.rs"
+test = false
+doc = false
+bench = false

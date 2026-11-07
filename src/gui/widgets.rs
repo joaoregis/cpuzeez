@@ -38,6 +38,17 @@ pub fn sidebar_item(ui: &mut Ui, icon: &str, label: &str, selected: bool) -> Res
         Color32::TRANSPARENT
     };
     ui.painter().rect_filled(rect, CornerRadius::same(theme::RADIUS_CONTROL), fill);
+    // Painted text is invisible to screen readers: name the item and say if it is the current one.
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, label));
+    // Keyboard focus is shown, not only felt.
+    if resp.has_focus() {
+        ui.painter().rect_stroke(
+            rect,
+            CornerRadius::same(theme::RADIUS_CONTROL),
+            Stroke::new(2.0, p.accent),
+            StrokeKind::Inside,
+        );
+    }
     let color = if selected { p.accent } else { p.text_secondary };
     let text_color = if selected { p.text } else { p.text_secondary };
     let font = egui::FontId::proportional(16.0);
@@ -47,18 +58,31 @@ pub fn sidebar_item(ui: &mut Ui, icon: &str, label: &str, selected: bool) -> Res
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
+/// Below this width (points) the header stacks its actions under the title.
+const NARROW_HEADER: f32 = 600.0;
+
 /// Page title, subtitle and optional right-aligned actions.
 pub fn page_header(ui: &mut Ui, title: &str, subtitle: &str, actions: impl FnOnce(&mut Ui)) {
     let p = theme::palette(ui);
-    ui.horizontal(|ui| {
+    let head = |ui: &mut Ui| {
         ui.vertical(|ui| {
             ui.label(RichText::new(title).text_style(theme::title()).color(p.text));
             if !subtitle.is_empty() {
                 ui.label(RichText::new(subtitle).text_style(theme::subtitle()).color(p.text_secondary));
             }
         });
-        ui.with_layout(Layout::right_to_left(Align::Center), actions);
-    });
+    };
+    // Side by side while there is room; below the title, wrapping, when a
+    // large text scale or a narrow window leaves none (a11y.rs checks it).
+    if ui.available_width() >= NARROW_HEADER {
+        ui.horizontal(|ui| {
+            head(ui);
+            ui.with_layout(Layout::right_to_left(Align::Center), actions);
+        });
+    } else {
+        head(ui);
+        ui.horizontal_wrapped(actions);
+    }
     ui.add_space(theme::GAP);
 }
 
@@ -81,26 +105,34 @@ pub fn card<R>(ui: &mut Ui, icon: &str, title: &str, add: impl FnOnce(&mut Ui) -
                 });
                 ui.add_space(6.0);
             }
-            add(ui)
+            // Rows copy and pin under this card's title (S1-U03).
+            let prev = super::pins::enter_card(ui.ctx(), title);
+            let r = add(ui);
+            super::pins::leave_card(ui.ctx(), prev);
+            r
         })
         .inner
 }
 
 /// Label on the left, value on the right; wraps long values. Empty values show "–".
-pub fn kv(ui: &mut Ui, label: &str, value: &str) {
+/// The row's response answers right-clicks (see `kv_list`).
+pub fn kv(ui: &mut Ui, label: &str, value: &str) -> Response {
     let p = theme::palette(ui);
     let w = ui.available_width();
     ui.horizontal_top(|ui| {
         let lw = (w * 0.42).clamp(90.0, 220.0);
         ui.allocate_ui_with_layout(egui::vec2(lw, 20.0), Layout::left_to_right(Align::Center), |ui| {
             ui.set_width(lw);
-            ui.add(egui::Label::new(RichText::new(label).color(p.text_secondary)).truncate());
+            // Not selectable: a right-click must reach the row's copy/pin menu.
+            ui.add(egui::Label::new(RichText::new(label).color(p.text_secondary)).truncate().selectable(false));
         });
         let v = if value.is_empty() { "–" } else { value };
         ui.with_layout(Layout::right_to_left(Align::Min).with_main_wrap(true), |ui| {
-            ui.add(egui::Label::new(RichText::new(v).color(p.text)).wrap());
+            ui.add(egui::Label::new(RichText::new(v).color(p.text)).wrap().selectable(false));
         });
-    });
+    })
+    .response
+    .interact(egui::Sense::click())
 }
 
 /// `kv` rows separated by hairlines.
@@ -112,7 +144,8 @@ pub fn kv_list(ui: &mut Ui, rows: &[(&str, String)]) {
             let x = ui.max_rect().x_range();
             ui.painter().hline(x, y, Stroke::new(1.0, p.border.gamma_multiply(0.6)));
         }
-        kv(ui, k, v);
+        let r = kv(ui, k, v);
+        super::pins::row_menu(&r, k, v, rows);
     }
 }
 
@@ -214,6 +247,13 @@ pub fn progress(ui: &mut Ui, frac: f32, text: &str) -> Response {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 22.0), Sense::hover());
     let r = CornerRadius::same(6);
     ui.painter().rect_filled(rect, r, p.sidebar);
+    resp.widget_info(|| {
+        egui::WidgetInfo::labeled(
+            egui::WidgetType::ProgressIndicator,
+            true,
+            format!("{text} ({:.0} %)", frac.clamp(0.0, 1.0) * 100.0),
+        )
+    });
     let mut fill = rect;
     fill.set_width(rect.width() * frac.clamp(0.0, 1.0));
     ui.painter().rect_filled(fill, r, p.accent);
@@ -242,7 +282,9 @@ pub fn segmented<T: PartialEq + Copy>(ui: &mut Ui, current: &mut T, items: &[(T,
                         .fill(if on { p.card } else { Color32::TRANSPARENT })
                         .stroke(if on { Stroke::new(1.0, p.border) } else { Stroke::NONE })
                         .corner_radius(CornerRadius::same(theme::RADIUS_CONTROL));
-                    if ui.add(b).clicked() {
+                    let resp = ui.add(b);
+                    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, label));
+                    if resp.clicked() {
                         *current = *v;
                     }
                 }

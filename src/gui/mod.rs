@@ -3,18 +3,62 @@
 //! the design system in `theme`/`widgets`. Every page reads the same report
 //! tree as `-txt`. F5 BMP, F6 clipboard, F7 .cvf (our JSON). UI text goes
 //! through `i18n::tr` (English keys; tables at the end of each file).
+//!
+//! No `unsafe` here (S0-E06): OS calls live in `cpuzeez_platform`.
+#![forbid(unsafe_code)]
 
+#[cfg(test)]
+mod a11y;
+mod access_ui;
 mod bench_tab;
 mod bmp;
+mod bottleneck_ui;
+pub mod detail;
 mod devices;
 pub mod i18n;
 pub mod overview;
+mod pages;
+mod palette;
+pub mod pins;
+mod screens;
 mod settings_ui;
+mod shots;
+#[cfg(feature = "soak")]
+mod soak;
+mod update_ui;
 // ---- monitoring (sensors / stress / tray) ----
+#[cfg(test)]
+mod bench_views_test;
+mod benchkit_view;
+mod cache;
+mod cpusuite_view;
+mod diskbench_view;
+mod drivehealth_view;
+mod gpubench_view;
+mod hotkeys;
+#[cfg(all(unix, not(target_os = "macos")))]
+mod hotkeys_portal;
+mod latency_view;
+mod layout_editor;
+pub mod layout_view;
+pub mod live;
+mod live_sessions;
+mod memplus_view;
+mod mini;
 mod plot;
 pub mod sensors;
 pub mod stress;
+pub mod system;
+pub mod system_history;
+pub mod system_perf;
+pub mod system_services;
+pub mod system_startup;
+pub mod system_users;
+pub mod table;
 mod tray;
+mod trayicon;
+pub mod units;
+mod welcome;
 // ---- end monitoring ----
 pub mod theme;
 mod tools;
@@ -25,6 +69,7 @@ use crate::report::{self, Node, Section};
 use crate::update::{Installer, Release, Stage};
 use eframe::egui::{self, RichText};
 use i18n::{tr, trf};
+use pages::{mainboard_tab, memory_tab};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use theme::icon;
@@ -32,6 +77,8 @@ use theme::icon;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Page {
     Overview,
+    System,
+    Live,
     Processor,
     Mainboard,
     Memory,
@@ -45,8 +92,10 @@ enum Page {
 }
 
 /// (page, icon, English name: translated when shown, used as-is for file names).
-const NAV: [(Page, &str, &str); 9] = [
+const NAV: [(Page, &str, &str); 11] = [
     (Page::Overview, icon::SQUARES_FOUR, "Overview"),
+    (Page::System, icon::LIST_BULLETS, "System"),
+    (Page::Live, icon::PULSE, "ZeeZ Live"),
     (Page::Processor, icon::CPU, "Processor"),
     (Page::Mainboard, icon::CIRCUITRY, "Mainboard"),
     (Page::Memory, icon::MEMORY, "Memory"),
@@ -67,6 +116,9 @@ fn page_name(p: Page) -> &'static str {
 enum BenchView {
     Cpu,
     Memory,
+    Latency,
+    Gpu,
+    Storage,
     Stress,
     History,
 }
@@ -77,6 +129,7 @@ enum ToolView {
     Clocks,
     Timers,
     Reports,
+    Drives,
 }
 
 enum Shot {
@@ -91,11 +144,14 @@ enum Step {
     Page(Page),
     Bench(BenchView),
     Tool(ToolView),
+    System(system::SysTab),
+    /// ZeeZ Live › Bottleneck, on a recorded capture.
+    Bottleneck,
     /// The About page in Brazilian Portuguese, to show the translations.
     AboutPt,
 }
 
-const SHOTS: [(&str, Step); 17] = [
+const SHOTS: [(&str, Step); 25] = [
     ("overview", Step::Page(Page::Overview)),
     ("processor", Step::Page(Page::Processor)),
     ("mainboard", Step::Page(Page::Mainboard)),
@@ -109,6 +165,14 @@ const SHOTS: [(&str, Step); 17] = [
     ("history", Step::Bench(BenchView::History)),
     ("compare", Step::Tool(ToolView::Compare)),
     ("clocks", Step::Tool(ToolView::Clocks)),
+    ("system-processes", Step::System(system::SysTab::Processes)),
+    ("system-performance", Step::System(system::SysTab::Performance)),
+    ("system-history", Step::System(system::SysTab::AppHistory)),
+    ("system-startup", Step::System(system::SysTab::Startup)),
+    ("system-users", Step::System(system::SysTab::Users)),
+    ("system-services", Step::System(system::SysTab::Services)),
+    ("live", Step::Page(Page::Live)),
+    ("bottleneck", Step::Bottleneck),
     ("settings", Step::Page(Page::Settings)),
     ("about", Step::Page(Page::About)),
     ("about-pt", Step::AboutPt),
@@ -127,27 +191,24 @@ struct AutoShots {
     since: std::time::Instant,
 }
 
-#[derive(Default)]
-struct Live {
-    /// MHz per logical CPU (index = logical CPU), refreshed in the background.
-    mhz: Vec<Option<f64>>,
-    source: &'static str,
-    gpus: Vec<crate::gpu::Live>,
-}
-
 struct App {
     ctx: Arc<Ctx>,
     report: Arc<Mutex<Option<Vec<Section>>>>,
-    live: Arc<Mutex<Live>>,
+    /// Capability banners and "Restart as administrator".
+    access: access_ui::Access,
+    /// The first-run privacy screen, until the user continues.
+    welcome: Option<welcome::Welcome>,
     page: Page,
     /// Reload history.json when the History view is opened.
     history_dirty: bool,
+    /// Mini monitor whose editor is open in Settings, and its JSON import box.
+    mini_edit: Option<usize>,
+    mini_import: String,
     bench_view: BenchView,
     tool_view: ToolView,
     core: usize,
     slot: usize,
     gpu: usize,
-    show_clocks: Arc<Mutex<bool>>,
     status: String,
     shot: Option<Shot>,
     auto: Option<AutoShots>,
@@ -162,53 +223,79 @@ struct App {
     logo: Option<egui::TextureHandle>,
     /// About > Check for updates: Some(result text) once finished.
     update_manual: Arc<Mutex<Option<String>>>,
-    title_minimized: bool,
+    /// Last window title sent (● REC, MHz while minimized).
+    title: String,
     /// Sensors page, stress monitor, tray and mini monitor (gui/sensors.rs).
     /// Its `settings` is the app's one copy of settings.json.
     mon: sensors::Monitor,
+    /// Ctrl+K search (S1-U02).
+    palette: palette::Palette,
+    overview: overview::State,
+    /// Processor › Cores table (sort, columns).
+    cores_table: table::State,
+    pcie_table: table::State,
+    latency: latency_view::State,
+    cpusuite: cpusuite_view::State,
+    memplus: memplus_view::State,
+    drivehealth: drivehealth_view::State,
+    gpubench: gpubench_view::State,
+    diskbench: diskbench_view::State,
+    system: system::State,
+    live: live::State,
+    #[cfg(feature = "soak")]
+    soak: Option<soak::Tour>,
 }
 
 pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
+    #[cfg(feature = "soak")]
+    crate::soak::start();
     let ctx = Arc::new(ctx);
     let report = Arc::new(Mutex::new(None));
     {
         let (c, r) = (ctx.clone(), report.clone());
         std::thread::spawn(move || *r.lock().unwrap() = Some(crate::collect(&c)));
     }
-    let live = Arc::new(Mutex::new(Live::default()));
-    let show_clocks = Arc::new(Mutex::new(false));
-    spawn_sampler(ctx.clone(), live.clone(), show_clocks.clone());
-
     // One copy of the settings (the monitor's), edited by the Settings page.
     // Screenshots are reproducible: default settings, English.
     let mut mon = sensors::Monitor::new(ctx.clone());
     mon.pages = true;
     if shots.is_some() {
         mon.settings = Default::default();
+        mon.show_mini = false;
     }
     i18n::set(if shots.is_some() { i18n::Lang::En } else { settings_ui::lang_of(&mon.settings) });
 
-    let opts = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
+    let always_top = mon.settings.always_on_top;
+    let start_page =
+        NAV.iter().find(|n| n.2.eq_ignore_ascii_case(&mon.settings.default_start_page)).map_or(Page::Overview, |n| n.0);
+    // OpenGL (glow) by default: it uses far less memory than wgpu (ADR 0013).
+    // CZ_RENDERER=wgpu forces wgpu, e.g. to work around a broken GL driver.
+    let opts = |renderer| {
+        let mut vp = egui::ViewportBuilder::default()
             .with_title(crate::DISPLAY_NAME)
             .with_icon(app_icon())
             .with_inner_size([1120.0, 760.0])
-            .with_min_inner_size([860.0, 560.0]),
-        ..Default::default()
+            .with_min_inner_size([860.0, 560.0]);
+        if always_top {
+            vp = vp.with_always_on_top();
+        }
+        eframe::NativeOptions { viewport: vp, renderer, ..Default::default() }
     };
     let theme = mon.settings.theme;
     let app = App {
         ctx,
         report,
-        live,
-        page: Page::Overview,
+        access: Default::default(),
+        welcome: (shots.is_none() && mon.settings.privacy_seen < welcome::PRIVACY_VERSION).then(Default::default),
+        page: if shots.is_some() { Page::Overview } else { start_page },
         history_dirty: true,
+        mini_edit: None,
+        mini_import: String::new(),
         bench_view: BenchView::Cpu,
         tool_view: ToolView::Compare,
         core: 0,
         slot: 0,
         gpu: 0,
-        show_clocks,
         status: String::new(),
         shot: None,
         auto: shots.map(|dir| {
@@ -226,66 +313,132 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         installer: None,
         logo: None,
         update_manual: Arc::new(Mutex::new(None)),
-        title_minimized: false,
+        title: String::new(),
         mon,
+        palette: Default::default(),
+        overview: Default::default(),
+        cores_table: Default::default(),
+        pcie_table: Default::default(),
+        latency: Default::default(),
+        cpusuite: Default::default(),
+        memplus: Default::default(),
+        drivehealth: Default::default(),
+        gpubench: Default::default(),
+        diskbench: Default::default(),
+        system: Default::default(),
+        live: Default::default(),
+        #[cfg(feature = "soak")]
+        soak: None,
     };
-    if app.ctx.cfg.check_updates && app.auto.is_none() {
-        let slot = app.update.clone();
-        std::thread::spawn(move || *slot.lock().unwrap() = crate::update::check());
+    if app.auto.is_none() {
+        crate::data::expire_logs(app.mon.settings.log_retention_days);
+        if app.welcome.is_none() {
+            app.check_updates_if_allowed();
+        }
     }
     let font_size = app.ctx.cfg.text_font_size;
-    if let Err(e) = eframe::run_native(
-        crate::DISPLAY_NAME,
-        opts,
-        Box::new(move |cc| {
-            // Theme text styles + Phosphor icons.
-            theme::install(&cc.egui_ctx);
-            cc.egui_ctx.set_theme(settings_ui::theme_pref(theme));
-            if font_size > 0.0 {
-                cc.egui_ctx.global_style_mut(|s| {
-                    for f in s.text_styles.values_mut() {
-                        f.size = font_size;
-                    }
-                });
-            }
-            Ok(Box::new(app))
-        }),
-    ) {
+    // Shared so a second attempt can still hand it over: the renderer fails
+    // before eframe asks for the app.
+    let app = std::rc::Rc::new(std::cell::RefCell::new(Some(app)));
+    let run = |renderer| {
+        let app = app.clone();
+        eframe::run_native(
+            crate::DISPLAY_NAME,
+            opts(renderer),
+            Box::new(move |cc| {
+                // Theme text styles + Phosphor icons.
+                theme::install(&cc.egui_ctx);
+                cc.egui_ctx.set_theme(settings_ui::theme_pref(theme));
+                if font_size > 0.0 {
+                    cc.egui_ctx.global_style_mut(|s| {
+                        for f in s.text_styles.values_mut() {
+                            f.size = font_size;
+                        }
+                    });
+                }
+                let app = app.borrow_mut().take().ok_or("the app was already started")?;
+                Ok(Box::new(app))
+            }),
+        )
+    };
+    let wgpu_only = std::env::var("CZ_RENDERER").as_deref() == Ok("wgpu");
+    // eframe panics (rather than erring) on some GL failures.
+    let attempt = |renderer| {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(renderer)))
+            .unwrap_or_else(|_| Err(eframe::Error::AppCreation("the renderer panicked".into())))
+    };
+    let mut r = attempt(if wgpu_only { eframe::Renderer::Wgpu } else { eframe::Renderer::Glow });
+    if let Err(e) = &r
+        && !wgpu_only
+        && app.borrow().is_some()
+    {
+        // VMs, Remote Desktop and machines without a GPU driver have no usable
+        // OpenGL; wgpu gets DX12 (with WARP software rendering), Vulkan or Metal.
+        crate::applog::warn(&format!("OpenGL renderer failed ({e}); retrying with wgpu"));
+        r = attempt(eframe::Renderer::Wgpu);
+    }
+    if let Err(e) = r {
+        crate::applog::warn(&format!("GUI failed to start: {e}"));
         eprintln!("GUI failed to start ({e}); use -console or -txt=FILE");
     }
 }
 
-/// Core 0 every second; every logical CPU while the Clocks window is open.
-fn spawn_sampler(ctx: Arc<Ctx>, live: Arc<Mutex<Live>>, all: Arc<Mutex<bool>>) {
-    std::thread::spawn(move || {
-        let n = crate::os::logical_cpus();
-        live.lock().unwrap().mhz = vec![None; n];
-        loop {
-            let every = *all.lock().unwrap();
-            let targets: Vec<usize> = if every { (0..n).collect() } else { vec![0] };
-            for cpu in targets {
-                if let Some((m, src)) = crate::cpu::clocks::core_mhz(&ctx, cpu) {
-                    let mut l = live.lock().unwrap();
-                    l.mhz[cpu] = Some(m);
-                    l.source = src.label();
-                }
-            }
-            if every {
-                let g = crate::gpu::live(&ctx);
-                live.lock().unwrap().gpus = g;
-            }
-            std::thread::sleep(Duration::from_millis(1000));
-        }
-    });
-}
-
 impl eframe::App for App {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        let ectx = ui.ctx().clone();
-        ectx.request_repaint_after(Duration::from_millis(500));
-        self.hotkeys(&ectx);
-        self.minimized_title(&ectx);
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        // The ETW session behind the Network column outlives the process otherwise.
+        cpuzeez_platform::proc_net::stop();
+        crate::live_frames::stop();
+        self.system.history.flush();
+    }
 
+    /// Transparent, so the mini monitors' rounded, see-through cards show the
+    /// desktop behind them (the main window's panels cover it).
+    fn clear_color(&self, _: &egui::Visuals) -> [f32; 4] {
+        [0.0; 4]
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        units::set(self.mon.settings.units);
+        let ectx = ui.ctx().clone();
+        self.take_pins(&ectx);
+        ectx.request_repaint_after(Duration::from_millis(500));
+        #[cfg(feature = "soak")]
+        self.soak_tour(&ectx);
+        if self.auto.is_none() {
+            self.system.background(&self.mon.settings);
+        }
+        live::overlay(
+            &mut self.mon,
+            &mut self.live,
+            &ectx,
+            self.auto.is_none(),
+            &self.system.sampler,
+            self.page == Page::Live,
+        );
+        self.hotkeys(&ectx);
+        self.window_title(&ectx);
+        self.access.frame(&ectx);
+        if std::mem::take(&mut self.access.restarted) {
+            self.mon.quit(&ectx); // the elevated copy is up
+        }
+
+        if let Some(w) = &mut self.welcome {
+            let allowed = self.ctx.cfg.check_updates;
+            let p = theme::palette(ui);
+            let done = egui::CentralPanel::default()
+                .frame(egui::Frame::default().fill(p.bg).inner_margin(egui::Margin::symmetric(48, 32)))
+                .show(ui, |ui| welcome::page(ui, w, allowed))
+                .inner;
+            if let Some(updates) = done {
+                self.mon.set_setting(|s| {
+                    s.privacy_seen = welcome::PRIVACY_VERSION;
+                    s.update_check = Some(updates);
+                });
+                self.welcome = None;
+                self.check_updates_if_allowed();
+            }
+            return;
+        }
         let report = self.report.lock().unwrap().clone();
         // Tray menu / monitor shortcuts navigate instead of opening windows.
         if std::mem::take(&mut self.mon.show_sensors) {
@@ -295,7 +448,6 @@ impl eframe::App for App {
             self.page = Page::Benchmarks;
             self.bench_view = BenchView::Stress;
         }
-        *self.show_clocks.lock().unwrap() = self.page == Page::Tools && self.tool_view == ToolView::Clocks;
         let p = theme::palette(ui);
         egui::Panel::left("nav")
             .exact_size(theme::SIDEBAR_WIDTH)
@@ -316,23 +468,47 @@ impl eframe::App for App {
                     });
                     return;
                 };
-                if self.page == Page::Sensors {
+                // The capability banner reflects this machine; CI screenshots would show the runner's.
+                let caps = if self.auto.is_some() { &[][..] } else { access_ui::page_caps(page_name(self.page)) };
+                let t0 = std::time::Instant::now();
+                if matches!(self.page, Page::Sensors | Page::System) {
                     // Full-height dashboard with its own scrolling table and charts.
+                    self.access.banner(ui, &self.ctx, page_name(self.page), caps);
                     self.page_body(ui, r);
                 } else {
-                    egui::ScrollArea::vertical()
-                        .auto_shrink([false, false])
-                        .id_salt(page_name(self.page))
-                        .show(ui, |ui| self.page_body(ui, r));
+                    egui::ScrollArea::vertical().auto_shrink([false, false]).id_salt(page_name(self.page)).show(
+                        ui,
+                        |ui| {
+                            self.access.banner(ui, &self.ctx, page_name(self.page), caps);
+                            self.page_body(ui, r)
+                        },
+                    );
                 }
+                frame_log(page_name(self.page), "page", t0);
             });
+        let t0 = std::time::Instant::now();
         self.mon.frame(&ectx);
+        frame_log("all", "monitor", t0);
+        if let Some(i) = self.mon.edit_mini.take() {
+            self.page = Page::Settings;
+            self.mini_edit = Some(i);
+        }
         self.take_screenshot(&ectx);
         self.auto_shots(&ectx, report.as_deref());
     }
 }
 
 // ---- helpers ----
+
+/// `CZ_FRAME_LOG=1`: frames whose part took longer than 4 ms, on stderr
+/// (a 60 Hz frame has 16 ms for everything).
+fn frame_log(page: &str, part: &str, t0: std::time::Instant) {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    let ms = t0.elapsed().as_secs_f64() * 1000.0;
+    if *ON.get_or_init(|| std::env::var_os("CZ_FRAME_LOG").is_some()) && ms > 4.0 {
+        eprintln!("frame {page} {part} {ms:.1} ms");
+    }
+}
 
 fn value(ui: &mut egui::Ui, text: &str) {
     ui.add(egui::Label::new(RichText::new(text).monospace()).wrap());
@@ -346,19 +522,39 @@ fn shown<'a>(key: &str, v: &'a str) -> &'a str {
     if !MASK_PRIVATE.load(std::sync::atomic::Ordering::Relaxed) || v.is_empty() {
         return v;
     }
-    let k = key.to_ascii_lowercase();
-    let first = k.split_whitespace().next().unwrap_or_default();
-    let private = k.contains("serial")
-        || key.contains("UUID")
-        || ["mac", "ipv4", "ipv6", "ip", "gateway", "dns", "ssid"].contains(&first);
-    if private { "••••••••" } else { v }
+    if report::is_private(key) { "••••••••" } else { v }
 }
 
-/// A card of label/value rows (labels translated, private values masked).
+/// A card of label/value rows (labels translated, private values masked),
+/// keeping the rows the page's detail level shows; nothing at all if none.
 fn boxed(ui: &mut egui::Ui, title: &str, rows: &[(&str, String)]) {
-    let rows: Vec<(&str, String)> = rows.iter().map(|(k, v)| (tr(k), shown(k, v).to_string())).collect();
+    use cpuzeez_core::detail::{level_of, shows};
+    let level = detail::get(ui.ctx());
+    let rows: Vec<(&str, String)> =
+        rows.iter().filter(|(k, _)| shows(level, level_of(k))).map(|(k, v)| (tr(k), shown(k, v).to_string())).collect();
+    if rows.is_empty() {
+        return;
+    }
     widgets::card(ui, "", tr(title), |ui| widgets::kv_list(ui, &rows));
     ui.add_space(theme::GAP);
+}
+
+/// Expert: thread 0's raw CPUID leaves and MSRs, from the report's thread dumps.
+fn cpuid_dump(ui: &mut egui::Ui, r: &[Section]) {
+    let Some(t0) = sec(r, "Thread dumps").and_then(|s| report::groups(&s.nodes, "CPU Thread").into_iter().next())
+    else {
+        return;
+    };
+    for (group, title) in [("CPUID", "CPUID leaves (thread 0)"), ("MSR", "MSRs (thread 0)")] {
+        let Some((_, rows)) = report::groups(t0.1, group).into_iter().next() else { continue };
+        heading(ui, tr(title));
+        widgets::card(ui, "", "", |ui| {
+            for (k, v) in report::fields(rows) {
+                ui.label(RichText::new(format!("{k}  {}", v.replace('\t', "  "))).monospace());
+            }
+        });
+        ui.add_space(theme::GAP);
+    }
 }
 
 /// Section label between cards.
@@ -378,81 +574,6 @@ fn sgi(r: &[Section], s: &str, g: &str, k: &str) -> String {
     sec(r, s).and_then(|x| x.get_in(g, k)).unwrap_or_default().to_string()
 }
 
-/// The update notice: version, one-click install with progress, errors, notes.
-fn update_bar(ui: &mut egui::Ui, rel: &Release, installer: &mut Option<Installer>, dismissed: &mut bool) {
-    let p = theme::palette(ui);
-    let stage = installer.as_ref().map(Installer::stage);
-    if matches!(stage, Some(Stage::Quit)) {
-        // msiexec is running: leave so it can replace our files.
-        std::process::exit(0);
-    }
-    if matches!(stage, Some(Stage::Downloading { .. } | Stage::Verifying | Stage::Installing)) {
-        ui.ctx().request_repaint_after(Duration::from_millis(150));
-    }
-    ui.horizontal_wrapped(|ui| {
-        ui.label(RichText::new(icon::ARROW_CIRCLE_UP).color(p.accent));
-        ui.label(RichText::new(trf("{} {} is available", &[&crate::DISPLAY_NAME, &rel.version])).strong());
-        ui.label(RichText::new(trf("(you have {})", &[&crate::VERSION])).color(p.text_secondary));
-        let start = |installer: &mut Option<Installer>| *installer = Some(Installer::start(rel));
-        match &stage {
-            None => {
-                if rel.asset.is_some()
-                    && widgets::primary_button(ui, &format!("{} {}", icon::DOWNLOAD_SIMPLE, tr("Download & install")))
-                        .clicked()
-                {
-                    start(installer);
-                }
-            }
-            Some(Stage::Downloading { done, total }) => {
-                let mb = |b: u64| format!("{:.1}", b as f64 / 1e6);
-                let frac = if *total > 0 { *done as f32 / *total as f32 } else { 0.0 };
-                let text = trf("Downloading… {} / {} MB", &[&mb(*done), &mb(*total)]);
-                ui.allocate_ui(egui::vec2(220.0, 22.0), |ui| widgets::progress(ui, frac, &text));
-            }
-            Some(Stage::Verifying) => {
-                ui.spinner();
-                ui.label(tr("Verifying checksum…"));
-            }
-            Some(Stage::Installing) => {
-                ui.spinner();
-                ui.label(tr("Starting the installer…"));
-            }
-            Some(Stage::Installed) => {
-                widgets::pill(ui, tr("Installed. Restart CpuZeeZ to use the new version."), widgets::Tone::Success);
-            }
-            Some(Stage::OpenedInstaller) => {
-                widgets::pill(
-                    ui,
-                    tr("The installer was opened: follow its steps, then restart CpuZeeZ."),
-                    widgets::Tone::Accent,
-                );
-            }
-            Some(Stage::OpenedFolder(d)) => {
-                widgets::pill(ui, &trf("Downloaded and verified. Opened {}", &[&d.display()]), widgets::Tone::Success);
-            }
-            Some(Stage::Failed(e)) => {
-                widgets::pill(ui, &trf("Update failed: {}", &[e]), widgets::Tone::Danger);
-                if ui.button(tr("Retry")).clicked() {
-                    start(installer);
-                }
-                if let Some(a) = &rel.asset
-                    && ui.button(tr("Open download page")).clicked()
-                {
-                    ui.ctx().open_url(egui::OpenUrl::new_tab(&a.url));
-                }
-            }
-            Some(Stage::Quit) => {}
-        }
-        if ui.button(tr("What's new")).clicked() {
-            ui.ctx().open_url(egui::OpenUrl::new_tab(&rel.page));
-        }
-        let busy = matches!(stage, Some(Stage::Downloading { .. } | Stage::Verifying | Stage::Installing));
-        if !busy && ui.small_button(icon::X).on_hover_text(tr("Dismiss")).clicked() {
-            *dismissed = true;
-        }
-    });
-}
-
 impl App {
     fn sidebar(&mut self, ui: &mut egui::Ui) {
         let p = theme::palette(ui);
@@ -470,6 +591,13 @@ impl App {
         }
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
             ui.label(RichText::new(format!("v{}", crate::VERSION)).small().color(p.text_muted));
+            if self.mon.recording() {
+                let rec =
+                    widgets::pill(ui, "● REC", widgets::Tone::Danger).on_hover_text(tr("Recording · click to stop"));
+                if rec.interact(egui::Sense::click()).clicked() {
+                    self.mon.stop_recording();
+                }
+            }
             if !self.status.is_empty() {
                 ui.add(egui::Label::new(RichText::new(&self.status).small().color(p.text_secondary)).wrap());
             }
@@ -493,13 +621,69 @@ impl App {
             .id()
     }
 
+    /// Pins asked for by any row last frame (S1-U03) go into the settings.
+    fn take_pins(&mut self, ectx: &egui::Context) {
+        let mut changed = false;
+        for p in pins::take_requests(ectx) {
+            let s = &mut self.mon.settings.pins;
+            if !s.iter().any(|q| q.card == p.card && q.label == p.label && q.metric == p.metric) {
+                s.push(p);
+                changed = true;
+            }
+        }
+        if changed && self.auto.is_none() {
+            self.mon.settings.save();
+        }
+        pins::publish(ectx, &self.mon.settings.pins);
+    }
+
+    /// A page header with the detail switch; the chosen level is remembered per page.
+    fn info_header(&mut self, ui: &mut egui::Ui, title: &str, sub: &str) {
+        let key = format!("{:?}", self.page);
+        let mut level = self.mon.settings.detail.get(&key).copied().unwrap_or_default();
+        let mut changed = false;
+        widgets::page_header(ui, title, sub, |ui| changed = detail::switch(ui, &mut level));
+        if changed {
+            self.mon.settings.detail.insert(key, level);
+            if self.auto.is_none() {
+                self.mon.settings.save();
+            }
+        }
+        detail::set(ui.ctx(), level);
+    }
+
     fn page_body(&mut self, ui: &mut egui::Ui, r: &[Section]) {
-        let c = crate::cpu::get(&self.ctx);
-        let core_mhz = self.live.lock().unwrap().mhz.first().copied().flatten();
+        let ctx = self.ctx.clone();
+        let c = crate::cpu::get(&ctx);
+        // Pages without the switch draw everything (as at Expert); boxed() reads this.
+        detail::set(ui.ctx(), cpuzeez_core::detail::Level::Expert);
         match self.page {
             Page::Overview => {
-                let tel = self.mon.tel();
-                overview::page(ui, &self.ctx, r, &tel, core_mhz);
+                let navs = overview::page(ui, &self.ctx, r, &mut self.mon, &mut self.overview);
+                for n in navs {
+                    match n {
+                        overview::Nav::Page(p) => self.page = p,
+                        overview::Nav::Sensors(filter) => {
+                            self.page = Page::Sensors;
+                            self.mon.focus(filter);
+                        }
+                        overview::Nav::Act(a) => self.run_palette(palette::Target::Act(a)),
+                        overview::Nav::Bottleneck => {
+                            self.page = Page::Live;
+                            self.live.tab = live::Tab::Bottleneck;
+                        }
+                        overview::Nav::Save if self.auto.is_none() => self.mon.settings.save(),
+                        overview::Nav::Save => {}
+                    }
+                }
+            }
+            Page::System => self.system.page(ui, &self.ctx, &mut self.mon),
+            Page::Live => {
+                self.live.page(ui, &mut self.mon, &mut self.access);
+                if let Some(path) = self.live.sessions.png_request.take() {
+                    self.shot = Some(Shot::Png(path));
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
+                }
             }
             Page::Processor => {
                 let sub = [c.info.codename.clone(), c.info.package.clone(), c.info.technology.clone()]
@@ -507,16 +691,21 @@ impl App {
                     .flatten()
                     .collect::<Vec<_>>()
                     .join(" · ");
-                widgets::page_header(ui, &c.name, &sub, |_| {});
+                self.info_header(ui, &c.name, &sub);
                 self.cpu_tab(ui, r);
                 heading(ui, tr("Caches"));
                 self.caches_tab(ui);
+                self.processor_more(ui);
+                if detail::get(ui.ctx()) == cpuzeez_core::detail::Level::Expert {
+                    cpuid_dump(ui, r);
+                }
             }
             Page::Mainboard => {
                 let board =
                     format!("{} {}", sgi(r, "DMI", "DMI Baseboard", "vendor"), sgi(r, "DMI", "DMI Baseboard", "model"));
-                widgets::page_header(ui, tr("Mainboard"), board.trim(), |_| {});
+                self.info_header(ui, tr("Mainboard"), board.trim());
                 mainboard_tab(ui, r);
+                self.mainboard_more(ui, r);
             }
             Page::Memory => {
                 let k = |key: &str| sget(r, "Chipset", key);
@@ -525,13 +714,14 @@ impl App {
                     .filter(|s| !s.is_empty())
                     .collect::<Vec<_>>()
                     .join(" · ");
-                widgets::page_header(ui, tr("Memory"), &sub, |_| {});
+                self.info_header(ui, tr("Memory"), &sub);
                 memory_tab(ui, r);
+                self.memory_more(ui, r);
                 heading(ui, "SPD");
                 self.spd_tab(ui, r);
             }
             Page::Graphics => {
-                widgets::page_header(ui, tr("Graphics"), "", |_| {});
+                self.info_header(ui, tr("Graphics"), "");
                 self.graphics_tab(ui, r);
             }
             Page::Devices => self.devices.page(ui, &self.ctx),
@@ -549,14 +739,42 @@ impl App {
                     &[
                         (BenchView::Cpu, icon::CPU, tr("Processor")),
                         (BenchView::Memory, icon::MEMORY, tr("Memory")),
+                        (BenchView::Latency, icon::GRID_FOUR, tr("Latency")),
+                        (BenchView::Gpu, icon::GRAPHICS_CARD, tr("Graphics")),
+                        (BenchView::Storage, icon::HARD_DRIVES, tr("Storage")),
                         (BenchView::Stress, icon::FLAME, tr("Stress test")),
                         (BenchView::History, icon::CLOCK_COUNTER_CLOCKWISE, tr("History")),
                     ],
                 );
                 match self.bench_view {
-                    BenchView::Cpu => self.bench.cpu_page(ui, &self.ctx, &mut self.mon),
-                    BenchView::Memory => self.bench.memory_page(ui, &self.ctx),
-                    BenchView::Stress => stress::page(ui, &mut self.mon, true),
+                    BenchView::Cpu => {
+                        self.bench.cpu_page(ui, &self.ctx, &mut self.mon);
+                        ui.add_space(theme::GAP);
+                        let t0 = benchkit_view::cpu_temp(&mut self.mon);
+                        self.cpusuite.page(ui, &self.ctx, t0);
+                    }
+                    BenchView::Memory => {
+                        let t0 = benchkit_view::cpu_temp(&mut self.mon);
+                        self.bench.memory_page(ui, &self.ctx, t0);
+                        ui.add_space(theme::GAP);
+                        self.memplus.page(ui, &self.ctx, t0);
+                    }
+                    BenchView::Latency => {
+                        let t0 = benchkit_view::cpu_temp(&mut self.mon);
+                        self.latency.page(ui, &self.ctx, t0)
+                    }
+                    BenchView::Gpu => {
+                        let t0 = benchkit_view::cpu_temp(&mut self.mon);
+                        self.gpubench.page(ui, &self.ctx, t0)
+                    }
+                    BenchView::Storage => {
+                        let t0 = benchkit_view::cpu_temp(&mut self.mon);
+                        self.diskbench.page(ui, &self.ctx, t0)
+                    }
+                    BenchView::Stress => {
+                        let gpus = cache::gpu_adapters(&self.ctx).map(|g| g.to_vec()).unwrap_or_default();
+                        stress::page(ui, &mut self.mon, true, &gpus)
+                    }
                     BenchView::History => {
                         if self.history_dirty {
                             self.history.reload();
@@ -571,379 +789,37 @@ impl App {
             }
             Page::Tools => self.tools_page(ui, r),
             Page::Settings => {
-                let tray = self.mon.settings.tray;
+                let s = &self.mon.settings;
+                let (tray, sampling) = (s.tray, (s.sample_ms, s.graph_seconds));
                 let persist = self.auto.is_none();
-                settings_ui::page(ui, &mut self.mon.settings, self.ctx.cfg.check_updates, persist);
+                settings_ui::page(ui, &mut self.mon.settings, self.ctx.cfg.check_updates, persist, Some(r));
                 if self.mon.settings.tray != tray {
                     let on = self.mon.settings.tray;
                     self.mon.set_tray(on, ui.ctx());
                 }
+                if (self.mon.settings.sample_ms, self.mon.settings.graph_seconds) != sampling {
+                    self.mon.apply_sampling();
+                }
                 ui.add_space(theme::GAP);
-                widgets::card(ui, icon::MONITOR, tr("Mini monitor"), |ui| {
-                    ui.label(
-                        RichText::new(tr("A small always-on-top window with CPU, GPU and chipset temperatures."))
-                            .color(theme::palette(ui).text_secondary),
-                    );
-                    if ui.checkbox(&mut self.mon.show_mini, tr("Show the mini monitor")).changed() && self.mon.show_mini
-                    {
+                let tjmax = self.mon.tjmax();
+                let mut minis = self.mon.settings.minis.clone();
+                widgets::card(ui, icon::MONITOR, tr("Mini monitors"), |ui| {
+                    mini::settings_card(ui, &mut minis, &mut self.mini_edit, &mut self.mini_import, tjmax);
+                });
+                if minis != self.mon.settings.minis {
+                    let on = minis.iter().any(|m| m.open);
+                    if persist {
+                        self.mon.set_setting(move |s| s.minis = minis.clone());
+                    } else {
+                        self.mon.settings.minis = minis;
+                    }
+                    self.mon.show_mini = on;
+                    if on {
                         self.mon.tel();
                     }
-                });
+                }
             }
             Page::About => self.about_tab(ui, r),
-        }
-    }
-
-    fn tools_page(&mut self, ui: &mut egui::Ui, r: &[Section]) {
-        widgets::page_header(ui, tr("Tools"), "", |_| {});
-        widgets::segmented(
-            ui,
-            &mut self.tool_view,
-            &[
-                (ToolView::Compare, icon::GIT_DIFF, tr("Compare reports")),
-                (ToolView::Clocks, icon::SPEEDOMETER, tr("Clocks")),
-                (ToolView::Timers, icon::TIMER, tr("Timers")),
-                (ToolView::Reports, icon::EXPORT, tr("Reports")),
-            ],
-        );
-        match self.tool_view {
-            ToolView::Compare => self.compare.page(ui, Some(r)),
-            ToolView::Clocks => self.clocks_body(ui),
-            ToolView::Timers => timers_body(ui, r),
-            ToolView::Reports => {
-                widgets::card(ui, icon::FILE_TEXT, tr("Save a report"), |ui| {
-                    ui.label(
-                        RichText::new(tr("Same format as CPU-Z's -txt / -html reports, or our JSON."))
-                            .color(theme::palette(ui).text_secondary),
-                    );
-                    ui.add_space(6.0);
-                    ui.horizontal_wrapped(|ui| {
-                        let rep = Some(r.to_vec());
-                        if widgets::primary_button(ui, &format!("{} {}", icon::FLOPPY_DISK, tr("Save .TXT"))).clicked()
-                        {
-                            self.save(&rep, "txt");
-                        }
-                        if ui.button(tr("Save .HTML")).clicked() {
-                            self.save(&rep, "html");
-                        }
-                        if ui.button(tr("Save .cvf (JSON)")).clicked() {
-                            self.save(&rep, "cvf");
-                        }
-                    });
-                });
-            }
-        }
-    }
-
-    fn cpu_tab(&mut self, ui: &mut egui::Ui, r: &[Section]) {
-        let c = crate::cpu::get(&self.ctx);
-        let pi = |k: &str| sget(r, "Processors Information", k);
-        let (fam, model, step) = c.sig;
-        let live = self.live.lock().unwrap();
-        let first_of_core = c.logical.iter().filter(|l| l.smt == 0).nth(self.core).map_or(0, |l| l.cpu);
-        let core_mhz = live.mhz.get(first_of_core).copied().flatten();
-        drop(live);
-        let bus = crate::cpu::bus_mhz(c);
-        boxed(
-            ui,
-            "Processor",
-            &[
-                ("Name", c.name.clone()),
-                ("Code Name", c.info.codename.clone().unwrap_or_default()),
-                ("Max TDP", c.info.tdp_w.map(|w| format!("{w:.1} W")).unwrap_or_default()),
-                ("Package", c.info.package.clone().unwrap_or_default()),
-                ("Technology", c.info.technology.clone().unwrap_or_default()),
-                ("Specification", c.brand.clone()),
-                (
-                    "Family / Model / Stepping",
-                    c.cpuid
-                        .as_deref()
-                        .map_or_else(|| format!("{fam:X} / {model:X} / {step:X}"), |s| s.replace('.', " / ")),
-                ),
-                ("Ext. Family / Model", c.ext_cpuid.clone().unwrap_or_default()),
-                ("Revision", c.info.core_stepping.clone().unwrap_or_default()),
-                ("Instructions", c.instructions.join(", ")),
-                ("Microcode", c.microcode.clone().unwrap_or_default()),
-            ],
-        );
-        ui.columns(2, |cols| {
-            boxed(
-                &mut cols[0],
-                &trf("Clocks (Core #{})", &[&self.core]),
-                &[
-                    ("Core Speed", core_mhz.map(|m| format!("{m:.2} MHz")).unwrap_or_else(|| pi("Core Speed"))),
-                    ("Multiplier", core_mhz.zip(bus).map(|(m, b)| format!("x {:.1}", m / b)).unwrap_or_default()),
-                    ("Bus Speed", bus.map(|b| format!("{b:.2} MHz")).unwrap_or_default()),
-                    ("Base", c.base_mhz.map(|b| format!("{b:.0} MHz")).unwrap_or_default()),
-                ],
-            );
-            let cache = |lvl: u32, kind: char| {
-                c.caches
-                    .iter()
-                    .find(|x| x.level == lvl && (x.kind == kind || kind == 'U'))
-                    .map(|x| format!("{} x {}", x.count, crate::cpu::size_text(x.size)))
-                    .unwrap_or_default()
-            };
-            boxed(
-                &mut cols[1],
-                "Cache",
-                &[
-                    ("L1 Data", cache(1, 'D')),
-                    ("L1 Inst.", cache(1, 'I')),
-                    ("Level 2", cache(2, 'U')),
-                    ("Level 3", cache(3, 'U')),
-                ],
-            );
-        });
-        ui.horizontal(|ui| {
-            ui.label(tr("Selection"));
-            let n = c.cores.max(1);
-            egui::ComboBox::from_id_salt("core").selected_text(trf("Core #{}", &[&self.core])).show_ui(ui, |ui| {
-                for i in 0..n {
-                    ui.selectable_value(&mut self.core, i, trf("Core #{}", &[&i]));
-                }
-            });
-            ui.label(trf("Cores {}   Threads {}", &[&c.cores, &c.threads]));
-        });
-        for cl in &c.clusters {
-            ui.label(trf("{}: {} cores, {} threads", &[&cl.kind, &cl.cores, &cl.threads]));
-        }
-    }
-
-    fn caches_tab(&mut self, ui: &mut egui::Ui) {
-        let c = crate::cpu::get(&self.ctx);
-        for ca in &c.caches {
-            let title = match (ca.level, ca.kind) {
-                (1, 'D') => tr("L1 D-Cache").to_string(),
-                (1, 'I') => tr("L1 I-Cache").to_string(),
-                (l, _) => trf("Level {}", &[&l]),
-            };
-            let ways = if ca.ways == 0 {
-                tr("fully associative").to_string()
-            } else {
-                trf("{}-way set associative", &[&ca.ways])
-            };
-            let mut rows = vec![
-                ("Size", format!("{} x {}", ca.count, crate::cpu::size_text(ca.size))),
-                ("Descriptor", trf("{}, {}-byte line size", &[&ways, &ca.line])),
-                ("Shared by", trf("{} thread(s)", &[&ca.sharing])),
-            ];
-            if let Some(n) = &ca.note {
-                rows.push(("Core set", n.clone()));
-            }
-            boxed(ui, &title, &rows);
-        }
-    }
-
-    fn spd_tab(&mut self, ui: &mut egui::Ui, r: &[Section]) {
-        // Empty "DIMM #" groups are the headers of the raw dumps at the end.
-        let mut dimms: Vec<(&str, &[Node])> =
-            sec(r, "Memory SPD").map(|s| report::groups(&s.nodes, "DIMM #")).unwrap_or_default();
-        dimms.retain(|(_, c)| !c.is_empty());
-        if dimms.is_empty() {
-            ui.label(no_data(ui, "SPD", &self.ctx));
-            return;
-        }
-        self.slot = self.slot.min(dimms.len() - 1);
-        ui.horizontal(|ui| {
-            ui.label(tr("Memory Slot Selection"));
-            egui::ComboBox::from_id_salt("slot").selected_text(trf("Slot #{}", &[&dimms[self.slot].0])).show_ui(
-                ui,
-                |ui| {
-                    for (i, (v, _)) in dimms.iter().enumerate() {
-                        ui.selectable_value(&mut self.slot, i, trf("Slot #{}", &[v]));
-                    }
-                },
-            );
-        });
-        let rows: Vec<(&str, String)> = report::fields(dimms[self.slot].1).map(|(k, v)| (k, v.to_string())).collect();
-        boxed(ui, "Module", &rows);
-        // CPU-Z style timings table for the selected module: one column per
-        // JEDEC bin / XMP / EXPO profile.
-        let mods = crate::spd::modules(&self.ctx);
-        let Some(m) = mods.get(self.slot) else { return };
-        let cols: Vec<(String, &crate::spd::decode::Timing)> = m
-            .jedec
-            .iter()
-            .enumerate()
-            .map(|(i, t)| (trf("JEDEC #{}", &[&(i + 1)]), t))
-            .chain(
-                m.profiles
-                    .iter()
-                    .map(|p| (if p.name.is_empty() { p.kind.to_string() } else { p.name.clone() }, &p.timing)),
-            )
-            .collect();
-        ui.group(|ui| {
-            ui.label(RichText::new(tr("Timings Table")).strong());
-            egui::ScrollArea::horizontal().show(ui, |ui| {
-                egui::Grid::new("spd-timings").striped(true).spacing([10.0, 3.0]).show(ui, |ui| {
-                    ui.label("");
-                    for (h, _) in &cols {
-                        ui.label(RichText::new(h).strong());
-                    }
-                    ui.end_row();
-                    type Cell = fn(&crate::spd::decode::Timing) -> String;
-                    let rows: [(&str, Cell); 8] = [
-                        ("Frequency", |t| format!("{:.0} MHz", t.freq)),
-                        ("CAS# Latency", |t| format!("{:.1}", t.cl)),
-                        ("RAS# to CAS#", |t| t.rcd.to_string()),
-                        ("RAS# Precharge", |t| t.rp.to_string()),
-                        ("tRAS", |t| t.ras.to_string()),
-                        ("tRC", |t| t.rc.to_string()),
-                        ("Command Rate", |t| t.cr.map_or("-".into(), |c| format!("{c}T"))),
-                        ("Voltage", |t| t.volts.map_or("-".into(), |v| format!("{v:.3} V"))),
-                    ];
-                    for (name, cell) in rows {
-                        ui.label(tr(name));
-                        for (_, t) in &cols {
-                            value(ui, &cell(t));
-                        }
-                        ui.end_row();
-                    }
-                });
-            });
-        });
-    }
-
-    fn graphics_tab(&mut self, ui: &mut egui::Ui, r: &[Section]) {
-        let gpus: Vec<(&str, &[Node])> =
-            sec(r, "Display Adapters").map(|s| report::groups(&s.nodes, "Display adapter")).unwrap_or_default();
-        if gpus.is_empty() {
-            ui.label(no_data(ui, "graphics", &self.ctx));
-            return;
-        }
-        self.gpu = self.gpu.min(gpus.len() - 1);
-        ui.horizontal(|ui| {
-            ui.label(tr("Display Device Selection"));
-            egui::ComboBox::from_id_salt("gpu").selected_text(gpu_name(gpus[self.gpu].1)).show_ui(ui, |ui| {
-                for (i, (_, n)) in gpus.iter().enumerate() {
-                    ui.selectable_value(&mut self.gpu, i, gpu_name(n));
-                }
-            });
-        });
-        let rows: Vec<(&str, String)> = report::fields(gpus[self.gpu].1).map(|(k, v)| (k, v.to_string())).collect();
-        boxed(ui, "GPU", &rows);
-        for (_, perf) in report::groups(gpus[self.gpu].1, "Performance Level") {
-            let rows: Vec<(&str, String)> = report::fields(perf).map(|(k, v)| (k, v.to_string())).collect();
-            boxed(ui, "Clocks", &rows);
-        }
-    }
-
-    fn about_tab(&mut self, ui: &mut egui::Ui, r: &[Section]) {
-        let logo = self.logo_texture(ui);
-        ui.horizontal(|ui| {
-            ui.image((logo, egui::vec2(64.0, 64.0)));
-            ui.vertical(|ui| {
-                ui.label(
-                    RichText::new(format!("{} {}", crate::DISPLAY_NAME, crate::VERSION)).text_style(theme::title()),
-                );
-                ui.label(
-                    RichText::new(tr("Clean-room, open-source reimplementation of CPU-Z's feature set."))
-                        .color(theme::palette(ui).text_secondary),
-                );
-            });
-        });
-        ui.add_space(theme::GAP);
-        ui.label(trf("Hardware access: {}", &[&self.ctx.hw.name()]));
-        let sw = sec(r, "Software")
-            .map(|s| report::fields(&s.nodes).map(|(k, v)| format!("{}: {v}", tr(k))).collect::<Vec<_>>().join("\n"))
-            .unwrap_or_default();
-        if !sw.is_empty() {
-            ui.label(sw);
-        }
-        ui.separator();
-        ui.horizontal_wrapped(|ui| {
-            if ui.button(tr("Save Report (.TXT)")).clicked() {
-                self.save(&Some(r.to_vec()), "txt");
-            }
-            if ui.button(tr("Save Report (.HTML)")).clicked() {
-                self.save(&Some(r.to_vec()), "html");
-            }
-            if ui.button(tr("Clocks")).clicked() {
-                self.page = Page::Tools;
-                self.tool_view = ToolView::Clocks;
-            }
-            if ui.button(tr("Timers")).clicked() {
-                self.page = Page::Tools;
-                self.tool_view = ToolView::Timers;
-            }
-        });
-        ui.separator();
-        ui.horizontal_wrapped(|ui| {
-            ui.hyperlink_to(tr("Project page"), crate::REPO_URL);
-            if ui.button(tr("Check for updates")).clicked() {
-                let slot = self.update_manual.clone();
-                *slot.lock().unwrap() = Some(tr("Checking...").into());
-                let found = self.update.clone();
-                self.update_dismissed = false;
-                std::thread::spawn(move || {
-                    let r = crate::update::check();
-                    // Translated when the check ends (the language can't change mid-check in practice).
-                    let text = match &r {
-                        Some(r) => trf("{} {} is available.", &[&crate::DISPLAY_NAME, &r.version]),
-                        None => trf("You have the latest version ({}).", &[&crate::VERSION]),
-                    };
-                    *found.lock().unwrap() = r;
-                    *slot.lock().unwrap() = Some(text);
-                });
-            }
-            if let Some(t) = self.update_manual.lock().unwrap().as_deref() {
-                ui.label(t);
-            }
-        });
-        ui.label(RichText::new(tr("Not affiliated with CPUID. CPU-Z is a trademark of CPUID.")).small().weak());
-    }
-
-    fn update_banner(&mut self, ui: &mut egui::Ui) {
-        if self.update_dismissed {
-            return;
-        }
-        let Some(rel) = self.update.lock().unwrap().clone() else { return };
-        egui::Panel::top("update").show(ui, |ui| update_bar(ui, &rel, &mut self.installer, &mut self.update_dismissed));
-    }
-
-    fn clocks_body(&mut self, ui: &mut egui::Ui) {
-        let c = crate::cpu::get(&self.ctx);
-        let live = self.live.lock().unwrap();
-        let mut rows: Vec<(String, String)> = Vec::new();
-        for (core, l) in c.logical.iter().filter(|l| l.smt == 0).enumerate() {
-            let kind = l.kind.as_deref().map(|k| format!(" ({k})")).unwrap_or_default();
-            let v = live.mhz.get(l.cpu).copied().flatten().map_or("…".into(), |m| format!("{m:.1} MHz"));
-            rows.push((format!("{}{kind}", trf("Core #{}", &[&core])), v));
-        }
-        let names = crate::gpu::adapters(&self.ctx);
-        let mut gpus: Vec<(String, String)> = Vec::new();
-        for g in &live.gpus {
-            let name = names.get(g.adapter).map_or("GPU", |a| a.name.as_str());
-            let opt = |v: Option<f64>, unit: &str| v.map_or(String::new(), |v| format!("{v:.0} {unit}"));
-            let mut s: Vec<String> = [
-                opt(g.core_mhz, "MHz core"),
-                opt(g.mem_mhz, "MHz mem"),
-                opt(g.temp_c, "°C"),
-                opt(g.hotspot_c, &format!("°C {}", tr("hot spot"))),
-                opt(g.fan_rpm, "RPM"),
-                opt(g.power_w, "W"),
-                opt(g.load_pct, "%"),
-            ]
-            .into_iter()
-            .filter(|s| !s.is_empty())
-            .collect();
-            if g.throttling() {
-                s.push(tr("throttling").into());
-            }
-            gpus.push((name.to_string(), s.join(", ")));
-        }
-        let source = live.source;
-        drop(live);
-        let refs: Vec<(&str, String)> = rows.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
-        widgets::card(ui, icon::CPU, tr("Cores"), |ui| {
-            ui.label(RichText::new(trf("source: {}", &[&source])).small().color(theme::palette(ui).text_muted));
-            widgets::kv_list(ui, &refs);
-        });
-        if !gpus.is_empty() {
-            ui.add_space(theme::GAP);
-            let refs: Vec<(&str, String)> = gpus.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
-            widgets::card(ui, icon::GRAPHICS_CARD, tr("Graphics"), |ui| widgets::kv_list(ui, &refs));
         }
     }
 
@@ -958,157 +834,71 @@ impl App {
             let r = self.report.lock().unwrap().clone();
             self.save(&r, "cvf");
         }
-    }
-
-    /// Put the UI in the state `step` captures; true when it is ready.
-    fn stage_shot(&mut self, step: Step, first: bool, report: Option<&[Section]>, ectx: &egui::Context) -> bool {
-        let idx = self.auto.as_ref().map_or(0, |a| a.step);
-        // The last capture shows the light theme.
-        ectx.set_theme(if SHOTS.get(idx).is_some_and(|s| s.0.ends_with("-light")) {
-            egui::ThemePreference::Light
-        } else {
-            egui::ThemePreference::Dark
-        });
-        if !matches!(step, Step::Bench(BenchView::Stress)) && self.mon.stress.running() {
-            self.mon.stress.stop(None); // don't load the CPU during later captures
+        if ectx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::K)) && self.welcome.is_none() {
+            let r = self.report.lock().unwrap().clone().unwrap_or_default();
+            let pages: Vec<(Page, &str)> = NAV.iter().chain(NAV_BOTTOM.iter()).map(|n| (n.0, n.2)).collect();
+            self.palette.open(&r, &pages);
         }
-        match step {
-            Step::Page(pg) => {
-                self.page = pg;
-                match pg {
-                    Page::Devices => self.devices.loaded(&self.ctx),
-                    // Graphs need some history.
-                    Page::Sensors | Page::Overview => {
-                        self.auto.as_ref().is_some_and(|a| a.started.elapsed() > Duration::from_secs(9))
-                    }
-                    _ => true,
-                }
-            }
-            Step::Bench(v) => {
-                self.page = Page::Benchmarks;
-                self.bench_view = v;
-                match v {
-                    BenchView::Cpu => self.bench.autorun(&self.ctx),
-                    BenchView::Memory => self.bench.autorun_memory(&self.ctx),
-                    BenchView::Stress => {
-                        if first && !self.mon.stress.running() {
-                            self.mon.start_stress(crate::os::logical_cpus());
-                        }
-                        self.mon.stress.elapsed_secs() >= 8.0
-                    }
-                    BenchView::History => {
-                        if first {
-                            // This session's results only: nothing from the user's history.json.
-                            self.history.preview(self.bench.session_entries(&self.ctx));
-                            self.history_dirty = false;
-                        }
-                        true
-                    }
-                }
-            }
-            Step::Tool(v) => {
-                self.page = Page::Tools;
-                self.tool_view = v;
-                if v == ToolView::Compare && first {
-                    let path = std::env::temp_dir().join(format!("{}-screenshot-report.json", crate::NAME));
-                    let _ = std::fs::write(&path, report.map(report::to_json).unwrap_or_default());
-                    self.compare.current = true;
-                    self.compare.b = path.display().to_string();
-                    self.compare.run(report);
-                    // Published image: no user name from the temp path.
-                    self.compare.b = path.file_name().map_or(String::new(), |n| n.to_string_lossy().into());
-                }
-                true
-            }
-            Step::AboutPt => {
-                i18n::set(i18n::Lang::PtBr);
-                self.page = Page::About;
-                true
-            }
+        if let Some(t) = self.palette.show(ectx) {
+            self.run_palette(t);
         }
     }
 
-    fn auto_shots(&mut self, ectx: &egui::Context, report: Option<&[Section]>) {
-        let Some(a) = &self.auto else { return };
-        ectx.request_repaint();
-        self.mon.tel(); // start sampling early so the Sensors shot has history
-        // Let the report load and the clock sampler produce a value first.
-        if report.is_none() || a.started.elapsed() < Duration::from_secs(3) || self.shot.is_some() {
-            return;
-        }
-        let idx = a.step;
-        let Some(&(name, step)) = SHOTS.get(idx) else {
-            self.mon.stress.stop(None);
-            ectx.send_viewport_cmd(egui::ViewportCommand::Close);
-            return;
-        };
-        let first = a.prepared != Some(idx);
-        let ready = self.stage_shot(step, first, report, ectx);
-        let Some(a) = &mut self.auto else { return };
-        if first {
-            a.prepared = Some(idx);
-            a.since = std::time::Instant::now();
-        }
-        if !ready {
-            return;
-        }
-        a.wait += 1;
-        // A few frames so the page is laid out, and time for windows to fade in.
-        if a.wait < 4 || a.since.elapsed() < Duration::from_millis(600) {
-            return;
-        }
-        a.wait = 0;
-        a.step += 1;
-        self.shot = Some(Shot::Png(a.dir.join(format!("{name}.png"))));
-        ectx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
-    }
-
-    fn take_screenshot(&mut self, ectx: &egui::Context) {
-        if self.shot.is_none() {
-            return;
-        }
-        let img = ectx.input(|i| {
-            i.raw.events.iter().find_map(|e| match e {
-                egui::Event::Screenshot { image, .. } => Some(image.clone()),
-                _ => None,
-            })
-        });
-        let Some(img) = img else { return };
-        match self.shot.take() {
-            Some(Shot::Clipboard) => {
-                ectx.copy_image((*img).clone());
-                self.status = tr("Tab copied to clipboard").into();
+    /// What the command palette picked (S1-U02).
+    fn run_palette(&mut self, t: palette::Target) {
+        use palette::{Act, Target};
+        match t {
+            Target::Page(p) => self.page = p,
+            Target::Act(Act::SaveTxt | Act::SaveHtml) => {
+                let r = self.report.lock().unwrap().clone();
+                self.save(&r, if t == Target::Act(Act::SaveTxt) { "txt" } else { "html" });
             }
-            Some(Shot::Bmp) => {
-                let name = format!("{}-{}.bmp", crate::NAME, page_name(self.page).to_lowercase());
-                self.status = match std::fs::write(&name, bmp::encode(&img)) {
-                    Ok(()) => trf("Saved {}", &[&name]),
-                    Err(e) => format!("{name}: {e}"),
-                };
-            }
-            Some(Shot::Png(path)) => {
-                if let Err(e) = write_png(&path, &img) {
-                    eprintln!("{}: {e}", path.display());
-                } else {
-                    eprintln!("wrote {}", path.display());
+            Target::Act(Act::ToggleCsv) => {
+                let tel = self.mon.tel();
+                if tel.csv_path().is_some() {
+                    tel.stop_csv();
+                } else if let Some(p) = sensors::log_path()
+                    && let Err(e) = tel.start_csv(&p)
+                {
+                    self.status = format!("{}: {e}", p.display());
                 }
             }
-            None => {}
+            Target::Act(Act::ToggleMini) => {
+                let on = !self.mon.show_mini;
+                self.mon.set_mini(on);
+            }
+            Target::Act(Act::ResetMinMax) => self.mon.tel().reset_stats(),
+            Target::Act(Act::Stress) => self.mon.show_stress = true,
         }
     }
 
-    fn minimized_title(&mut self, ectx: &egui::Context) {
-        // CPU-Z shows the core clock in the title while iconized.
-        let min = ectx.input(|i| i.viewport().minimized.unwrap_or(false));
-        if min {
-            let m = self.live.lock().unwrap().mhz.first().copied().flatten();
-            if let Some(m) = m {
-                ectx.send_viewport_cmd(egui::ViewportCommand::Title(format!("{m:.0} MHz - {}", crate::DISPLAY_NAME)));
+    /// The update check, only when the user opted in and cpuzeez.ini allows it (P1).
+    fn check_updates_if_allowed(&self) {
+        if crate::update::startup_check_allowed(self.ctx.cfg.check_updates, self.mon.settings.update_check) {
+            let slot = self.update.clone();
+            let channel = self.mon.settings.channel();
+            std::thread::spawn(move || *slot.lock().unwrap() = crate::update::check(channel));
+        }
+    }
+
+    /// Window title: ● REC while recording, and the core clock while
+    /// minimized (as CPU-Z does). Sent only when it changes.
+    fn window_title(&mut self, ectx: &egui::Context) {
+        let mut t = String::new();
+        if self.mon.recording() || self.live.capturing() {
+            t += "● REC · ";
+        }
+        if ectx.input(|i| i.viewport().minimized.unwrap_or(false)) {
+            let tel = self.mon.tel();
+            tel.want("title", &["cpu/clock"]);
+            if let Some(m) = crate::telemetry::core_mhz(&tel.snapshot(), 0) {
+                t += &format!("{m:.0} MHz - ");
             }
-            self.title_minimized = true;
-        } else if self.title_minimized {
-            ectx.send_viewport_cmd(egui::ViewportCommand::Title(crate::DISPLAY_NAME.into()));
-            self.title_minimized = false;
+        }
+        t += crate::DISPLAY_NAME;
+        if t != self.title {
+            ectx.send_viewport_cmd(egui::ViewportCommand::Title(t.clone()));
+            self.title = t;
         }
     }
 
@@ -1129,98 +919,6 @@ impl App {
     }
 }
 
-fn timers_body(ui: &mut egui::Ui, r: &[Section]) {
-    let rows: Vec<(String, String)> = sec(r, "Timers")
-        .map(|s| report::fields(&s.nodes).map(|(k, v)| (k.to_string(), v.to_string())).collect())
-        .unwrap_or_default();
-    widgets::card(ui, icon::TIMER, tr("Timers"), |ui| {
-        if rows.is_empty() {
-            ui.label(tr("No timer information."));
-        }
-        let refs: Vec<(&str, String)> = rows.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
-        widgets::kv_list(ui, &refs);
-    });
-}
-
-fn mainboard_tab(ui: &mut egui::Ui, r: &[Section]) {
-    boxed(
-        ui,
-        "Motherboard",
-        &[
-            ("Manufacturer", sgi(r, "DMI", "DMI Baseboard", "vendor")),
-            ("Model", sgi(r, "DMI", "DMI Baseboard", "model")),
-            ("Revision", sgi(r, "DMI", "DMI Baseboard", "revision")),
-            ("Bus Specs.", sget(r, "Chipset", "Bus Specification")),
-            ("Chipset", sget(r, "Chipset", "Northbridge")),
-            ("Southbridge", sget(r, "Chipset", "Southbridge")),
-            (
-                "LPCIO",
-                format!("{} {}", sget(r, "LPCIO", "LPCIO Vendor"), sget(r, "LPCIO", "LPCIO Model")).trim().to_string(),
-            ),
-        ],
-    );
-    boxed(
-        ui,
-        "BIOS",
-        &[
-            ("Brand", sgi(r, "DMI", "DMI BIOS", "vendor")),
-            ("Version", sgi(r, "DMI", "DMI BIOS", "version")),
-            ("Date", sgi(r, "DMI", "DMI BIOS", "date")),
-            ("UEFI", sget(r, "BIOS", "UEFI")),
-            ("Microcode", sget(r, "Processors Information", "Microcode Revision")),
-        ],
-    );
-    boxed(
-        ui,
-        "Graphic Interface",
-        &[
-            ("Bus", sget(r, "Chipset", "Graphic Interface")),
-            ("Current Link Width", sget(r, "Chipset", "PCI-E Link Width")),
-            ("Current Link Speed", sget(r, "Chipset", "PCI-E Link Speed")),
-        ],
-    );
-}
-
-fn memory_tab(ui: &mut egui::Ui, r: &[Section]) {
-    let k = |key: &str| sget(r, "Chipset", key);
-    boxed(
-        ui,
-        "General",
-        &[
-            ("Type", k("Memory Type")),
-            ("Size", k("Memory Size")),
-            ("Channel #", k("Channels")),
-            ("Uncore Frequency", k("Uncore Frequency")),
-        ],
-    );
-    boxed(
-        ui,
-        "Timings",
-        &[
-            ("DRAM Frequency", k("Memory Frequency")),
-            ("CAS# Latency (CL)", k("CAS# latency (CL)")),
-            ("RAS# to CAS# Delay (tRCD)", k("RAS# to CAS# delay (tRCD)")),
-            ("RAS# Precharge (tRP)", k("RAS# Precharge (tRP)")),
-            ("Cycle Time (tRAS)", k("Cycle Time (tRAS)")),
-            ("Bank Cycle Time (tRC)", k("Bank Cycle Time (tRC)")),
-            ("Command Rate (CR)", k("Command Rate (CR)")),
-            ("Row Refresh Cycle Time (tRFC)", k("Row Refresh Cycle Time (tRFC)")),
-        ],
-    );
-    #[cfg(target_os = "macos")]
-    if k("CAS# latency (CL)").is_empty() {
-        let muted = theme::palette(ui).text_muted;
-        ui.label(
-            RichText::new(tr("macOS does not expose live DRAM timings. Dashes indicate unavailable fields."))
-                .color(muted),
-        );
-    }
-}
-
-fn gpu_name(n: &[Node]) -> String {
-    report::find(n, "Name").unwrap_or("GPU").to_string()
-}
-
 fn no_data(ui: &egui::Ui, what: &str, ctx: &Ctx) -> RichText {
     let why = if ctx.hw.name().starts_with("none") {
         "this needs privileged hardware access (see README: PawnIO on Windows, root on Linux)"
@@ -1237,16 +935,6 @@ fn hostname() -> String {
         .or_else(|| crate::os::read_trim("/etc/hostname"))
         .or_else(|| crate::os::cmd("hostname", &[]).map(|s| s.trim().to_string()))
         .unwrap_or_else(|| crate::NAME.into())
-}
-
-fn write_png(path: &std::path::Path, img: &egui::ColorImage) -> Result<(), Box<dyn std::error::Error>> {
-    let f = std::io::BufWriter::new(std::fs::File::create(path)?);
-    let mut enc = png::Encoder::new(f, img.size[0] as u32, img.size[1] as u32);
-    enc.set_color(png::ColorType::Rgba);
-    enc.set_depth(png::BitDepth::Eight);
-    let data: Vec<u8> = img.pixels.iter().flat_map(|p| p.to_array()).collect();
-    enc.write_header()?.write_image_data(&data)?;
-    Ok(())
 }
 
 /// Window/taskbar icon (the same artwork as assets/icon.svg).
@@ -1272,6 +960,7 @@ fn decode_png(png: &[u8]) -> Option<egui::IconData> {
 /// labels (Core Speed, Bus Speed, SPD, CAS#, tRCD…) stay in English, as in
 /// CPU-Z's own Portuguese/Spanish builds and local reviews.
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Recording · click to stop", "Gravando · clique para parar"),
     // tabs, menus
     ("CPU", "CPU"),
     ("Caches", "Caches"),
@@ -1394,6 +1083,14 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Save Report (.TXT)", "Salvar relatório (.TXT)"),
     ("Save Report (.HTML)", "Salvar relatório (.HTML)"),
     ("Project page", "Página do projeto"),
+    ("Third-party components", "Componentes de terceiros"),
+    ("PawnIO driver installer {}, by namazso (pawnio.eu)", "Instalador do driver PawnIO {}, de namazso (pawnio.eu)"),
+    ("PawnIO modules {}, LGPL-2.1-or-later", "Módulos do PawnIO {}, LGPL-2.1-or-later"),
+    (
+        "Rust crates under MIT, Apache-2.0 and compatible licenses.",
+        "Crates Rust sob MIT, Apache-2.0 e licenças compatíveis.",
+    ),
+    ("Full list and licenses", "Lista completa e licenças"),
     ("Check for updates", "Procurar atualizações"),
     ("Checking...", "Verificando..."),
     ("{} {} is available.", "{} {} está disponível."),
@@ -1497,6 +1194,7 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Recording · click to stop", "Grabando · haz clic para detener"),
     // tabs, menus
     ("CPU", "CPU"),
     ("Caches", "Cachés"),
@@ -1619,6 +1317,17 @@ pub const ES: &[(&str, &str)] = &[
     ("Save Report (.TXT)", "Guardar informe (.TXT)"),
     ("Save Report (.HTML)", "Guardar informe (.HTML)"),
     ("Project page", "Página del proyecto"),
+    ("Third-party components", "Componentes de terceros"),
+    (
+        "PawnIO driver installer {}, by namazso (pawnio.eu)",
+        "Instalador del controlador PawnIO {}, de namazso (pawnio.eu)",
+    ),
+    ("PawnIO modules {}, LGPL-2.1-or-later", "Módulos de PawnIO {}, LGPL-2.1-or-later"),
+    (
+        "Rust crates under MIT, Apache-2.0 and compatible licenses.",
+        "Crates de Rust bajo MIT, Apache-2.0 y licencias compatibles.",
+    ),
+    ("Full list and licenses", "Lista completa y licencias"),
     ("Check for updates", "Buscar actualizaciones"),
     ("Checking...", "Comprobando..."),
     ("{} {} is available.", "{} {} está disponible."),
@@ -1734,5 +1443,64 @@ mod tests {
         assert_eq!(super::shown("Machine", "x"), "x");
         assert_eq!(super::shown("Name", "x"), "x");
         super::MASK_PRIVATE.store(false, Ordering::Relaxed);
+    }
+
+    /// S1-U01: a card keeps the rows its page's level shows, and vanishes when none.
+    #[test]
+    fn detail_levels_filter_cards() {
+        use cpuzeez_core::detail::Level;
+        use eframe::egui;
+        use egui_kittest::{Harness, kittest::Queryable};
+        let draw = |level: Level| {
+            let mut h = Harness::builder().with_size(egui::vec2(600.0, 400.0)).build_ui(move |ui| {
+                if !ui.style().text_styles.contains_key(&egui::TextStyle::Name("title".into())) {
+                    super::theme::install(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                super::detail::set(ui.ctx(), level);
+                super::boxed(ui, "Processor", &[("Name", "Ryzen".into()), ("Microcode", "0xA601209".into())]);
+                super::boxed(ui, "Only advanced", &[("Bus Speed", "100 MHz".into())]);
+            });
+            h.run();
+            h
+        };
+        let basic = draw(Level::Basic);
+        assert!(basic.query_by_label("Ryzen").is_some());
+        assert!(basic.query_by_label("0xA601209").is_none(), "Microcode is Advanced");
+        assert!(basic.query_by_label("Only advanced").is_none(), "an empty card isn't drawn");
+        let advanced = draw(Level::Advanced);
+        assert!(advanced.query_by_label("0xA601209").is_some() && advanced.query_by_label("100 MHz").is_some());
+    }
+
+    /// S1-U03: right-click a row, "Pin to Overview" asks the app to pin it under its card.
+    #[test]
+    fn a_row_pins_under_its_card() {
+        use eframe::egui;
+        use egui_kittest::{Harness, kittest::Queryable};
+        let mut h = Harness::builder().with_size(egui::vec2(600.0, 400.0)).build_ui_state(
+            |ui, got: &mut Vec<crate::settings::Pin>| {
+                if !ui.style().text_styles.contains_key(&egui::TextStyle::Name("title".into())) {
+                    super::theme::install(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                super::detail::set(ui.ctx(), cpuzeez_core::detail::Level::Expert);
+                super::boxed(ui, "Processor", &[("Name", "Ryzen".into())]);
+                got.extend(super::pins::take_requests(ui.ctx()));
+            },
+            Vec::new(),
+        );
+        h.run();
+        h.get_by_label("Ryzen").click_secondary();
+        h.run();
+        h.run();
+        h.get_by_label("Pin to Overview").click();
+        h.run();
+        let p = h.state().first().cloned().expect("a pin request");
+        assert_eq!(
+            (p.card.as_str(), p.label.as_str(), p.value.as_str(), p.metric),
+            ("Processor", "Name", "Ryzen", None)
+        );
     }
 }

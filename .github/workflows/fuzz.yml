@@ -1,0 +1,34 @@
+name: Fuzz
+
+# Coverage-guided fuzzing of the untrusted-input parsers (S0-T07), nightly
+# and on demand. Crashes are uploaded as artifacts with the input that broke.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+# Read-only token: nothing here pushes, comments or publishes.
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [elevated_op, layout_json, smbios, spd, edid, pci_config, presentmon_csv, output_lines, hw_csv, session_json, detector]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@2c76c034f9e32a5d6e2c104dc4df23a22476db04 # nightly
+        with:
+          toolchain: nightly
+      - run: cargo install cargo-fuzz --locked
+      - name: Fuzz for 5 minutes
+        run: cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=300
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: crash-${{ matrix.target }}
+          path: fuzz/artifacts/

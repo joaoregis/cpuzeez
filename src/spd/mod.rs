@@ -1,8 +1,7 @@
 //! Memory SPD section (FEATURES.md 3.9, 8): read DIMM SPD EEPROMs over SMBus
 //! and decode them. Decoders are pure (`decode`), reading is in this file.
 
-pub mod decode;
-mod jep106;
+pub use cpuzeez_core::spd::decode;
 
 pub use decode::{DecodedModule, Timing};
 
