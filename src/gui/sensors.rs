@@ -906,48 +906,7 @@ pub fn local_time() -> String {
 }
 
 fn local_stamp() -> String {
-    #[cfg(unix)]
-    {
-        // SAFETY: localtime_r only writes into the zeroed tm we pass.
-        let tm = unsafe {
-            let t = libc::time(std::ptr::null_mut());
-            let mut tm: libc::tm = std::mem::zeroed();
-            libc::localtime_r(&t, &mut tm);
-            tm
-        };
-        format!(
-            "{:04}{:02}{:02}-{:02}{:02}{:02}",
-            tm.tm_year + 1900,
-            tm.tm_mon + 1,
-            tm.tm_mday,
-            tm.tm_hour,
-            tm.tm_min,
-            tm.tm_sec
-        )
-    }
-    #[cfg(windows)]
-    {
-        #[repr(C)]
-        #[derive(Default)]
-        struct SystemTime {
-            year: u16,
-            month: u16,
-            dow: u16,
-            day: u16,
-            hour: u16,
-            min: u16,
-            sec: u16,
-            ms: u16,
-        }
-        #[link(name = "kernel32")]
-        unsafe extern "system" {
-            fn GetLocalTime(t: *mut SystemTime);
-        }
-        let mut t = SystemTime::default();
-        // SAFETY: GetLocalTime fills the struct we own.
-        unsafe { GetLocalTime(&mut t) };
-        format!("{:04}{:02}{:02}-{:02}{:02}{:02}", t.year, t.month, t.day, t.hour, t.min, t.sec)
-    }
+    cpuzeez_platform::os::local_stamp()
 }
 
 fn open_folder(p: &Path) {

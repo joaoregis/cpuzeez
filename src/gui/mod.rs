@@ -3,6 +3,9 @@
 //! the design system in `theme`/`widgets`. Every page reads the same report
 //! tree as `-txt`. F5 BMP, F6 clipboard, F7 .cvf (our JSON). UI text goes
 //! through `i18n::tr` (English keys; tables at the end of each file).
+//!
+//! No `unsafe` here (S0-E06): OS calls live in `cpuzeez_platform`.
+#![forbid(unsafe_code)]
 
 #[cfg(test)]
 mod a11y;

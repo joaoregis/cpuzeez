@@ -375,3 +375,74 @@ mod tests {
         assert_eq!(get(), before);
     }
 }
+
+/// The local date and time as `YYYYMMDD-HHMMSS`.
+pub fn local_stamp() -> String {
+    #[cfg(unix)]
+    {
+        // SAFETY: `time` with a null pointer only returns the time; `localtime_r` writes only
+        // into the zeroed `tm` we pass.
+        let tm = unsafe {
+            let t = libc::time(std::ptr::null_mut());
+            let mut tm: libc::tm = std::mem::zeroed();
+            libc::localtime_r(&t, &mut tm);
+            tm
+        };
+        format!(
+            "{:04}{:02}{:02}-{:02}{:02}{:02}",
+            tm.tm_year + 1900,
+            tm.tm_mon + 1,
+            tm.tm_mday,
+            tm.tm_hour,
+            tm.tm_min,
+            tm.tm_sec
+        )
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Foundation::SYSTEMTIME;
+        use windows_sys::Win32::System::SystemInformation::GetLocalTime;
+        let mut t = SYSTEMTIME {
+            wYear: 0,
+            wMonth: 0,
+            wDayOfWeek: 0,
+            wDay: 0,
+            wHour: 0,
+            wMinute: 0,
+            wSecond: 0,
+            wMilliseconds: 0,
+        };
+        // SAFETY: GetLocalTime fills the struct we own.
+        unsafe { GetLocalTime(&mut t) };
+        format!("{:04}{:02}{:02}-{:02}{:02}{:02}", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond)
+    }
+}
+
+/// The user's UI language tag from the OS where it keeps one (`pt-BR`);
+/// None elsewhere (Unix reads the environment, macOS `defaults`).
+pub fn user_locale() -> Option<String> {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Globalization::GetUserDefaultLocaleName;
+        let mut buf = [0u16; 85];
+        // SAFETY: the buffer is ours and its length is passed.
+        let n = unsafe { GetUserDefaultLocaleName(buf.as_mut_ptr(), buf.len() as i32) };
+        (n > 1).then(|| String::from_utf16_lossy(&buf[..n as usize - 1]))
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
+#[cfg(test)]
+mod stamp_tests {
+    #[test]
+    fn the_stamp_has_the_documented_shape() {
+        let s = super::local_stamp();
+        assert_eq!(s.len(), 15, "{s}");
+        assert_eq!(s.as_bytes()[8], b'-');
+        assert!(s.bytes().enumerate().all(|(i, b)| i == 8 || b.is_ascii_digit()), "{s}");
+        assert!(s.starts_with("20"), "{s}");
+    }
+}

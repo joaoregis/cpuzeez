@@ -25,6 +25,8 @@ Processador, caches, placa-mãe, memória e SPD, gráficos, sensores, discos, re
 - [Instalação](#instalação)
 - [Atualizações](#atualizações)
 - [Acesso privilegiado ao hardware](#acesso-privilegiado-ao-hardware)
+- [Qualidade, acessibilidade e segurança](#qualidade-acessibilidade-e-segurança)
+- [Orçamento de desempenho](#orçamento-de-desempenho)
 - [Uso](#uso)
 - [Cobertura de funcionalidades](#cobertura-de-funcionalidades)
 - [Precisão: lado a lado com o CPU-Z](#precisão-lado-a-lado-com-o-cpu-z)
@@ -59,6 +61,13 @@ Processador, caches, placa-mãe, memória e SPD, gráficos, sensores, discos, re
     - **GPU:** temperatura, hot spot, junção da memória, ventoinhas, potência, carga.
     - **Placa-mãe:** voltagens, temperaturas e ventoinhas do Super I/O, com mapas para mais de 150 modelos de placa.
     - **Chipset, DIMMs e discos.**
+- **ZeeZ Live: overlay, FPS e captura, sem tocar no jogo.**
+  - **Overlay:** uma janela própria, transparente, sempre no topo e que deixa os cliques passarem. Nada é injetado no jogo. Cinco estilos, nove posições mais um deslocamento (ou arraste), no monitor em que o jogo está, com contorno real no texto. **Etiquetas de redução de clock** dizem o que está reduzindo (CPU ou GPU, por temperatura ou potência).
+  - **FPS:** PresentMon no Windows (incluso; exige administrador), MangoHud no Linux, Metal HUD no macOS (experimental). FPS, tempo de quadro, 1% e 0,1% lows, GPU Busy.
+  - **Capture** uma sessão na mão, com timer, por atalho ou por jogo; ela é salva como `frames.csv` (colunas do PresentMon, então o CapFrameX abre), `hw.csv` e `session.json`. **Relatórios** com gráficos, comparação entre sessões e exportação em HTML.
+  - **Atalhos globais** (no Wayland pelo portal de atalhos do desktop), perfis por jogo e um **modo seguro para anti-cheat** que para toda leitura via driver enquanto um jogo escolhido roda.
+- **O que limita o seu FPS, medido.** O detector de gargalo diz *GPU no limite*, *CPU no limite (núcleo 4)*, *limitado de propósito* (V-Sync, um limite de FPS), *redução térmica*, *memória de vídeo cheia*, *paginação*, *disco* ou *outro programa*, com os números por trás, ao vivo e numa sessão inteira. Nunca ranqueia peças e nunca chuta.
+- **Um Gerenciador de Tarefas em *Sistema*.** Processos (agrupados, com rede, energia, GPU, linha de comando, integridade e mais), Desempenho, **Histórico de apps** (opcional, guardado localmente), Inicialização com a linha do tempo do boot, Usuários e Serviços (recuperação, gatilhos, contas). Encerrar ou alterar algo pergunta antes e avisa quando o alvo é crítico para o sistema; o que exige direitos pede por eles só para aquela ação.
 - **Benchmarks** (cargas próprias; 1000 pontos = o Ryzen 9 7900X / RTX 4060 de referência):
   - **Suíte de CPU:** compressão, n-corpos, matrizes com SIMD, AES com e sem as instruções AES, SHA-256, um ray tracer e ordenação, com uma e com várias threads; escala por threads, núcleos P × E e uma rodada sustentada que mostra a limitação.
   - **Memória:** latência e banda por nível de cache, STREAM triad, GUPS, o custo das falhas de TLB, latência por CCD.
@@ -75,7 +84,7 @@ Processador, caches, placa-mãe, memória e SPD, gráficos, sensores, discos, re
   - Clocks ao vivo de cada núcleo e da GPU, timers e exportação TXT/HTML/JSON.
 - **A linha de comando do CPU-Z:**
   - As opções do CPU-Z: `-txt=`, `-html=`, `-json=`, `-console`, `-bench`, `-core=`, `-coremask=`.
-  - Opções novas: `-sensors`, `-log=`, `-membench`, `-diff=`, `-checkupdate`.
+  - Opções novas: `-sensors`, `-log=`, `-membench`, `-diff=`, `-checkupdate[=stable|beta|alpha]`.
   - Um `cpuzeez.ini` com as mesmas chaves do `cpuz.ini`.
 - **Atualização em um clique.** O app encontra releases novas e instala o pacote certo para o seu SO, depois de conferir o SHA-256.
 - **Um único binário nativo**, de cerca de 20 MB (a maior parte é o renderizador e o benchmark de GPU), sem dependências em tempo de execução.
@@ -164,6 +173,11 @@ Com Rust instalado, também dá para usar `cargo install --git https://github.co
   - **Outros:** abre a pasta do download.
 - **Novidades** abre as notas da release.
 - Também dá para checar em *Sobre ▸ Procurar atualizações*, ou com `cpuzeez -checkupdate`.
+- **Canais de atualização.** *Configurações ▸ Atualizações ▸ Canal de atualização* escolhe o que a verificação pode oferecer:
+  - **Estável:** só versões finais (o padrão numa versão final).
+  - **Beta:** também betas e candidatas a versão final (o padrão quando você roda uma beta).
+  - **Alfa:** tudo o que foi publicado.
+  A verificação ao abrir segue o canal escolhido, depois que você a permitiu. `cpuzeez -checkupdate=beta` mostra o que um canal ofereceria sem mudar nada. Pré-versões podem estar inacabadas; há um modelo de issue *Beta report* para o que você encontrar.
 - Para desligar, use `CheckUpdates=0` no `cpuzeez.ini`.
 - O aviso usa o `curl` do sistema, que já vem no Windows 10+, no macOS e nas distros Linux desktop.
 
@@ -185,6 +199,20 @@ Como no CPU-Z, algumas informações só vêm de registradores do hardware: MSRs
 | **Windows** | CPU, caches, topologia, DMI, BIOS, lista e links PCI, nomes do chipset, tipo/tamanho/canais da memória, SMART NVMe, rede, bateria, GPUs (NVML/NVAPI/ADL) com temperaturas e clocks, monitores, SO, timers, benchmarks | **+ PawnIO** (como administrador): clock real dos núcleos (APERF/MPERF), P-states, núcleos preferenciais, SPD, timings de memória, voltagens/temperaturas/ventoinhas do Super I/O, temperaturas e potência da CPU, SMU da AMD, temperatura do PCH Intel, temperatura das DIMMs, limites do SMART ATA |
 | **Linux** | Tudo acima, mais sensores hwmon (`k10temp`, `coretemp`, `nct6775`, `it87`, `amdgpu`…), clocks via cpufreq, potência RAPL, e SPD quando `ee1004`/`spd5118` estão carregados | **+ root**: MSRs (`modprobe msr`), PCI config completo, SPD via `i2c-dev`, Super I/O via `/dev/port`, SMN/UMC da AMD, MCHBAR Intel, SMART via ioctl, tabela do SMU com o módulo opcional `ryzen_smu` |
 | **macOS** | CPU (sysctl / CPUID), caches, clusters, SMBIOS (Intel) ou IODeviceTree (Apple Silicon), tamanho e tipo da memória, PCI (IOKit), GPU e Metal, monitores (EDID), discos, USB, rede, temperaturas/ventoinhas/potência do SMC, saúde da bateria, benchmarks | Nada a mais: o macOS não permite acesso de terceiros a registradores, e o Apple Silicon não tem SPD, MSRs nem Super I/O |
+
+### O que mais exige administrador ou root
+
+Quase tudo no CpuZeeZ roda como usuário comum. Estas são as exceções, e cada tela avisa quando se aplicam:
+
+| Recurso | Windows | Linux | macOS |
+|---|---|---|---|
+| **FPS e GPU Busy** (ZeeZ Live) | administrador (o PresentMon lê os eventos do kernel gráfico); a aba Ao vivo oferece o reinício | MangoHud, sem root | Metal HUD, sem root; sem tempos de quadro de outros apps |
+| **Rede por processo** | administrador | só TCP; processos de outros usuários exigem root | `nettop`, sem root |
+| **Encerrar, suspender ou alterar um processo ou serviço** | um pedido do UAC para aquela ação | `pkexec` para aquela ação | autorização para aquela ação |
+| **Itens de inicialização, recuperação e contas de serviços** | um pedido do UAC para aquela ação | `pkexec`; a recuperação é um drop-in do systemd que você pode apagar | autorização para aquela ação |
+| **Registradores de hardware** (veja acima) | PawnIO + administrador | root | impossível |
+
+Uma ação que exige direitos roda numa cópia elevada e descartável do CpuZeeZ, que só aceita uma lista fixa de operações ([modelo de ameaças](docs/security/threat-model.md)). Tudo o que ela faz vai para o registro de auditoria local.
 
 ### Windows: PawnIO
 
@@ -213,6 +241,17 @@ sudo modprobe spd5118       # SPD DDR5 (kernel 6.11+), ou ee1004 para DDR4
 sudo cpuzeez                # detalhe completo; sem sudo você ainda vê quase tudo
 ```
 
+## Qualidade, acessibilidade e segurança
+
+- **Testado sem depender de uma pessoa.** Os leitores de dados e o detector rodam com entradas aleatórias e corrompidas a cada push, e 11 alvos de fuzz rodam agendados (`fuzz/`). Um jogo sintético alimenta um teste longo de **soak** que confere que memória, handles e threads ficam estáveis ([como](docs/testing/soak.md)). Os instaladores são testados no CI: instalar, atualizar a partir de toda versão publicada, recusar downgrade, driver opcional e remoção limpa.
+- **Acessível.** O texto atinge o contraste WCAG AA nos dois temas, as cores dos gráficos atingem 3:1, nada depende só de cor (avisos levam um ícone), as páginas se mantêm de 75% a 200% de escala, tabelas e abas funcionam pelo teclado, e widgets e gráficos desenhados expõem nomes e valores a tecnologias assistivas. O que ainda não está coberto está em [docs/accessibility.md](docs/accessibility.md).
+- **Segurança.** [Modelo de ameaças](docs/security/threat-model.md), [SECURITY.md](SECURITY.md) para relatar um problema, actions fixadas por commit, tokens de workflow só de leitura, `cargo-deny` e Dependabot. As versões ainda não são assinadas ([ADR 0009](docs/adr/0009-releases-stay-unsigned-for-now.md)); cada uma vem com `SHA256SUMS.txt`.
+- **Um guia de auditoria** para quem revisar o projeto: [docs/audit/](docs/audit/README.md).
+
+## Orçamento de desempenho
+
+O CpuZeeZ roda ao lado do seu jogo, então segue um orçamento: no máximo 2% de um núcleo para o coletor a 1 s com o overlay a 4 Hz, no máximo 150 MB de memória e nenhum pico de tempo de quadro causado pela coleta. Os números medidos e como são medidos estão em [docs/performance.md](docs/performance.md).
+
 ## Uso
 
 Rode `cpuzeez` sem argumentos para abrir o app. Todas as opções do CPU-Z funcionam, mais algumas novas:
@@ -230,7 +269,7 @@ Rode `cpuzeez` sem argumentos para abrir o app. Todas as opções do CPU-Z funci
 | `-diff=ANTIGO.json,NOVO.json` | Compara dois relatórios (`NOVO` pode ser `now`; acrescente `,all` para incluir valores ao vivo) |
 | `-core=N` | Mostra o clock do núcleo N e sai |
 | `-coremask=HEX` | Restringe o `-bench` a essas CPUs lógicas |
-| `-checkupdate` | Verifica se há release mais nova no GitHub |
+| `-checkupdate[=canal]` | Verifica se há release mais nova no GitHub (`stable`, `beta` ou `alpha`; sem valor, o canal das Configurações) |
 | `-screenshots=DIR` | Renderiza cada página em PNG e sai (para docs e CI) |
 
 Atalhos da interface, como no CPU-Z:

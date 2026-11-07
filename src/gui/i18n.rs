@@ -116,17 +116,8 @@ pub fn os_lang() -> Lang {
             return from_code(&v);
         }
     }
-    #[cfg(windows)]
-    {
-        #[link(name = "kernel32")]
-        unsafe extern "system" {
-            fn GetUserDefaultLocaleName(buf: *mut u16, len: i32) -> i32;
-        }
-        let mut buf = [0u16; 85];
-        let n = unsafe { GetUserDefaultLocaleName(buf.as_mut_ptr(), buf.len() as i32) };
-        if n > 1 {
-            return from_code(&String::from_utf16_lossy(&buf[..n as usize - 1]));
-        }
+    if let Some(l) = cpuzeez_platform::os::user_locale() {
+        return from_code(&l);
     }
     #[cfg(target_os = "macos")]
     if let Some(l) = crate::os::cmd("defaults", &["read", "-g", "AppleLocale"]) {

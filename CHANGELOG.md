@@ -7,6 +7,33 @@ generated from its section below.
 
 ## [Unreleased]
 
+Hardening: tests, security, accessibility, installers and the leftovers of ZeeZ Live. (Becomes `1.0.0-beta.8`.)
+
+### Added
+
+- **Update channels.** *Settings ▸ Updates ▸ Update channel*: **Stable** (releases only), **Beta** (also betas and release candidates) or **Alpha** (everything). The default follows the build you run: a beta is told about newer betas. The startup check, *About ▸ Check for updates* and `cpuzeez -checkupdate[=stable|beta|alpha]` use it. The check now reads the releases list instead of `/releases/latest`, which GitHub keeps pre-releases out of. A *Beta report* issue template is included.
+- **Throttling pills** in the overlay and mini monitors (a new widget kind, in the *Benchmark* and *Overclocker* styles; the layout editor picks CPU, GPU or both): one pill per throttle that is on, with a warning icon besides the colour, or a quiet "no throttling".
+- **Overlay and mini monitors per monitor.** The overlay goes on the monitor the game is on (or the one you choose in *Position ▸ Monitor*) and dropping it on another monitor moves it there. Mini monitors snap to the edges of the monitor they are on. (Windows lists the monitors; elsewhere the screen is the one the window reports, as before.)
+- **A real outline on overlay text**: the glyphs are stroked, not drawn on a dark plate.
+- **Wayland global shortcuts** through the desktop's GlobalShortcuts portal ([ADR 0015](docs/adr/0015-wayland-shortcuts-through-the-portal.md)): the five ZeeZ Live shortcuts are asked of the desktop, which shows them and lets you pick the keys. Where there is no portal the card says so and shortcuts work while CpuZeeZ has focus. The exchange with a real portal is not tested in CI (no Wayland desktop there).
+- **Linux refresh rate through KMS**: current and best refresh, monitor names (from the EDID) and the connector, without root. V-Sync detection and *Build health* now see the refresh rate on Linux.
+- **Accessibility**: AA contrast for text in both themes and 3:1 for chart colours (several colours were darkened), icons with every warning mark, a visible keyboard focus, names and values for painted widgets, charts and bars, and pages that hold together from 75% to 200% scale. Checked by tests ([docs/accessibility.md](docs/accessibility.md)).
+- **Security**: a [threat model](docs/security/threat-model.md), [SECURITY.md](SECURITY.md), five more fuzz targets (11 in all), deterministic robustness tests for every parser and the detector, GitHub Actions pinned by commit with read-only tokens, Dependabot.
+- **Soak test** (`--features soak`, `soak.py --gui`): a synthetic game drives the overlay, capture, detector and a tour of every page for hours while memory, handles and threads are checked ([docs/testing/soak.md](docs/testing/soak.md)). Not part of any release.
+- **Installer checks in CI**: install without the optional driver, clean removal (folder, shortcut, PATH entry; your data stays), and upgrade through **every published MSI** to the current build.
+- [docs/audit/](docs/audit/README.md): a guide for whoever audits the project; [docs/performance.md](docs/performance.md): the P6 budget and what is measured.
+
+### Fixed
+
+- Found by the new tests: a frame-time histogram could overflow on absurd values; building a session's windows was quadratic in its length and allocated by the timestamp's size (a corrupt `session.json` could hang the app).
+- Found by the scale test: the *System* page header ran the title into *Run new task* at large text sizes; the Users session row overlapped at 150%.
+- `release.yml` had two `with:` keys on one step after the actions were pinned, which GitHub refuses as a whole: no tag would have built a release. A CI check now looks for it.
+- `unsafe` is gone from the GUI (`forbid(unsafe_code)`): its two OS calls moved to `cpuzeez_platform::os`.
+
+### Changed
+
+- The ROADMAP marks every S0 row with its outcome, and the places where a row is only partly met.
+
 ## [1.0.0-beta.7] - 2026-11-06
 
 The bottleneck detector: what limits your FPS, measured, with the evidence.

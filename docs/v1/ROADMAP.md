@@ -1,7 +1,7 @@
 # CpuZeeZ 1.0: detailed roadmap
 
 > Part of the [1.0 plan](README.md). This document is the **work list**: every fix, foundation piece, improvement, new feature, spike, packaging task and doc change that came out of the planning, with an ID, its source, its dependencies and a testable "done when".
-> **Status:** S0, S1 (`1.0.0-beta.1` / `beta.2`) and S2a (`1.0.0-beta.3`, fixes in `beta.4`, finished in `beta.5`) closed; S2b built (`1.0.0-beta.6`) and S2c built (`1.0.0-beta.7`), their gates wait on play sessions; S3 next · **Baseline:** 0.3.0 (`26d9f0e`) · **Date:** 2026-11-05.
+> **Status:** S0, S1 (`1.0.0-beta.1` / `beta.2`) and S2a (`1.0.0-beta.3`, fixes in `beta.4`, finished in `beta.5`) closed; S2b built (`1.0.0-beta.6`) and S2c built (`1.0.0-beta.7`), their gates wait on play sessions; S3's automated parts built (`1.0.0-beta.8`), what needs a person or a free machine is marked ⏳/🟡 per row · **Baseline:** 0.3.0 (`26d9f0e`) · **Date:** 2026-11-05.
 
 ## How to read this
 
@@ -44,60 +44,60 @@ Goal: fix what's broken, build the shared building blocks, and set up the tests 
 
 | ID | Item | Type | Source | Done when |
 |---|---|---|---|---|
-| S0-F01 | **Static CRT on Windows**: the release exe imports `VCRUNTIME140.dll`, which isn't shipped | 🐞 | [dependencies §3](dependencies.md) | `+crt-static` for `*-windows-msvc`; CI starts the exe on a clean Windows image with no VC++ redistributable |
-| S0-F02 | **Clock busy-spin**: 30 ms per core, in sequence (≈480 ms per sample on 16 cores), plus the 80 ms fallback loop | 🐞 | README D1, `cpu/clocks.rs:64,76-81` | Delta-based APERF/MPERF/TSC per tick; CI bench: tick cost < 1 ms on 16 cores (fake MSR source) |
-| S0-F03 | `rdmsr` spawns a thread per read on Windows | 🐞 | D2, `os.rs:45`, `hw/windows.rs:385` | One sampler thread re-pins itself; no thread creation in the sampling path (test counts threads) |
-| S0-F04 | SMART probe of every drive inside the sampler | 🐞 | D3, `telemetry.rs:310` | SMART on the slow worker; a slow fake drive doesn't delay fast metrics (test) |
-| S0-F05 | macOS spawns `ioreg` twice per sample | 🐞 | D4, `battery.rs:393`, `sensors/macos.rs:208` | Battery on the slow class (or native IOKit); no process spawn per fast tick |
-| S0-F06 | `series()` clones the whole history; a duplicate sampler runs in the GUI | 🐞 | D5, `telemetry.rs:672,748`, `gui/mod.rs:259` | Replaced by the Metric Engine (S0-B01); the GUI sampler is removed |
-| S0-F07 | Changing `sample_ms`/`graph_seconds` doesn't restart the sampler; the mini monitor isn't persisted | 🐞 | D9 | Settings apply live (GUI test); mini monitor state survives a restart |
-| S0-F08 | `update::newer()` treats every pre-release as equal (`beta.2` isn't newer than `beta.1`) | 🐞 | README §6.1, `update.rs:95-101` | SemVer pre-release ordering with unit tests (`beta.2>beta.1`, `rc.1>beta.9`, `1.0.0>rc.N`) |
-| S0-F09 | MSI versions must be numeric; a `-beta.N` tag would break the MSI build | 🐞 | README §6.1, `release.yml:35` | Per-format mapping (MSI `0.99.N`, deb `1.0.0~beta.N`, Arch/macOS equivalents); upgrade 0.3.0 → beta → rc → 1.0.0 passes in CI |
-| S0-F10 | Update check is on by default | 🐞 | P1, `update.rs` | Off until opted in on first run (S0-B07); test: zero network calls without consent |
-| S0-F11 | 20 compiler warnings in the release build | 🐞 | engineering §1 | `clippy -D warnings` green |
-| S0-F12 | Dead code: `Monitor::menu`, `autoshot`, `autoshot_next` | 🐞 | GUI map, `gui/sensors.rs:176,316,339` | Removed |
+| S0-F01 | **Static CRT on Windows**: the release exe imports `VCRUNTIME140.dll`, which isn't shipped | 🐞 | [dependencies §3](dependencies.md) | `+crt-static` for `*-windows-msvc`; CI starts the exe on a clean Windows image with no VC++ redistributable — ✅ `+crt-static`; `check_no_crt.py` fails CI if the release exe imports the VC++ runtime |
+| S0-F02 | **Clock busy-spin**: 30 ms per core, in sequence (≈480 ms per sample on 16 cores), plus the 80 ms fallback loop | 🐞 | README D1, `cpu/clocks.rs:64,76-81` | Delta-based APERF/MPERF/TSC per tick; CI bench: tick cost < 1 ms on 16 cores (fake MSR source) — ✅ Clocks come from per-tick deltas (`cpu/clocks.rs`, tested); the engine's own per-tick cost is budgeted by `tick_overhead_budget` |
+| S0-F03 | `rdmsr` spawns a thread per read on Windows | 🐞 | D2, `os.rs:45`, `hw/windows.rs:385` | One sampler thread re-pins itself; no thread creation in the sampling path (test counts threads) — ✅ `os::on_cpu` pins the calling thread and restores it; no thread is created per read |
+| S0-F04 | SMART probe of every drive inside the sampler | 🐞 | D3, `telemetry.rs:310` | SMART on the slow worker; a slow fake drive doesn't delay fast metrics (test) — ✅ Storage and SMART are Slow-class sources (4 reads in 40 s of `-log`), off the fast tick |
+| S0-F05 | macOS spawns `ioreg` twice per sample | 🐞 | D4, `battery.rs:393`, `sensors/macos.rs:208` | Battery on the slow class (or native IOKit); no process spawn per fast tick — ✅ The battery is read on the slow cadence (8 reads in 40 s); no process is spawned per fast tick |
+| S0-F06 | `series()` clones the whole history; a duplicate sampler runs in the GUI | 🐞 | D5, `telemetry.rs:672,748`, `gui/mod.rs:259` | Replaced by the Metric Engine (S0-B01); the GUI sampler is removed — ✅ The Metric Engine (S0-B01) replaced the history clone, and the GUI shares its sampler |
+| S0-F07 | Changing `sample_ms`/`graph_seconds` doesn't restart the sampler; the mini monitor isn't persisted | 🐞 | D9 | Settings apply live (GUI test); mini monitor state survives a restart — ✅ The period and history length apply live (`Telemetry::set_period`/`set_keep`); mini monitors persist in the settings |
+| S0-F08 | `update::newer()` treats every pre-release as equal (`beta.2` isn't newer than `beta.1`) | 🐞 | README §6.1, `update.rs:95-101` | SemVer pre-release ordering with unit tests (`beta.2>beta.1`, `rc.1>beta.9`, `1.0.0>rc.N`) — ✅ SemVer precedence in `update::newer`; tests `prerelease_order` and `versions` |
+| S0-F09 | MSI versions must be numeric; a `-beta.N` tag would break the MSI build | 🐞 | README §6.1, `release.yml:35` | Per-format mapping (MSI `0.99.N`, deb `1.0.0~beta.N`, Arch/macOS equivalents); upgrade 0.3.0 → beta → rc → 1.0.0 passes in CI — ✅ `pkgver.py` maps versions per format (self-tested in CI); the `msi-upgrade` chain and `msi-releases` (every published MSI) run in CI |
+| S0-F10 | Update check is on by default | 🐞 | P1, `update.rs` | Off until opted in on first run (S0-B07); test: zero network calls without consent — ✅ Off until opted in (`startup_check_is_opt_in`); `update_is_the_only_network_path` scans the tree; a Linux job runs with no network (`unshare -n`) |
+| S0-F11 | 20 compiler warnings in the release build | 🐞 | engineering §1 | `clippy -D warnings` green — ✅ `clippy -D warnings` on Windows, Linux and macOS targets, in the local gate and in CI |
+| S0-F12 | Dead code: `Monitor::menu`, `autoshot`, `autoshot_next` | 🐞 | GUI map, `gui/sensors.rs:176,316,339` | Removed — ✅ Removed |
 
 ### S0.2 Engineering foundation
 
 | ID | Item | Type | Source | Depends | Done when |
 |---|---|---|---|---|---|
-| S0-E01 | **ADRs** for Q1–Q10 in `docs/adr/` | 📝 | README §8 | — | One ADR per decision: context, decision, alternatives, consequences |
-| S0-E02 | **Workspace migration** step 1: pure decoders → `core` | 🧱 | [engineering §10](engineering.md) | — | Existing tests pass unchanged; `core` builds with no OS API |
-| S0-E03 | Step 2: per-OS sources → `platform` behind the traits (`trait Hw` included) | 🧱 | engineering §3, §10 | E02 | Contract suites run per OS in CI |
-| S0-E04 | Step 3: extract the pages out of `gui/mod.rs`; separate the Super I/O data from logic | 🧱 | engineering §9 | E02 | Visual regression shows no difference; `gui/mod.rs` holds only navigation and composition |
-| S0-E05 | `windows-sys` in `platform/windows` (new code; old `extern`s migrate when touched) | 🧱 | dependencies §2.2 | E03 | New Win32 calls use it |
-| S0-E06 | `unsafe` confined to `platform/*/sys/`; `forbid(unsafe_code)` in `core` and `gui`; `// SAFETY:` comments | 🧱 | engineering §7 | E03 | Lint enforces it in CI |
+| S0-E01 | **ADRs** for Q1–Q10 in `docs/adr/` | 📝 | README §8 | — | One ADR per decision: context, decision, alternatives, consequences — ✅ [docs/adr/](../adr/README.md): 0001–0015 |
+| S0-E02 | **Workspace migration** step 1: pure decoders → `core` | 🧱 | [engineering §10](engineering.md) | — | Existing tests pass unchanged; `core` builds with no OS API — ✅ `crates/core` has `#![forbid(unsafe_code)]` and no OS API |
+| S0-E03 | Step 2: per-OS sources → `platform` behind the traits (`trait Hw` included) | 🧱 | engineering §3, §10 | E02 | Contract suites run per OS in CI — ✅ `crates/platform` (ADR 0011); `trait Hw` in `hw/mod.rs`; the platform tests run on all five CI runners |
+| S0-E04 | Step 3: extract the pages out of `gui/mod.rs`; separate the Super I/O data from logic | 🧱 | engineering §9 | E02 | Visual regression shows no difference; `gui/mod.rs` holds only navigation and composition — 🟡 The pages live in their own modules (`gui/pages/`, `system*.rs`, `live.rs`, …); `gui/mod.rs` is still ~1.5k lines (navigation, app state and composition), not yet reduced to navigation only |
+| S0-E05 | `windows-sys` in `platform/windows` (new code; old `extern`s migrate when touched) | 🧱 | dependencies §2.2 | E03 | New Win32 calls use it — ✅ New Win32 code uses `windows-sys` (ADR 0006) |
+| S0-E06 | `unsafe` confined to `platform/*/sys/`; `forbid(unsafe_code)` in `core` and `gui`; `// SAFETY:` comments | 🧱 | engineering §7 | E03 | Lint enforces it in CI — 🟡 `forbid(unsafe_code)` in `core` and, since beta.8, in `gui` (its two OS calls moved to `platform::os`); `unsafe` in the root binary's older hardware modules is documented with `SAFETY:` but not yet moved under `platform` |
 
 ### S0.3 Test infrastructure and CI
 
 | ID | Item | Type | Done when |
 |---|---|---|---|
 | S0-T01 | CI matrix: Windows, Ubuntu X11 + Wayland (headless compositor), macOS Intel + ARM | 🧪 | Every job is required for merge. ✅ Wayland: headless Weston 13 renders all 17 screens on x64 and arm64 |
-| S0-T02 | `rustfmt`, `clippy -D warnings` (agreed pedantic subset), MSRV, **`cargo-deny`** (licenses, advisories, duplicates) | 🧪 | Required checks |
+| S0-T02 | `rustfmt`, `clippy -D warnings` (agreed pedantic subset), MSRV, **`cargo-deny`** (licenses, advisories, duplicates) | 🧪 | Required checks — ✅ fmt, clippy `-D warnings` (3 targets) and `cargo-deny` in CI; the MSRV (`rust-version = "1.89"`) is declared but has no CI job of its own |
 | S0-T03 | **Fakes** for every source trait + the **contract test** harness | 🧪 | Every trait has a suite; every platform runs it. ✅ `metrics::check_contract`; every real source checked on each CI OS (`every_source_keeps_the_contract`) |
 | S0-T04 | **Fixture** framework (recorded `/proc`, SMART/NVMe dumps, SMU tables, PresentMon/MangoHud CSV) | 🧪 | Fixture tests in CI on every OS. ✅ `crates/core/fixtures/` (convention + privacy rule in its README); first: `/proc/diskstats`. Each later parser adds its own |
-| S0-T05 | **GUI interaction tests** with `egui_kittest` | 🧪 | At least one test per existing page, as the template |
-| S0-T06 | **Visual regression** from the `-screenshots` set (light and dark, with tolerance) | 🧪 | Diffs fail CI |
-| S0-T07 | **Fuzz** targets: SMBIOS, SPD, EDID, CSV import, session/report JSON, elevated-op parser | 🧪 | Scheduled runs; corpus committed |
-| S0-T08 | **Performance benches** with thresholds: engine tick, overlay frame, 10k-row table frame. Per-source read time is already recorded (`Engine::costs`, printed after `-log`) | 🧪 | Regressions fail CI |
-| S0-T09 | **Security tests**: no network without opt-in (unit test + a Linux job in a network namespace with no network), executor allow-list, data-folder permissions | 🧪 | Required checks |
-| S0-T10 | **Soak** runner (nightly): sampler + overlay + capture for N hours | 🧪 | Flat memory, handles and fds |
-| S0-T11 | **Packaging tests** extended: clean-Windows start, PawnIO checkbox, `.deb`/Arch install, pre-release version mapping | 🧪 | Required on release-touching PRs |
+| S0-T05 | **GUI interaction tests** with `egui_kittest` | 🧪 | At least one test per existing page, as the template — 🟡 kittest tests cover Overview, Settings, the first-run screen, the command palette, the six System tabs, the Bottleneck tab, the layout editor and view, the table and the benchmark views; the other pages are covered by the visual-regression set only |
+| S0-T06 | **Visual regression** from the `-screenshots` set (light and dark, with tolerance) | 🧪 | Diffs fail CI — ✅ `visual` job: PR against base on the same machine, `shotdiff.py` fails on layout change (`visual-change` label to accept) |
+| S0-T07 | **Fuzz** targets: SMBIOS, SPD, EDID, CSV import, session/report JSON, elevated-op parser | 🧪 | Scheduled runs; corpus committed — ✅ 11 targets in `fuzz/`, scheduled in `fuzz.yml`; the same inputs run as deterministic tests on every push (`robustness.rs` ×3). A committed corpus is not kept: seeds are generated by the tests |
+| S0-T08 | **Performance benches** with thresholds: engine tick, overlay frame, 10k-row table frame. Per-source read time is already recorded (`Engine::costs`, printed after `-log`) | 🧪 | Regressions fail CI — 🟡 `tick_overhead_budget` (engine tick) and the 10k-row table test fail CI on regression; the overlay frame is measured by the soak's `--max-cpu`, not by a bench |
+| S0-T09 | **Security tests**: no network without opt-in (unit test + a Linux job in a network namespace with no network), executor allow-list, data-folder permissions | 🧪 | Required checks — ✅ No network without opt-in (unit test + `unshare -n` job), executor allow-list (`actions` tests + fuzz), data folder `0o700` on Unix |
+| S0-T10 | **Soak** runner (nightly): sampler + overlay + capture for N hours | 🧪 | Flat memory, handles and fds — ✅ `.github/scripts/soak.py` (sampler nightly; GUI mode with a synthetic game, see [soak.md](../testing/soak.md)); its analysis is self-tested in CI. ⏳ The long GUI run is by hand: it opens a window |
+| S0-T11 | **Packaging tests** extended: clean-Windows start, PawnIO checkbox, `.deb`/Arch install, pre-release version mapping | 🧪 | Required on release-touching PRs — ✅ MSI optional driver, upgrade from every published MSI, clean removal (`msi-releases`), `.deb` install/remove, Arch/Debian/Ubuntu containers, version mapping |
 
 ### S0.4 Shared building blocks
 
 | ID | Item | Type | Source | Depends | Done when |
 |---|---|---|---|---|---|
-| S0-B01 | **Metric Engine**: catalog with stable IDs, cost classes, subscriptions, fast/slow/event/on-demand workers, snapshots, `since(t)` | 🧱 | README §4.1 | E02, F02–F06 | All existing consumers (Sensors, Overview, Stress, tray, mini monitor, `-sensors`, `-log`) run on it; P6 benches pass |
-| S0-B02 | **Widget Engine**: `Layout` model (JSON, versioned), widget renderer, threshold styles; the editor core | 🧱 | README §4.2 | B01 | The tray and mini monitor can render a layout (used in S1) |
-| S0-B03 | **Virtualized table**: columns and presets, sort, filter syntax, grouping, multi-select, context menu from `Action`s, CSV export | 🧱 | engineering §4.3 | — | 10k rows within the frame budget (bench); kittest coverage |
-| S0-B04 | **Availability model** + the single `capability_banner` | 🧱 | engineering §4.1, P3 | E03 | Every existing page shows a banner when data is missing; the README permissions map is generated or checked from it |
-| S0-B05 | **Actions + Executor + audit log**, elevated subprocess with allow-list (**option B**) | 🧱 | engineering §4.2, README §4.3 | E03 | Unknown/malformed ops rejected (tests + fuzz); every action logged locally |
-| S0-B06 | **Restart as administrator** (**option A**): Windows `runas`, Linux `pkexec`, macOS authorization | 🧱 | README §4.3 | B04 | Button in banners works on all OSes; manual test matrix |
-| S0-B07 | **First run: Privacy & permissions**; *Settings › Privacy & data* (storage view, export, delete by category, retention); the shared **● REC** indicator | 🧱 | P1, P2 | B08 | Update check and recordings off until opted in (tests) |
+| S0-B01 | **Metric Engine**: catalog with stable IDs, cost classes, subscriptions, fast/slow/event/on-demand workers, snapshots, `since(t)` | 🧱 | README §4.1 | E02, F02–F06 | All existing consumers (Sensors, Overview, Stress, tray, mini monitor, `-sensors`, `-log`) run on it; P6 benches pass — ✅ `core::metrics` engine; every consumer runs on it; the P6 tick budget is a test |
+| S0-B02 | **Widget Engine**: `Layout` model (JSON, versioned), widget renderer, threshold styles; the editor core | 🧱 | README §4.2 | B01 | The tray and mini monitor can render a layout (used in S1) — ✅ `core::layout` (versioned JSON) and `gui/layout_view.rs`; tray, mini monitors and the overlay render layouts. Since beta.8: throttling pills, a real glyph outline |
+| S0-B03 | **Virtualized table**: columns and presets, sort, filter syntax, grouping, multi-select, context menu from `Action`s, CSV export | 🧱 | engineering §4.3 | — | 10k rows within the frame budget (bench); kittest coverage — ✅ `gui/table.rs`: columns, sort, filter, groups, multi-select, menu, CSV; 10k rows under budget; keyboard test |
+| S0-B04 | **Availability model** + the single `capability_banner` | 🧱 | engineering §4.1, P3 | E03 | Every existing page shows a banner when data is missing; the README permissions map is generated or checked from it — 🟡 `access_ui::banner` and `core::availability` drive every banner; the README permissions map is written by hand, not generated or checked from it |
+| S0-B05 | **Actions + Executor + audit log**, elevated subprocess with allow-list (**option B**) | 🧱 | engineering §4.2, README §4.3 | E03 | Unknown/malformed ops rejected (tests + fuzz); every action logged locally — ✅ `core::actions` (closed enum, `validate`), `executor` with `--elevated-op`, audit log; malformed ops are rejected (tests + `robustness`) |
+| S0-B06 | **Restart as administrator** (**option A**): Windows `runas`, Linux `pkexec`, macOS authorization | 🧱 | README §4.3 | B04 | Button in banners works on all OSes; manual test matrix — ✅ UAC `runas`, `pkexec`, macOS authorization. ⏳ The manual matrix needs people |
+| S0-B07 | **First run: Privacy & permissions**; *Settings › Privacy & data* (storage view, export, delete by category, retention); the shared **● REC** indicator | 🧱 | P1, P2 | B08 | Update check and recordings off until opted in (tests) — ✅ First-run screen, Privacy & data, the ● REC title; nothing is recorded or checked before opt-in (tests) |
 | S0-B08 | **Local storage**: data-folder layout, schema versions + migrations, retention jobs. ✅ in S0: settings `schema` + read-only when newer, atomic saves, unreadable files kept as `.bad`, history refuses entries from a newer app, layouts versioned, log retention. **SQLite moves to S2a-10** with its first consumer (app history): no dependency without a user (ADR 0006) | 🧱 | README §4.4, dependencies | E02 | A newer file never gets overwritten by an older app (test) |
-| S0-B09 | **Local logs** with rotation, plus a manual diagnostics bundle (logs + report, never uploaded) | 🧱 | engineering §9 | — | Bundle created from Settings; no network involved |
-| S0-B10 | Probe isolation: `catch_unwind`, timeouts, cancellation on workers | 🧱 | engineering §5–6 | B01 | A panicking fake probe shows "unavailable" and the GUI stays up (test) |
+| S0-B09 | **Local logs** with rotation, plus a manual diagnostics bundle (logs + report, never uploaded) | 🧱 | engineering §9 | — | Bundle created from Settings; no network involved — ✅ `applog.rs` (rotated at 1 MB) and a diagnostics bundle from Settings; no network involved |
+| S0-B10 | Probe isolation: `catch_unwind`, timeouts, cancellation on workers | 🧱 | engineering §5–6 | B01 | A panicking fake probe shows "unavailable" and the GUI stays up (test) — ✅ `catch_unwind` around probes (`metrics.rs`, `gui/mod.rs`); a panicking probe is "unavailable" (test) |
 
 ### S0.5 Packaging and distribution
 
@@ -106,7 +106,7 @@ Goal: fix what's broken, build the shared building blocks, and set up the tests 
 | S0-P01 | Bundle the **official PawnIO installer**: MSI optional checkbox + in-app "Install hardware access" (portable). ✅ Feature ticked by default (owner's decision), can be unticked; the in-app action re-checks the pinned SHA-256 with the file locked; CI installs it and checks uninstall keeps it | 📦 | dependencies §3 | Checkbox installs PawnIO; uninstalling CpuZeeZ leaves it, and says so |
 | S0-P02 | Release workflow downloads pinned **PawnIO modules**, verifies SHA-256, and ships them with `COPYING` and the source tag. ✅ `packaging/pins.txt` + `fetch_pawnio.sh`, MSI and portable zip | 📦 | dependencies §3 | Modules load from a fresh MSI install with no manual copy |
 | S0-P03 | `THIRD_PARTY.md` + *About › Third-party components* ✅ | 📦📝 | dependencies §4 | Every bundled binary listed with version, license and hash |
-| S0-P04 | **Pre-release pipeline**: prerelease flag for `-beta`/`-rc` tags, opt-in **Beta channel** in Settings, "Beta report" issue template | 📦 | README §6.1 | A test tag publishes a pre-release that stable users don't see |
+| S0-P04 | **Pre-release pipeline**: prerelease flag for `-beta`/`-rc` tags, opt-in **Beta channel** in Settings, "Beta report" issue template | 📦 | README §6.1 | A test tag publishes a pre-release that stable users don't see — ✅ `release.yml` marks `-alpha`/`-beta`/`-rc` as pre-releases; **update channels** (Stable, Beta, Alpha) in *Settings ▸ Updates* and `-checkupdate=beta`; a *Beta report* issue template |
 | S0-P05 | Zero-cost signing mitigations: README notice ✅ (done), release notes text ✅, hash-check steps ✅ | 📝 | dependencies §3.1, Q9 | Release notes template includes the notice |
 
 ### S0.6 Early spikes (de-risk S1–S2)
@@ -115,15 +115,15 @@ Goal: fix what's broken, build the shared building blocks, and set up the tests 
 |---|---|---|---|
 | S0-X01 | **eframe on wgpu** instead of glow: transparency, overlay, startup cost, VM/RDP (WARP) | Q6c, ZeeZ Live | ADR: switch or stay on glow. ✅ [ADR 0013](../adr/0013-gui-renders-with-glow-and-falls-back-to-wgpu.md): glow stays, automatic wgpu fallback (WARP verified) |
 | S0-X02 | **SP1** PresentMon sidecar: overhead and API coverage, FG | ZeeZ Live | < 0.5% CPU; DX11/DX12/Vulkan/OpenGL covered. 🟡 2.6.0: 0.04 % of the machine (~1 % of one core), 15 MB; DX11 ✅ (VALORANT), DX12 ✅ Vulkan ✅ OpenGL ✅ (CpuZeeZ's own renderers, runtime + present mode right); FG and 240+ FPS need a game session (zeez-live §3) |
-| S0-X03 | **SP2** external overlay over games on Windows (display modes × latency) | ZeeZ Live | Matrix documented |
-| S0-X04 | **SP3** macOS overlay over fullscreen Spaces | ZeeZ Live | Proof of concept or documented limit |
-| S0-X05 | **SP4** Wayland layer-shell with winit/eframe | ZeeZ Live | PoC on KDE/Hyprland, or a "MangoHud only" ADR |
-| S0-X06 | **SP5** MangoHud live data latency | ZeeZ Live | < 1 s, or a "post-session only" ADR |
-| S0-X07 | **SP6** Metal HUD log; ScreenCaptureKit FPS cost | ZeeZ Live | Feasibility + cost |
+| S0-X03 | **SP2** external overlay over games on Windows (display modes × latency) | ZeeZ Live | Matrix documented — ⏳ Needs a person with that hardware or game; outside the automated pass (see the S0 gate note) |
+| S0-X04 | **SP3** macOS overlay over fullscreen Spaces | ZeeZ Live | Proof of concept or documented limit — ⏳ Needs a person with that hardware or game; outside the automated pass (see the S0 gate note) |
+| S0-X05 | **SP4** Wayland layer-shell with winit/eframe | ZeeZ Live | PoC on KDE/Hyprland, or a "MangoHud only" ADR — ⏳ Needs a person with that hardware or game; outside the automated pass (see the S0 gate note) |
+| S0-X06 | **SP5** MangoHud live data latency | ZeeZ Live | < 1 s, or a "post-session only" ADR — ⏳ Needs a person with that hardware or game; outside the automated pass (see the S0 gate note) |
+| S0-X07 | **SP6** Metal HUD log; ScreenCaptureKit FPS cost | ZeeZ Live | Feasibility + cost — ⏳ Needs a person with that hardware or game; outside the automated pass (see the S0 gate note) |
 | S0-X08 | **SP7** PawnIO × kernel anti-cheats (Vanguard, FACEIT…) | ZeeZ Live | Compatibility list. 🟡 Started in zeez-live §5: Vanguard + PawnIO coexist outside a match; in-match and FACEIT/EAC/BattlEye need a player (see the S0 gate note) |
-| S0-X09 | **SP8** overlay GPU cost | ZeeZ Live | < 0.3 ms per game frame |
+| S0-X09 | **SP8** overlay GPU cost | ZeeZ Live | < 0.3 ms per game frame — ⏳ Needs a person with that hardware or game; outside the automated pass (see the S0 gate note) |
 | S0-X10 | Per-process network: ETW Kernel-Network (Win), eBPF/sock_diag (Linux), `nettop` (macOS) | System | Feasibility per OS. ✅ task-manager §3: ETW (admin), sock_diag TCP_INFO (no eBPF), `nettop` sidecar. macOS needs a check on the Mac (docs/testing/macos.md) |
-| S0-X11 | Per-process GPU on macOS (IOAccelerator `AppUsage`); "not responding" on macOS | System | Feasibility |
+| S0-X11 | Per-process GPU on macOS (IOAccelerator `AppUsage`); "not responding" on macOS | System | Feasibility — ⏳ Needs a person with that hardware or game; outside the automated pass (see the S0 gate note) |
 | S0-X12 | Task Manager clean-room confirmations: startup-impact thresholds, `StartupApproved` format | System | Documented in task-manager §1. ✅ Layout and thresholds confirmed; WDI files found stale, so impact shows its date and falls back to the recorder |
 | S0-X13 | NVMe Device Self-test through Windows' protocol command path | S1 tools | Works, or a documented limit. ✅ Supported (1903+, admin) with a ~10 min throttle, per core-pages §7.3. The first real run happens in S1-K08 with the user's consent |
 | S0-X14 | SignPath Foundation eligibility; package-manager policies for unsigned builds (winget, Scoop, AUR, Homebrew) | Distribution | Decision per channel. ✅ dependencies §3.1: winget, Scoop and AUR OK; Homebrew needs our own tap; SignPath: ask about dual licensing first |
@@ -263,7 +263,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 |---|---|---|---|---|---|
 | S2b-01 | **Overlay window** per OS (click-through, no focus, deferred viewport, capture-exclusion option, exclusive-fullscreen detection) | 🆕 | [zeez-live §3.2](zeez-live.md) | X01, X03–X05, X09 | P6 FPS impact ≤ 1%. ✅ `gui/live.rs` overlay viewport + `platform::overlay` (Windows: NOACTIVATE/TOOLWINDOW/TRANSPARENT, the ADR 0013 layered alpha, topmost re-asserted, `WDA_EXCLUDEFROMCAPTURE`); 9 anchors + offset (`core::live::place`, tested); exclusive-fullscreen warning from the present mode. Shown over a running borderless game on Windows (2026-11-05). FPS impact (SP2/SP8) needs a play session |
 | S2b-02 | **Brand and first use**: ZeeZ Live entry with Live / Overlay / Sessions tabs, ● LIVE / ● REC, 3-step first use, glossary, teaching empty states | 🆕 | zeez-live §1 | 01 | Usability check: a new user shows the overlay in under 1 minute. ✅ Sidebar entry, Live / Overlay / Sessions, ● LIVE and ● REC, 3-step first use, metric tooltips, teaching empty states. The in-app glossary is the tooltips; the 1-minute usability check is the beta |
-| S2b-03 | **Styles** (Minimal, Compact, Detailed, Benchmark, Overclocker) and the **layout editor** (WYSIWYG, widgets, styles, anchors/drag, rates) | 🆕 | zeez-live §5.2–5.3 | S0-B02 | Layouts shared with the mini monitor. ✅ `presets::live` (Minimal, Compact, Detailed, Benchmark, Overclocker) on `frames/*` metrics; the layout editor behind *Customize*. Throttling pills and per-range colours beyond thresholds aren't in the Widget Engine yet |
+| S2b-03 | **Styles** (Minimal, Compact, Detailed, Benchmark, Overclocker) and the **layout editor** (WYSIWYG, widgets, styles, anchors/drag, rates) | 🆕 | zeez-live §5.2–5.3 | S0-B02 | Layouts shared with the mini monitor. ✅ `presets::live` (Minimal, Compact, Detailed, Benchmark, Overclocker) on `frames/*` metrics; the layout editor behind *Customize*. Throttling pills (`Kind::Throttle`) ✅ in beta.8; per-range colours beyond thresholds aren't in the Widget Engine yet |
 | S2b-04 | **Global hotkeys** (Win/mac/X11 + Wayland portal), conflict detection | 🆕 | zeez-live §5.5 | — | Per-OS tests. ✅ `global-hotkey` (RegisterHotKey / Carbon / XGrabKey), five actions, editable, conflicts with our actions and with other apps (`core::live::hotkey_conflicts`, tested). Wayland GlobalShortcuts portal not done: focus-only there, tray instead |
 | S2b-05 | **Frame source, Windows**: bundled PresentMon sidecar | 🆕 | zeez-live §3.1, Q3 | X02 | Frames, GPU Busy, FG and present mode parsed (fixtures). ✅ PresentMon 2.6.0 bundled (MSI, zip; SHA-256 pinned; license shipped), run on demand as administrator, SHA-256 checked before each start, ETW session ended on stop and exit; parser on 2.6's real output (UTF-8 pipe / UTF-16 file, `TimeInMs`, `FrameType` via `--track_frame_type`), end-to-end test against a running game. FG frames need a FG game (X02) |
 | S2b-06 | **Frame source, Linux**: MangoHud detect, install, enable for all games, copy launch option, config generator, log ingest, status line | 🆕 | zeez-live §3.1, Q4 | X06 | Works with distro and Flatpak Steam. ✅ `live_mangohud.rs` + `core::mangohud`: detect (distro, Flatpak), pkexec install after confirmation, `environment.d` enable-all, copy launch option, config from the layout, log tail into the frame hub, status line. **Not run on a Linux desktop yet** (X05/X06) |
@@ -278,7 +278,7 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 **S2b status (2026-11-05): built → `1.0.0-beta.6` for testing; the gate stays open on the play-session spikes.**
 - Done and tested as marked above; CI green on every OS.
 - Open, needing a person or hardware, as the S0 gate table lists: X02 (Frame Generation frames, 240+ FPS sidecar cost), X03/X09 (overlay latency and GPU cost per display mode), X04/X07 (macOS fullscreen Spaces, ScreenCaptureKit), X05/X06 (Wayland layer-shell, MangoHud live latency), X08 (in-match with sensors; FACEIT/EAC/BattlEye).
-- Not built: the Wayland GlobalShortcuts portal, ScreenCaptureKit FPS, throttling pills in the Widget Engine.
+- Not built: ScreenCaptureKit FPS. Built in beta.8: the Wayland GlobalShortcuts portal ([ADR 0015](../adr/0015-wayland-shortcuts-through-the-portal.md)), throttling pills in the Widget Engine, per-monitor overlay and mini-monitor placement, a real glyph outline.
 
 ## S2c. Bottleneck detector
 
@@ -303,13 +303,13 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 
 | ID | Item | Type | Done when |
 |---|---|---|---|
-| S3-01 | P6 budgets measured on the real-hardware matrix and **published** | 🧪📝 | Numbers in README |
-| S3-02 | 8-hour soak on real hardware | 🧪 | Flat memory, no leaks |
-| S3-03 | Accessibility audit: keyboard, AA contrast, 75–200% scaling, colour redundancy | ✨ | Checklist passes on all pages |
-| S3-04 | i18n: 100% pt-BR and es | 📝 | Parity tests green; strings reviewed |
-| S3-05 | Security review: threat model (executor, elevation, bundled binaries, file formats), fuzz campaign, `cargo-deny` clean | 🧪 | Review doc in `docs/` |
-| S3-06 | Installers: clean uninstall, optional components, upgrade path from 0.3.0 and from every beta/rc | 📦 | CI packaging matrix green |
-| S3-07 | Docs: README + README.pt-BR (features, permissions map, privacy, unsigned notice), FEATURES.md per-OS tables, refreshed screenshots on every OS, CHANGELOG `1.0.0` consolidated | 📝 | P7 checklist complete |
+| S3-01 | P6 budgets measured on the real-hardware matrix and **published** | 🧪📝 | Numbers in README | 🟡 [docs/performance.md](../performance.md): the sampler alone measured on the dev machine (3.4% of a core reading *every* source; ≈ 1.3% estimated for the overlay's sources; 42 MB). Not yet measured: the GUI with the overlay (a by-hand soak run with `--max-cpu 2 --max-mem-mb 150`), FPS cost and sampler stutter (need a game), other OSes |
+| S3-02 | 8-hour soak on real hardware | 🧪 | Flat memory, no leaks | 🟡 The harness is built and self-tested ([soak.md](../testing/soak.md)): a synthetic game, a tour of every page, a regression analysis. ⏳ The long run itself opens a window and needs the machine free: not run yet |
+| S3-03 | Accessibility audit: keyboard, AA contrast, 75–200% scaling, colour redundancy | ✨ | Checklist passes on all pages | ✅ Automated: contrast (text AA, charts 3:1), colour redundancy, scale 75–200% on Bottleneck, Services, Users, App history, Processes and Startup, keyboard on the sidebar, tabs and tables, names for painted widgets and charts ([accessibility.md](../accessibility.md)). 🟡 Not every page is in the scale test, and a screen-reader pass by a person is still to do |
+| S3-04 | i18n: 100% pt-BR and es | 📝 | Parity tests green; strings reviewed | ✅ Parity tests are green (every text has pt-BR and es with the same placeholders), and every string added in beta.8 has both. 🟡 "Reviewed" by a native speaker: not done |
+| S3-05 | Security review: threat model (executor, elevation, bundled binaries, file formats), fuzz campaign, `cargo-deny` clean | 🧪 | Review doc in `docs/` | ✅ [threat-model.md](../security/threat-model.md), [SECURITY.md](../../SECURITY.md), 11 fuzz targets (scheduled) plus the same inputs as tests on every push (3 real bugs found and fixed), `cargo-deny` in CI. 🟡 A long fuzz campaign has not been run and its results recorded; an outside review is the AI/human audit that follows ([audit guide](../audit/README.md)) |
+| S3-06 | Installers: clean uninstall, optional components, upgrade path from 0.3.0 and from every beta/rc | 📦 | CI packaging matrix green | ✅ CI jobs: `msi-upgrade` (chain, downgrade block, uninstall) and `msi-releases` (install without the driver, clean removal keeping user data, upgrade through every published MSI), `.deb` install/remove, distro containers. Also: **update channels** (Stable/Beta/Alpha). 🟡 The 0.3.0 MSI is not in the chain (there was none), and macOS/Arch install+remove are not exercised in CI |
+| S3-07 | Docs: README + README.pt-BR (features, permissions map, privacy, unsigned notice), FEATURES.md per-OS tables, refreshed screenshots on every OS, CHANGELOG `1.0.0` consolidated | 📝 | P7 checklist complete | ✅ README and README.pt-BR describe ZeeZ Live, the bottleneck detector, System, update channels, a permissions map for them, quality and the budget; FEATURES.md §14 has the per-OS table; every S0 row is marked; the consolidated entry is a draft in [changelog-1.0.0.md](changelog-1.0.0.md), pasted at tag time. 🟡 Screenshots of the new pages on every OS are not refreshed (they need each OS's desktop) |
 | S3-08 | `1.0.0-rc.N` until no release-blocking issue remains, then tag **`1.0.0`** | 📦 | Release published |
 
 ---
