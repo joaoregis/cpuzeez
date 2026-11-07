@@ -18,3 +18,4 @@ Short records of decisions and why they were made. The full reasoning lives in [
 | [0012](0012-no-code-injection-ever.md) | No code injection, ever | P4 |
 | [0013](0013-gui-renders-with-glow-and-falls-back-to-wgpu.md) | The GUI renders with glow and falls back to wgpu | Q6c, S0-X01 |
 | [0014](0014-no-hardware-balance-bar-in-1-0.md) | No "hardware balance" bar in 1.0 | S2c-06 |
+| [0015](0015-wayland-shortcuts-through-the-portal.md) | Wayland global shortcuts go through the XDG portal | Sobras |

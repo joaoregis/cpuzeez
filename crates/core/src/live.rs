@@ -122,6 +122,23 @@ impl HotkeyAction {
         }
     }
 
+    /// The shortcut's id for the Wayland GlobalShortcuts portal: stable, so the
+    /// desktop remembers the user's choice of keys across runs.
+    pub fn portal_id(self) -> &'static str {
+        match self {
+            HotkeyAction::ToggleOverlay => "toggle-overlay",
+            HotkeyAction::CycleStyle => "cycle-style",
+            HotkeyAction::Capture => "capture",
+            HotkeyAction::Marker => "marker",
+            HotkeyAction::EditMode => "edit-mode",
+        }
+    }
+
+    /// The action behind a portal shortcut id.
+    pub fn from_portal_id(id: &str) -> Option<HotkeyAction> {
+        HotkeyAction::ALL.into_iter().find(|a| a.portal_id() == id)
+    }
+
     pub fn default_keys(self) -> &'static str {
         match self {
             HotkeyAction::ToggleOverlay => "Ctrl+Shift+O",
@@ -152,6 +169,43 @@ pub fn normalize_keys(k: &str) -> Option<String> {
     mods.dedup();
     let key = key?;
     Some(mods.into_iter().map(str::to_string).chain([key]).collect::<Vec<_>>().join("+"))
+}
+
+/// "Ctrl+Shift+O" in the portal's `preferred_trigger` spelling
+/// (`CTRL+SHIFT+o`): modifiers `CTRL`, `ALT`, `SHIFT`, `LOGO`, then the XKB
+/// keysym name (letters lowercase, `F9` as is, `Insert`, `Prior`…). It is only
+/// a hint: the desktop shows it to the user, who may pick other keys.
+pub fn portal_trigger(keys: &str) -> Option<String> {
+    let norm = normalize_keys(keys)?;
+    let mut parts: Vec<&str> = norm.split('+').collect();
+    let key = parts.pop()?;
+    let sym = match key {
+        "INSERT" => "Insert".to_string(),
+        "DELETE" => "Delete".to_string(),
+        "HOME" => "Home".to_string(),
+        "END" => "End".to_string(),
+        "PAGEUP" => "Prior".to_string(),
+        "PAGEDOWN" => "Next".to_string(),
+        "SPACE" => "space".to_string(),
+        "ESCAPE" | "ESC" => "Escape".to_string(),
+        "TAB" => "Tab".to_string(),
+        "ENTER" | "RETURN" => "Return".to_string(),
+        k if k.len() == 1 => k.to_ascii_lowercase(),
+        k => k.to_string(), // F1..F24 and the rest keep their spelling
+    };
+    let mods = parts.into_iter().map(|m| if m == "SUPER" { "LOGO" } else { m });
+    Some(mods.map(str::to_string).chain([sym]).collect::<Vec<_>>().join("+"))
+}
+
+/// Where the portal answers a request made by the D-Bus peer `unique_name`
+/// (":1.42") with `token`. The reply signal is subscribed to before the call,
+/// so it cannot be missed.
+pub fn portal_request_path(unique_name: &str, token: &str) -> String {
+    format!(
+        "/org/freedesktop/portal/desktop/request/{}/{}",
+        unique_name.trim_start_matches(':').replace('.', "_"),
+        token
+    )
 }
 
 /// Pairs of actions bound to the same shortcut (empty bindings are off).
@@ -272,6 +326,25 @@ impl Default for Overlay {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn portal_triggers_and_ids() {
+        assert_eq!(portal_trigger("Ctrl+Shift+O").as_deref(), Some("CTRL+SHIFT+o"));
+        assert_eq!(portal_trigger("shift + ctrl + F9").as_deref(), Some("CTRL+SHIFT+F9"));
+        assert_eq!(portal_trigger("Super+Alt+Home").as_deref(), Some("ALT+LOGO+Home"));
+        assert_eq!(portal_trigger("Ctrl+PageDown").as_deref(), Some("CTRL+Next"));
+        assert_eq!(portal_trigger("Ctrl+Space").as_deref(), Some("CTRL+space"));
+        assert_eq!(portal_trigger(""), None, "off stays off");
+        assert_eq!(portal_trigger("Ctrl+"), None);
+        for a in HotkeyAction::ALL {
+            assert!(portal_trigger(a.default_keys()).is_some(), "{a:?} has a default trigger");
+            assert_eq!(HotkeyAction::from_portal_id(a.portal_id()), Some(a));
+        }
+        let ids: std::collections::HashSet<_> = HotkeyAction::ALL.iter().map(|a| a.portal_id()).collect();
+        assert_eq!(ids.len(), HotkeyAction::ALL.len(), "ids are unique");
+        assert_eq!(HotkeyAction::from_portal_id("nope"), None);
+        assert_eq!(portal_request_path(":1.42", "cz_1"), "/org/freedesktop/portal/desktop/request/1_42/cz_1");
+    }
+
     use super::*;
 
     #[test]

@@ -42,13 +42,15 @@ tray-icon = { version = "0.24", default-features = false, optional = true }
 # Linux: StatusNotifierItem over D-Bus, pure Rust (zbus + async-io, no system libs).
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
 ksni = { version = "0.3", default-features = false, features = ["blocking", "async-io"], optional = true }
+# The GlobalShortcuts portal on Wayland (ADR 0015). Already in the tree through ksni.
+zbus = { version = "5", default-features = false, features = ["async-io", "blocking-api"], optional = true }
 
 [features]
 default = ["gui"]
 # Test hooks for the long-running soak (docs/testing/soak.md): a synthetic game
 # and an automatic tour of every page. Never in a release.
 soak = []
-gui = ["dep:eframe", "dep:png", "dep:rusqlite", "dep:global-hotkey", "dep:egui-phosphor", "dep:tray-icon", "dep:ksni"]
+gui = ["dep:eframe", "dep:png", "dep:rusqlite", "dep:global-hotkey", "dep:egui-phosphor", "dep:tray-icon", "dep:ksni", "dep:zbus"]
 
 
 [package.metadata.deb]

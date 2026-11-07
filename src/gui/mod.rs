@@ -32,6 +32,8 @@ mod diskbench_view;
 mod drivehealth_view;
 mod gpubench_view;
 mod hotkeys;
+#[cfg(all(unix, not(target_os = "macos")))]
+mod hotkeys_portal;
 mod latency_view;
 mod layout_editor;
 pub mod layout_view;

@@ -775,14 +775,9 @@ impl State {
             ui.label(
                 RichText::new(tr("Empty turns a shortcut off. Example: Ctrl+Alt+F9.")).small().color(p.text_muted),
             );
-            if cfg!(target_os = "linux") {
-                ui.label(
-                    RichText::new(tr(
-                        "On Wayland, shortcuts work only while CpuZeeZ has focus; use the tray menu instead.",
-                    ))
-                    .small()
-                    .color(p.text_muted),
-                );
+            // Wayland: what the desktop's GlobalShortcuts portal says (hotkeys_portal.rs).
+            if let Some(note) = &self.hotkeys.portal_note {
+                ui.label(RichText::new(note).small().color(p.text_muted));
             }
         });
     }
@@ -1279,9 +1274,14 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("off", "desligado"),
     ("Default", "Padrão"),
     ("Empty turns a shortcut off. Example: Ctrl+Alt+F9.", "Vazio desliga o atalho. Exemplo: Ctrl+Alt+F9."),
+    ("Waiting for your desktop to confirm the shortcuts", "Aguardando seu desktop confirmar os atalhos"),
     (
-        "On Wayland, shortcuts work only while CpuZeeZ has focus; use the tray menu instead.",
-        "No Wayland, os atalhos só funcionam com o CpuZeeZ em foco; use o menu da bandeja.",
+        "Your desktop did not accept the shortcuts; choose them in its settings",
+        "Seu desktop não aceitou os atalhos; escolha-os nas configurações dele",
+    ),
+    (
+        "This desktop has no global shortcuts portal; shortcuts work while CpuZeeZ has focus",
+        "Este desktop não tem o portal de atalhos globais; os atalhos funcionam com o CpuZeeZ em foco",
     ),
     ("Show/hide overlay", "Mostrar/ocultar overlay"),
     ("Next style", "Próximo estilo"),
@@ -1494,9 +1494,14 @@ pub const ES: &[(&str, &str)] = &[
     ("off", "desactivado"),
     ("Default", "Predeterminado"),
     ("Empty turns a shortcut off. Example: Ctrl+Alt+F9.", "Vacío desactiva el atajo. Ejemplo: Ctrl+Alt+F9."),
+    ("Waiting for your desktop to confirm the shortcuts", "Esperando que tu escritorio confirme los atajos"),
     (
-        "On Wayland, shortcuts work only while CpuZeeZ has focus; use the tray menu instead.",
-        "En Wayland, los atajos solo funcionan con CpuZeeZ en foco; usa el menú de la bandeja.",
+        "Your desktop did not accept the shortcuts; choose them in its settings",
+        "Tu escritorio no aceptó los atajos; elígelos en sus ajustes",
+    ),
+    (
+        "This desktop has no global shortcuts portal; shortcuts work while CpuZeeZ has focus",
+        "Este escritorio no tiene el portal de atajos globales; los atajos funcionan con CpuZeeZ en foco",
     ),
     ("Show/hide overlay", "Mostrar/ocultar overlay"),
     ("Next style", "Siguiente estilo"),

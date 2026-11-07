@@ -561,6 +561,7 @@ dependencies = [
  "serde_json",
  "tray-icon",
  "winresource",
+ "zbus",
 ]
 
 [[package]]
