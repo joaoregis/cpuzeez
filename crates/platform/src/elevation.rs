@@ -493,7 +493,12 @@ mod tests {
         };
         #[cfg(not(target_os = "linux"))]
         assert_eq!(p.poll(), None, "no marker yet");
+        #[cfg(unix)]
         signal_handoff(marker.to_str().unwrap());
+        #[cfg(not(unix))]
+        // Windows has no handoff flow (signal_handoff is a no-op there by
+        // design); write the marker directly to exercise the waiting side.
+        std::fs::write(&marker, b"ok").unwrap();
         assert_eq!(p.poll(), Some(Outcome::Started));
         assert!(!marker.exists(), "marker cleaned up");
         assert!(!marker.parent().unwrap().exists(), "the handoff directory is reclaimed");
