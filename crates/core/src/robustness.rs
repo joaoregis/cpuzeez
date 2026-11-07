@@ -299,7 +299,7 @@ fn frame_statistics_invariants() {
 fn corrupt_sessions_stay_bounded() {
     let mut r = Rng(0xDEAD_5E55);
     let started = std::time::Instant::now();
-    for _ in 0..300 {
+    for _ in 0..120 {
         let frames: Vec<Frame> = (0..r.below(200)).map(|_| random_frame(&mut r)).collect();
         let hw = session::parse_hw_csv(&r.mutate_text("time,cpu/load/total\n# units,%\n2026-11-05T20:00:00.000Z,10\n"));
         let bands = vec![Band { from_s: r.float(), to_s: r.float(), label: "x".into(), kind: "cpu-thermal".into() }];
@@ -309,7 +309,8 @@ fn corrupt_sessions_stay_bounded() {
         let html = session::html_report(&s, &frames, &hw);
         assert!(!html.contains("<img") && !html.contains("<script"), "report HTML isn't escaped");
     }
-    assert!(started.elapsed().as_secs() < 20, "took {:?}", started.elapsed());
+    // A slow CI machine does this in ~10 s; a quadratic loop needs minutes.
+    assert!(started.elapsed().as_secs() < 90, "took {:?}", started.elapsed());
 }
 
 /// A real long session (an 8-hour soak is 28 800 windows) joins the

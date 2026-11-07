@@ -359,3 +359,42 @@ fn the_processes_tab_holds_together_at_every_scale() {
     };
     at_every_zoom("Processes", make, |ui, (s, snap)| s.page_with_snapshot(ui, snap));
 }
+
+/// Painted charts and bars are named for assistive technology, with their numbers.
+#[test]
+fn charts_and_bars_say_what_they_show() {
+    use egui_kittest::{Harness, kittest::Queryable};
+    let pts: Vec<(f64, f64)> = (0..60).map(|i| (i as f64, 40.0 + i as f64)).collect();
+    let mut h = Harness::new_ui(move |ui| {
+        let lines = [super::plot::Line { label: "CPU", color: egui::Color32::RED, points: &pts }];
+        super::plot::chart(ui, &lines, 60.0, 60.0, 120.0, &|v| format!("{v:.0} °C"));
+    });
+    h.run();
+    let found = h.query_all_by_label_contains("Chart, last 60 s").count();
+    assert_eq!(found, 1, "the chart has a name");
+    assert!(h.query_all_by_label_contains("CPU: 99 °C (min 40 °C, max 99 °C)").count() == 1, "with its numbers");
+}
+
+#[test]
+fn the_startup_tab_holds_together_at_every_scale() {
+    use cpuzeez_core::startup::{BootSummary, Impact, StartupRow};
+    let summary = || {
+        let items = (0..10)
+            .map(|i| StartupRow {
+                id: format!("item{i}"),
+                name: format!("A startup program with a rather long name {i}"),
+                publisher: "Some Publisher, Inc.".into(),
+                enabled: i % 3 != 0,
+                impact: if i % 2 == 0 { Impact::High } else { Impact::Low },
+                command: r"C:\Program Files\Some Publisher\A long folder name\app.exe --background".into(),
+                ..Default::default()
+            })
+            .collect();
+        BootSummary { bios_time_ms: Some(12_400), os_boot_ms: Some(18_000), items, ..Default::default() }
+    };
+    at_every_zoom(
+        "Startup",
+        || (super::system_startup::State::default(), summary()),
+        |ui, (s, sum)| s.show_with_summary(ui, sum),
+    );
+}

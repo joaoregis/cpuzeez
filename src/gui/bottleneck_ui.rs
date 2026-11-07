@@ -518,7 +518,16 @@ pub fn draw_analysis(ui: &mut Ui, a: &Analysis) {
         return;
     }
     // Stacked bar: time per class.
-    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::hover());
+    let (rect, bar) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::hover());
+    bar.widget_info(|| {
+        let shares: Vec<String> =
+            a.share.iter().map(|(c, f)| format!("{} {:.0} %", tr(c.label()), f * 100.0)).collect();
+        egui::WidgetInfo::labeled(
+            egui::WidgetType::ProgressIndicator,
+            true,
+            format!("{}: {}", tr("Time per cause"), shares.join(", ")),
+        )
+    });
     let painter = ui.painter_at(rect);
     let mut x = rect.left();
     for (c, f) in &a.share {
@@ -541,6 +550,24 @@ pub fn draw_analysis(ui: &mut Ui, a: &Analysis) {
     ui.add_space(4.0);
     ui.label(RichText::new(tr("Second by second")).small().color(p.text_secondary));
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 16.0), Sense::hover());
+    resp.widget_info(|| {
+        // One stripe per second; the longest unbroken stretch says more than a colour strip.
+        let mut best = (0usize, None);
+        let mut run = (0usize, None);
+        for c in &a.timeline {
+            run = if run.1 == Some(*c) { (run.0 + 1, run.1) } else { (1, Some(*c)) };
+            if run.0 > best.0 {
+                best = run;
+            }
+        }
+        let longest =
+            best.1.map_or(String::new(), |c| trf("Longest stretch: {} for {} s.", &[&tr(c.label()), &best.0]));
+        egui::WidgetInfo::labeled(
+            egui::WidgetType::Other,
+            true,
+            format!("{}: {} s. {longest}", tr("Second by second"), a.timeline.len()),
+        )
+    });
     let painter = ui.painter_at(rect);
     let w = rect.width() / a.timeline.len() as f32;
     for (i, c) in a.timeline.iter().enumerate() {
@@ -792,6 +819,8 @@ pub const PT_BR: &[(&str, &str)] = &[
     ),
     ("No frames were measured: was a game presenting?", "Nenhum quadro foi medido: havia um jogo apresentando?"),
     ("Second by second", "Segundo a segundo"),
+    ("Time per cause", "Tempo por causa"),
+    ("Longest stretch: {} for {} s.", "Trecho mais longo: {} por {} s."),
     ("Strongest evidence", "Evidências mais fortes"),
     ("What you can do", "O que você pode fazer"),
     ("CPU at its limit (core {})", "CPU no limite (núcleo {})"),
@@ -1037,6 +1066,8 @@ pub const ES: &[(&str, &str)] = &[
     ),
     ("No frames were measured: was a game presenting?", "No se midió ningún fotograma: ¿había un juego presentando?"),
     ("Second by second", "Segundo a segundo"),
+    ("Time per cause", "Tiempo por causa"),
+    ("Longest stretch: {} for {} s.", "Tramo más largo: {} durante {} s."),
     ("Strongest evidence", "Evidencias más fuertes"),
     ("What you can do", "Qué puedes hacer"),
     ("CPU at its limit (core {})", "CPU al límite (núcleo {})"),
@@ -1134,7 +1165,9 @@ mod tests {
         };
         let a = bn::analyze(&vec![w.clone(); 30], &Thresholds::default());
         let h = show(Detector::preview(Some(now(w)), Some(a)));
-        h.get_by_label_contains("GPU 100 %");
+        // The share is in the list and, now, in the bar's accessible name.
+        assert!(h.get_all_by_label_contains("GPU 100 %").count() >= 2);
+        h.get_by_label_contains("Time per cause: GPU 100 %");
         assert!(
             h.get_all_by_label_contains("GPU Busy averaged 97 % of the frame time").count() >= 2,
             "as evidence and as the basis of the advice"
