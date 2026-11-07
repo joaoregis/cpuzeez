@@ -37,3 +37,18 @@ fn network_and_process_text() {
         let _ = crate::proc_net::parse_inet_diag(&r.bytes(400));
     }
 }
+
+/// Any bytes from the kernel's mode query decode, or not, without a panic, and
+/// the rates they give are finite.
+#[test]
+fn display_modes_from_any_bytes() {
+    use crate::display_drm::{best_hz, parse_modeinfo};
+    let mut r = Rng(0xD15_91A7);
+    for _ in 0..N {
+        let n = r.below(200);
+        let Some(m) = parse_modeinfo(&r.bytes(n)) else { continue };
+        assert!(m.hz().is_finite() && m.hz() >= 0.0);
+        let others: Vec<_> = (0..4).filter_map(|_| parse_modeinfo(&r.bytes(80))).collect();
+        let _ = best_hz(&m, &others);
+    }
+}

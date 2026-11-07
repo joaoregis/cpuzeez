@@ -1,7 +1,7 @@
 //! Displays and the power plan, for build health (S1-G02). No privileges.
-//! Windows only for displays (current vs best refresh at the current
-//! resolution, and which adapter drives each); the power plan on Windows and
-//! the CPU governor on Linux.
+//! Displays on Windows (GDI/DXGI) and Linux (KMS, `display_drm.rs`): current
+//! vs best refresh at the current resolution, and which adapter drives each;
+//! the power plan on Windows and the CPU governor on Linux. macOS has none yet.
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Mode {
@@ -202,7 +202,7 @@ mod imp {
 #[cfg(target_os = "linux")]
 mod imp {
     pub fn modes() -> Vec<super::Mode> {
-        Vec::new() // ponytail: DRM modes need the KMS ioctls; add with the Linux display page.
+        crate::display_drm::modes() // KMS query ioctls, no root (display_drm.rs)
     }
 
     pub fn power_saver() -> Option<bool> {
