@@ -432,25 +432,66 @@ fn private_and_ours(dir: &Path) -> Result<(), String> {
 }
 
 /// A base directory our private subdirectory cannot be renamed out of or
-/// replaced in: a real directory (not a symlink) whose owner is root or us,
-/// and which is not writable by others unless it is sticky like /tmp — in a
-/// sticky directory only the entry's owner, the directory's owner or root can
-/// rename or unlink entries, so nobody can swap our subdirectory. Every
-/// ancestor of the base must pass the same check: a base inside a directory
-/// someone else can rename in (e.g. `TMPDIR=/srv/team/tmp` with a
-/// team-writable `/srv/team`) can be swapped wholesale during the polkit
-/// prompt — and a listable 0755 base makes the random directory name
-/// observable, so the replacement can even carry the same name.
+/// replaced in: every directory on the way to it — the base, each ancestor,
+/// and each directory a symlink passes through — must be owned by root or us
+/// and not writable by others unless sticky like /tmp: in a sticky directory
+/// only the entry's owner, the directory's owner or root can rename or unlink
+/// entries, so nobody can swap our subdirectory. Symlink components (macOS
+/// `/tmp` → `/private/tmp`, `/var` → `/private/var`) are followed one
+/// component at a time: a link must itself be root-or-ours and sit in a safe
+/// directory, so nobody can swap the link to redirect the path. A base inside
+/// a directory someone else can rename in (e.g. `TMPDIR=/srv/team/tmp` with a
+/// team-writable `/srv/team`) is rejected: it can be swapped wholesale during
+/// the polkit prompt — and a listable 0755 base makes the random directory
+/// name observable, so the replacement can even carry the same name.
 #[cfg(unix)]
 fn base_is_safe(p: &Path) -> bool {
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
     // SAFETY: geteuid takes no arguments, has no preconditions and cannot fail.
     let euid = unsafe { libc::geteuid() };
-    let entry_ok = |md: &std::fs::Metadata| {
+    let ours = |md: &std::fs::Metadata| md.uid() == 0 || md.uid() == euid;
+    let dir_ok = |md: &std::fs::Metadata| {
         let mode = md.permissions().mode();
-        md.is_dir() && (md.uid() == 0 || md.uid() == euid) && (mode & 0o022 == 0 || mode & 0o1000 != 0)
+        md.is_dir() && ours(md) && (mode & 0o022 == 0 || mode & 0o1000 != 0)
     };
-    p.ancestors().all(|a| std::fs::symlink_metadata(a).is_ok_and(|md| entry_ok(&md)))
+    if !p.is_absolute() || !std::fs::symlink_metadata("/").is_ok_and(|md| dir_ok(&md)) {
+        return false; // a relative TMPDIR is not a path we can validate; `/` gates `/tmp` itself
+    }
+    // Walk `p` one component at a time from the root; hitting a symlink
+    // continues the walk at its target (with the rest of the path appended),
+    // so a link chained through an unsafe directory still meets every check.
+    let mut queue = vec![p.to_path_buf()];
+    let mut links = 64u32; // symlink budget: a cycle must not hang the check
+    while let Some(path) = queue.pop() {
+        let comps: Vec<_> = path.components().collect();
+        let mut cur = PathBuf::from("/");
+        for i in 0..comps.len() {
+            let c = match &comps[i] {
+                std::path::Component::RootDir => continue,
+                // `.`/`..`/prefix components have no place in a temp base.
+                std::path::Component::Normal(c) => c,
+                _ => return false,
+            };
+            let next = cur.join(c); // the entry lives in `cur`, already validated
+            let Ok(md) = std::fs::symlink_metadata(&next) else { return false };
+            if md.is_symlink() {
+                if links == 0 || !ours(&md) {
+                    return false;
+                }
+                links -= 1;
+                let Ok(t) = std::fs::read_link(&next) else { return false };
+                let t = if t.is_absolute() { t } else { cur.join(t) };
+                let rest: PathBuf = comps[i + 1..].iter().map(|c| c.as_os_str()).collect();
+                queue.push(t.join(rest));
+                break;
+            }
+            if !dir_ok(&md) {
+                return false;
+            }
+            cur = next;
+        }
+    }
+    true
 }
 
 /// An unpredictable hex token for the download directory name: OS entropy
@@ -912,6 +953,43 @@ mod tests {
         let _ = std::fs::remove_dir_all(&parent);
         assert!(!inside_ok, "a base inside a directory others can rename in must be rejected");
         assert!(default_ok, "the default temp dir must still validate");
+    }
+
+    /// macOS reaches the default temp dir through symlinks (`/var` →
+    /// `/private/var`, and `/tmp` → `/private/tmp` for the fallback base): a
+    /// safe base reached through such links must be accepted — and the links
+    /// themselves validated (they can only be swapped through a safe parent).
+    #[cfg(unix)]
+    #[test]
+    fn base_validation_follows_symlinks_in_the_path() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(format!("cpuzeez-test-link-{}", random_token()));
+        std::fs::create_dir(&root).unwrap();
+        let target = root.join("target");
+        std::fs::create_dir(&target).unwrap();
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::os::unix::fs::symlink("target", root.join("link")).unwrap();
+        let ok = base_is_safe(&root.join("link"));
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(ok, "a symlink to a safe base, in a safe directory, must be accepted");
+    }
+
+    /// A symlink in a directory others can rename in must be rejected even
+    /// though it points at a safe target: swapping the link during the polkit
+    /// prompt redirects the whole path.
+    #[cfg(unix)]
+    #[test]
+    fn base_validation_rejects_swappable_symlinks() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(format!("cpuzeez-test-swaplink-{}", random_token()));
+        std::fs::create_dir(&root).unwrap();
+        std::fs::create_dir(root.join("target")).unwrap();
+        std::os::unix::fs::symlink("target", root.join("link")).unwrap();
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o777)).unwrap(); // others may rename `link`
+        let ok = base_is_safe(&root.join("link"));
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(!ok, "a symlink others can replace must not be trusted");
     }
 
     #[test]
