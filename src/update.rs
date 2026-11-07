@@ -239,12 +239,23 @@ impl Installer {
         let stage = Arc::new(Mutex::new(Stage::Downloading { done: 0, total: 0 }));
         let (s, rel) = (stage.clone(), rel.clone());
         std::thread::spawn(move || {
-            let end = download_and_verify(&rel, &s)
-                .and_then(|p| {
+            let end = match download_and_verify(&rel, &s) {
+                Err(e) => Stage::Failed(e),
+                Ok(p) => {
                     *s.lock().unwrap() = Stage::Installing;
-                    launch(&p)
-                })
-                .unwrap_or_else(Stage::Failed);
+                    let end = launch(&p).unwrap_or_else(Stage::Failed);
+                    // The package has been consumed by the install (or the
+                    // install failed for good): reclaim the space. msiexec,
+                    // macOS `open` and the OpenedFolder fallback still need
+                    // the file after we return, so those stages keep it.
+                    if matches!(end, Stage::Installed | Stage::Failed(_)) {
+                        if let Some(d) = p.parent() {
+                            let _ = std::fs::remove_dir_all(d);
+                        }
+                    }
+                    end
+                }
+            };
             *s.lock().unwrap() = end;
         });
         Installer { stage }
@@ -268,7 +279,9 @@ fn command(prog: &str) -> std::process::Command {
     c
 }
 
-/// Download the release's installer to the temp dir and check its SHA-256.
+/// Download the release's installer to a fresh private directory and check its
+/// SHA-256. On any failure the directory (with any partial download) is
+/// removed before the error is returned.
 fn download_and_verify(rel: &Release, stage: &Mutex<Stage>) -> Result<PathBuf, String> {
     let a = rel.asset.as_ref().ok_or("this release has no package for this system")?;
     let sums_url = rel.sums.as_ref().ok_or("this release has no SHA256SUMS.txt; not installing an unverified file")?;
@@ -276,14 +289,19 @@ fn download_and_verify(rel: &Release, stage: &Mutex<Stage>) -> Result<PathBuf, S
     if Path::new(&a.name).file_name().and_then(|n| n.to_str()) != Some(a.name.as_str()) {
         return Err(format!("unexpected asset name {:?}", a.name));
     }
-    let dir = std::env::temp_dir().join(format!("{}-update-{}", crate::NAME, rel.version));
-    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let dir = private_download_dir(&rel.version)?;
     let path = dir.join(&a.name);
-    let _ = std::fs::remove_file(&path);
+    fetch_and_verify(a, sums_url, &path, stage).inspect_err(|_| {
+        let _ = std::fs::remove_dir_all(&dir);
+    })?;
+    Ok(path)
+}
 
+/// The download + checksum half of [`download_and_verify`], into `path`.
+fn fetch_and_verify(a: &Asset, sums_url: &str, path: &Path, stage: &Mutex<Stage>) -> Result<(), String> {
     let mut child = command("curl")
         .args(["-fL", "--retry", "2", "--max-time", "900", "-o"])
-        .arg(&path)
+        .arg(path)
         .arg(&a.url)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -293,14 +311,14 @@ fn download_and_verify(rel: &Release, stage: &Mutex<Stage>) -> Result<PathBuf, S
         if let Some(st) = child.try_wait().map_err(|e| e.to_string())? {
             break st;
         }
-        let done = std::fs::metadata(&path).map_or(0, |m| m.len());
+        let done = std::fs::metadata(path).map_or(0, |m| m.len());
         *stage.lock().unwrap() = Stage::Downloading { done, total: a.size };
         std::thread::sleep(std::time::Duration::from_millis(150));
     };
     if !status.success() {
         return Err(format!("download failed (curl exit code {})", status.code().unwrap_or(-1)));
     }
-    let len = std::fs::metadata(&path).map_or(0, |m| m.len());
+    let len = std::fs::metadata(path).map_or(0, |m| m.len());
     *stage.lock().unwrap() = Stage::Downloading { done: len, total: a.size };
     if a.size > 0 && len != a.size {
         return Err(format!("download incomplete ({len} of {} bytes)", a.size));
@@ -310,12 +328,134 @@ fn download_and_verify(rel: &Release, stage: &Mutex<Stage>) -> Result<PathBuf, S
     let sums =
         crate::os::cmd("curl", &["-fsSL", "--max-time", "30", sums_url]).ok_or("could not download SHA256SUMS.txt")?;
     let want = sum_for(&sums, &a.name).ok_or_else(|| format!("SHA256SUMS.txt has no entry for {}", a.name))?;
-    let got = sha256_file(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let got = sha256_file(path).map_err(|e| format!("{}: {e}", path.display()))?;
     if !got.eq_ignore_ascii_case(&want) {
-        let _ = std::fs::remove_file(&path);
         return Err(format!("checksum mismatch for {} (expected {want}, got {got}); file deleted", a.name));
     }
-    Ok(path)
+    Ok(())
+}
+
+/// A fresh directory for one download: an unpredictable name, an exclusive
+/// `create` (fails if the name is already taken) and, on Unix, mode 0700
+/// inside a validated base directory (see [`base_is_safe`]) and verified to be
+/// owned by the current user.
+///
+/// The verified installer is later opened *by path* by a privileged installer
+/// (pkexec apt-get/pacman, msiexec, open), so its path must live where no
+/// other local user can create files, write, or swap: the old predictable
+/// shared `/tmp/cpuzeez-update-<version>` let anyone pre-create it world-
+/// writable and rename the verified file during the polkit/UAC prompt,
+/// installing a swapped package as root (CWE-377/59/426). On Windows the
+/// default per-user %TEMP% ACL already provides this; on Unix the base is
+/// validated so a non-sticky or user-owned `TMPDIR` (e.g. preserved through
+/// sudo) cannot re-enable the directory-swap attack.
+fn private_download_dir(version: &str) -> Result<PathBuf, String> {
+    // The version is a network-provided tag: keep it to one path component
+    // (no `/`, `\`, `..` tricks — those become `_`).
+    let v: String = version
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') { c } else { '_' })
+        .collect();
+    let mut bases = vec![std::env::temp_dir()];
+    #[cfg(unix)]
+    bases.push(PathBuf::from("/tmp")); // fallback when TMPDIR is unusable
+    #[cfg(unix)]
+    bases.retain(|b| base_is_safe(b));
+    let mut last = "no usable temporary directory".to_string();
+    for base in &bases {
+        for _ in 0..8 {
+            let dir = base.join(format!("{}-update-{v}-{}", crate::NAME, random_token()));
+            match create_exclusive_private(&dir) {
+                Ok(()) => return Ok(dir),
+                Err((e, retry)) if retry => last = e,
+                Err((e, _)) => return Err(e),
+            }
+        }
+    }
+    Err(format!("could not create a private download directory: {last}"))
+}
+
+/// Create `dir` with mode 0700, failing if it (or a symlink at that name)
+/// already exists. `Ok` means it exists, is ours, and is private; on failure
+/// returns the message and whether another name might still succeed.
+fn create_exclusive_private(dir: &Path) -> Result<(), (String, bool)> {
+    let mut b = std::fs::DirBuilder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        b.mode(0o700);
+    }
+    b.create(dir).map_err(|e| (format!("{}: {e}", dir.display()), e.kind() == std::io::ErrorKind::AlreadyExists))?;
+    #[cfg(unix)]
+    {
+        if let Err(e) = private_and_ours(dir) {
+            // Deterministic for a given filesystem (NFS root-squash, FAT,
+            // FUSE): retrying a different name cannot help.
+            return Err((e, false));
+        }
+    }
+    Ok(())
+}
+
+/// `dir` must be owned by the effective user and give nobody else access;
+/// otherwise remove it and say why. Complements the exclusive create: only
+/// proceed with a directory nobody else made, owns, or can reach into.
+#[cfg(unix)]
+fn private_and_ours(dir: &Path) -> Result<(), String> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    let md = std::fs::symlink_metadata(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    // SAFETY: geteuid takes no arguments, has no preconditions and cannot fail.
+    let euid = unsafe { libc::geteuid() };
+    let mode = md.permissions().mode();
+    if md.uid() != euid || mode & 0o077 != 0 {
+        let _ = std::fs::remove_dir_all(dir);
+        return Err(format!(
+            "{} is owned by uid {} with mode {:o}; need uid {euid} (us) and mode 0700",
+            dir.display(),
+            md.uid(),
+            mode & 0o777
+        ));
+    }
+    Ok(())
+}
+
+/// A base directory our private subdirectory cannot be renamed out of or
+/// replaced in: a real directory (not a symlink) whose owner is root or us,
+/// and which is not writable by others unless it is sticky like /tmp — in a
+/// sticky directory only the entry's owner, the directory's owner or root can
+/// rename or unlink entries, so nobody can swap our subdirectory.
+#[cfg(unix)]
+fn base_is_safe(p: &Path) -> bool {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    let Ok(md) = std::fs::symlink_metadata(p) else { return false };
+    if !md.is_dir() {
+        return false;
+    }
+    // SAFETY: geteuid takes no arguments, has no preconditions and cannot fail.
+    let euid = unsafe { libc::geteuid() };
+    let mode = md.permissions().mode();
+    (md.uid() == 0 || md.uid() == euid) && (mode & 0o022 == 0 || mode & 0o1000 != 0)
+}
+
+/// An unpredictable hex token for the download directory name: OS entropy
+/// (`/dev/urandom` where present) mixed with the time, the pid, an address
+/// (ASLR) and `RandomState`'s OS-seeded keys.
+fn random_token() -> String {
+    use std::hash::{BuildHasher, Hasher};
+    let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+    if let Ok(mut f) = std::fs::File::open("/dev/urandom") {
+        use std::io::Read;
+        let mut buf = [0u8; 16];
+        if f.read_exact(&mut buf).is_ok() {
+            h.write(&buf);
+        }
+    }
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
+    h.write(&t.to_ne_bytes());
+    h.write(&std::process::id().to_ne_bytes());
+    let probe = 0u8;
+    h.write(&(std::ptr::addr_of!(probe) as usize).to_ne_bytes());
+    format!("{:016x}", h.finish())
 }
 
 /// Hand the verified package to the OS.
@@ -336,6 +476,9 @@ fn launch(path: &Path) -> Result<Stage, String> {
         return if st.success() { Ok(Stage::OpenedInstaller) } else { Err("open failed".into()) };
     }
     let manager: Option<&[&str]> = if name.ends_with(".deb") {
+        // apt's sandbox user `_apt` cannot enter our 0700 download dir, so apt
+        // reads the verified file as root itself and may print a harmless
+        // "Download is performed unsandboxed" notice. Keep the mode strict.
         Some(&["apt-get", "install", "-y"])
     } else if name.ends_with(".pkg.tar.zst") {
         Some(&["pacman", "-U", "--noconfirm"])
@@ -643,6 +786,96 @@ mod tests {
             s.update(&a[cut..]);
         }
         assert_eq!(hex(&s.finish()), "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0");
+    }
+
+    /// The download dir must be freshly created, private to us, and never
+    /// reuse a predictable name another local user could pre-create or swap
+    /// files in (the verified installer is handed to a privileged installer).
+    #[test]
+    fn download_dirs_are_fresh_private_and_unique() {
+        let (a, b) = (private_download_dir("9.9.9").unwrap(), private_download_dir("9.9.9").unwrap());
+        #[cfg(unix)]
+        let private = {
+            use std::os::unix::fs::{MetadataExt, PermissionsExt};
+            std::fs::symlink_metadata(&a).is_ok_and(|md| {
+                // SAFETY: geteuid takes no arguments, has no preconditions and cannot fail.
+                md.is_dir() && md.uid() == unsafe { libc::geteuid() } && md.permissions().mode() & 0o777 == 0o700
+            })
+        };
+        let (existed, distinct) = (a.is_dir(), a != b);
+        let _ = std::fs::remove_dir_all(&a);
+        let _ = std::fs::remove_dir_all(&b);
+        assert!(existed);
+        assert!(distinct, "each download must get its own unpredictable directory");
+        #[cfg(unix)]
+        assert!(private, "the download directory must be 0700 and owned by us");
+    }
+
+    /// A network-provided version (a git tag) must never pick a path: slashes
+    /// and separators collapse into one plain directory component.
+    #[test]
+    fn hostile_versions_stay_in_one_component() {
+        let d = private_download_dir("1.0/../evil").unwrap();
+        let name = d.file_name().unwrap().to_str().unwrap().to_string();
+        let existed = d.is_dir();
+        let _ = std::fs::remove_dir_all(&d);
+        assert!(existed);
+        assert!(
+            name.strip_prefix("cpuzeez-update-1.0_.._evil-").is_some(),
+            "version must be sanitized into one path component: {name:?}"
+        );
+        assert!(!name.contains(['/', '\\']));
+    }
+
+    /// Exclusive creation: a squatted name is refused, never written into.
+    #[test]
+    fn refuses_a_pre_existing_directory() {
+        let squat = std::env::temp_dir().join(format!("cpuzeez-test-squat-{}", random_token()));
+        std::fs::create_dir(&squat).unwrap();
+        let r = create_exclusive_private(&squat);
+        let _ = std::fs::remove_dir(&squat);
+        assert!(r.is_err(), "a pre-existing name must be rejected, never reused");
+    }
+
+    /// The post-create check rejects anything not 0700-and-ours, and cleans up.
+    #[cfg(unix)]
+    #[test]
+    fn private_dir_check_rejects_shared_permissions() {
+        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+        let d = std::env::temp_dir().join(format!("cpuzeez-test-shared-{}", random_token()));
+        std::fs::DirBuilder::new().mode(0o777).create(&d).unwrap();
+        std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o777)).unwrap();
+        let r = private_and_ours(&d);
+        let gone = !d.exists();
+        assert!(r.is_err(), "a 0777 directory must never be accepted");
+        assert!(gone, "a rejected directory must be removed");
+    }
+
+    /// Base validation: writable by others only with the sticky bit, and the
+    /// default temp dir must pass on every platform we test.
+    #[cfg(unix)]
+    #[test]
+    fn base_validation_requires_sticky_when_shared() {
+        use std::os::unix::fs::PermissionsExt;
+        let mk = |mode: u32| {
+            let d = std::env::temp_dir().join(format!("cpuzeez-test-base-{mode:o}-{}", random_token()));
+            std::fs::create_dir(&d).unwrap();
+            std::fs::set_permissions(&d, std::fs::Permissions::from_mode(mode)).unwrap();
+            d
+        };
+        let shared = mk(0o777); // world-writable, not sticky: others can rename our dir
+        let sticky = mk(0o1777); // world-writable but sticky (like /tmp)
+        let closed = mk(0o700); // not writable by others at all
+        let results =
+            (base_is_safe(&shared), base_is_safe(&sticky), base_is_safe(&closed), base_is_safe(&std::env::temp_dir()));
+        for d in [shared, sticky, closed] {
+            let _ = std::fs::remove_dir(&d);
+        }
+        let (bad, sticky_ok, closed_ok, default_ok) = results;
+        assert!(!bad, "0777 without sticky lets others replace our directory");
+        assert!(sticky_ok, "a sticky base like /tmp must be accepted");
+        assert!(closed_ok, "a private base must be accepted");
+        assert!(default_ok, "the default temp dir must validate on this platform");
     }
 
     #[test]
