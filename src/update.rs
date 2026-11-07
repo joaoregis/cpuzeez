@@ -364,13 +364,21 @@ fn private_download_dir(version: &str) -> Result<PathBuf, String> {
     #[cfg(unix)]
     bases.retain(|b| base_is_safe(b));
     let mut last = "no usable temporary directory".to_string();
-    for base in &bases {
+    'base: for base in &bases {
         for _ in 0..8 {
             let dir = base.join(format!("{}-update-{v}-{}", crate::NAME, random_token()));
             match create_exclusive_private(&dir) {
                 Ok(()) => return Ok(dir),
-                Err((e, retry)) if retry => last = e,
-                Err((e, _)) => return Err(e),
+                // Name taken: try another name in the same base.
+                Err((e, true)) => last = e,
+                // Anything else (EACCES on a validated-but-unwritable base
+                // such as TMPDIR=/root, read-only FS, deterministic
+                // ownership/mode failure): another *name* cannot help, but
+                // the next *base* might — e.g. the /tmp fallback.
+                Err((e, false)) => {
+                    last = e;
+                    continue 'base;
+                }
             }
         }
     }
@@ -427,18 +435,22 @@ fn private_and_ours(dir: &Path) -> Result<(), String> {
 /// replaced in: a real directory (not a symlink) whose owner is root or us,
 /// and which is not writable by others unless it is sticky like /tmp — in a
 /// sticky directory only the entry's owner, the directory's owner or root can
-/// rename or unlink entries, so nobody can swap our subdirectory.
+/// rename or unlink entries, so nobody can swap our subdirectory. Every
+/// ancestor of the base must pass the same check: a base inside a directory
+/// someone else can rename in (e.g. `TMPDIR=/srv/team/tmp` with a
+/// team-writable `/srv/team`) can be swapped wholesale during the polkit
+/// prompt — and a listable 0755 base makes the random directory name
+/// observable, so the replacement can even carry the same name.
 #[cfg(unix)]
 fn base_is_safe(p: &Path) -> bool {
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
-    let Ok(md) = std::fs::symlink_metadata(p) else { return false };
-    if !md.is_dir() {
-        return false;
-    }
     // SAFETY: geteuid takes no arguments, has no preconditions and cannot fail.
     let euid = unsafe { libc::geteuid() };
-    let mode = md.permissions().mode();
-    (md.uid() == 0 || md.uid() == euid) && (mode & 0o022 == 0 || mode & 0o1000 != 0)
+    let entry_ok = |md: &std::fs::Metadata| {
+        let mode = md.permissions().mode();
+        md.is_dir() && (md.uid() == 0 || md.uid() == euid) && (mode & 0o022 == 0 || mode & 0o1000 != 0)
+    };
+    p.ancestors().all(|a| std::fs::symlink_metadata(a).is_ok_and(|md| entry_ok(&md)))
 }
 
 /// An unpredictable hex token for the download directory name: OS entropy
@@ -880,6 +892,26 @@ mod tests {
         assert!(sticky_ok, "a sticky base like /tmp must be accepted");
         assert!(closed_ok, "a private base must be accepted");
         assert!(default_ok, "the default temp dir must validate on this platform");
+    }
+
+    /// A safe base inside a swappable directory must be rejected: renaming a
+    /// non-sticky writable ancestor during the polkit prompt swaps the whole
+    /// path, and a listable 0755 base even exposes the random name to replay.
+    #[cfg(unix)]
+    #[test]
+    fn base_validation_rejects_swappable_ancestors() {
+        use std::os::unix::fs::PermissionsExt;
+        let parent = std::env::temp_dir().join(format!("cpuzeez-test-swap-{}", random_token()));
+        std::fs::create_dir(&parent).unwrap();
+        std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o777)).unwrap(); // others may rename entries in it
+        let inside = parent.join("tmp");
+        std::fs::create_dir(&inside).unwrap();
+        std::fs::set_permissions(&inside, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let (inside_ok, default_ok) = (base_is_safe(&inside), base_is_safe(&std::env::temp_dir()));
+        std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let _ = std::fs::remove_dir_all(&parent);
+        assert!(!inside_ok, "a base inside a directory others can rename in must be rejected");
+        assert!(default_ok, "the default temp dir must still validate");
     }
 
     #[test]
