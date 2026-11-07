@@ -90,7 +90,7 @@ fn verify_identity(op: &actions::ProcessOp, identity: &[(u32, u64)]) -> Result<(
         match now.iter().find(|p| p.pid == pid) {
             Some(p) if p.start_ms.abs_diff(want) <= 1 => {
                 if matches!(op, actions::ProcessOp::Dump { .. }) && cpuzeez_core::procs::anti_cheat(&p.name) {
-                    return Err(format!("{} is protected by an anti-cheat: CpuZeeZ never reads its memory", p.name));
+                    return Err(format!("{} is protected by an anti-cheat: CPU ZeeZ never reads its memory", p.name));
                 }
             }
             Some(_) => return Err(format!("process {pid} has exited; its PID now belongs to another process")),

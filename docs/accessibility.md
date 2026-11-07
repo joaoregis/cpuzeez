@@ -1,6 +1,6 @@
 # Accessibility (S3-03)
 
-What CpuZeeZ guarantees, how it is tested, and what it does not cover yet. The tests are in `src/gui/a11y.rs`, `src/gui/table.rs` and `src/gui/widgets.rs`.
+What CPU ZeeZ guarantees, how it is tested, and what it does not cover yet. The tests are in `src/gui/a11y.rs`, `src/gui/table.rs` and `src/gui/widgets.rs`.
 
 ## Checklist
 

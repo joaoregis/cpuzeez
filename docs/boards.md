@@ -3,7 +3,7 @@
 A Super I/O chip (Nuvoton NCT67xx, ITE IT86xx/IT87xx, ...) only measures
 *inputs*: "voltage input 4", "temperature input 2", "tachometer 3". Which rail,
 diode or fan header each input is wired to, and through which resistor
-divider, is decided by the motherboard designer. CpuZeeZ keeps that knowledge
+divider, is decided by the motherboard designer. CPU ZeeZ keeps that knowledge
 as data, one entry per board, in `BOARDS` in
 [`src/sensors/superio.rs`](../src/sensors/superio.rs).
 
@@ -20,7 +20,7 @@ you which header is which.
 b(
     "GIGABYTE",                      // SMBIOS board vendor (normalized, substring)
     &["B550 AORUS ELITE"],           // SMBIOS board product patterns (normalized, substring)
-    &["IT8688"],                     // Super I/O model as CpuZeeZ reports it
+    &["IT8688"],                     // Super I/O model as CPU ZeeZ reports it
     m(
         &[                           // voltages: input, label, multiplier
             v(0, "CPU", 1.0),
@@ -55,7 +55,7 @@ b(
 
 ## Contributing a map
 
-1. Run CpuZeeZ elevated (Windows: as administrator with PawnIO; Linux: as
+1. Run CPU ZeeZ elevated (Windows: as administrator with PawnIO; Linux: as
    root, with no `nct6775`/`it87` driver bound to the chip) and dump the
    board section with every input visible:
 

@@ -18,7 +18,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Status {
     Running,
-    /// The OS refused: run CpuZeeZ as administrator / root.
+    /// The OS refused: run CPU ZeeZ as administrator / root.
     NeedsAdmin,
     #[default]
     Unavailable,

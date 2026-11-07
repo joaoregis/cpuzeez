@@ -5,7 +5,7 @@
 use crate::frames::{LowConvention, Summary};
 use serde::{Deserialize, Serialize};
 
-/// The machine a session ran on, as far as CpuZeeZ knows it.
+/// The machine a session ran on, as far as CPU ZeeZ knows it.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct System {
@@ -274,7 +274,7 @@ pub fn html_report(s: &Session, frames: &[crate::frames::Frame], hw: &HwLog) -> 
     let sm = &s.summary;
     let row = |k: &str, v: String| format!("<tr><th>{}</th><td>{}</td></tr>", esc(k), esc(&v));
     let mut out = String::from(
-        r#"<!doctype html><html><head><meta charset="utf-8"><title>CpuZeeZ · ZeeZ Live report</title><style>
+        r#"<!doctype html><html><head><meta charset="utf-8"><title>CPU ZeeZ · ZeeZ Live report</title><style>
 body{font:14px system-ui,sans-serif;max-width:1000px;margin:24px auto;padding:0 16px;color:#222;background:#fff}
 @media(prefers-color-scheme:dark){body{color:#ddd;background:#151318}}
 h1{font-size:22px}h2{font-size:16px;margin-top:28px}table{border-collapse:collapse}th{text-align:left;padding:2px 16px 2px 0;font-weight:500;color:#888}
@@ -333,7 +333,7 @@ h1{font-size:22px}h2{font-size:16px;margin-top:28px}table{border-collapse:collap
     out += "<h2>FPS histogram</h2>";
     let bars: Vec<(String, f64, &str)> = hist.iter().map(|(b, v)| (format!("{b:.0}"), v * 100.0, "#8b5cf6")).collect();
     out += &svg_bars(&bars, 960.0, 160.0);
-    out += "<p><small>Made by CpuZeeZ. Frames from the graphics kernel's events; nothing was injected into the game.</small></p></body></html>";
+    out += "<p><small>Made by CPU ZeeZ. Frames from the graphics kernel's events; nothing was injected into the game.</small></p></body></html>";
     out
 }
 

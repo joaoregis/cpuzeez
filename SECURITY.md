@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-CpuZeeZ 1.0 is in public beta (`1.0.0-beta.N`). Security fixes go into the newest beta; once 1.0.0 is out, into the latest release.
+CPU ZeeZ 1.0 is in public beta (`1.0.0-beta.N`). Security fixes go into the newest beta; once 1.0.0 is out, into the latest release.
 
 ## Reporting a vulnerability
 

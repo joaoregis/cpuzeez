@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/wordmark.png" width="440" alt="CpuZeeZ">
+<img src="assets/wordmark.png" width="440" alt="CPU ZeeZ">
 
 **A clean-room, open-source, cross-platform reimplementation of CPU-Z's feature set, plus a hardware monitor, written in Rust.**
 
@@ -16,7 +16,7 @@ Processor, caches, mainboard, memory and SPD, graphics, sensors, drives, network
 
 ---
 
-> CpuZeeZ (`cpuzeez`) is **not affiliated with CPUID**. CPU-Z is a trademark of CPUID. No CPU-Z code, data tables or text were used. See [Clean-room process](#clean-room-process).
+> CPU ZeeZ (`cpuzeez`) is **not affiliated with CPUID**. CPU-Z is a trademark of CPUID. No CPU-Z code, data tables or text were used. See [Clean-room process](#clean-room-process).
 
 ## Contents
 
@@ -139,7 +139,7 @@ Every [release](https://github.com/joaoregis/cpuzeez/releases) ships an installe
 
 ### Why Windows or macOS shows a security warning
 
-**CpuZeeZ is not signed with a publisher certificate.** On Windows, removing the warning needs a code-signing certificate. On macOS it needs a paid Apple Developer membership (US$ 99/year) for notarization. Both cost money every year, and CpuZeeZ is a free project with no budget for that yet. macOS executables are ad-hoc signed, which keeps them runnable but neither identifies the developer nor counts as notarization.
+**CPU ZeeZ is not signed with a publisher certificate.** On Windows, removing the warning needs a code-signing certificate. On macOS it needs a paid Apple Developer membership (US$ 99/year) for notarization. Both cost money every year, and CPU ZeeZ is a free project with no budget for that yet. macOS executables are ad-hoc signed, which keeps them runnable but neither identifies the developer nor counts as notarization.
 
 **What the warning means.** Windows and macOS can't tell who published the file. **It doesn't mean malware was found.** SmartScreen is reputation-based and warns about unsigned downloads that few people have run yet.
 
@@ -165,7 +165,7 @@ With Rust installed you can also run `cargo install --git https://github.com/joa
 
 ## Updates
 
-**Update notice.** At startup CpuZeeZ asks GitHub's releases API whether a newer version exists. That is one anonymous `GET`; nothing about your machine is sent.
+**Update notice.** At startup CPU ZeeZ asks GitHub's releases API whether a newer version exists. That is one anonymous `GET`; nothing about your machine is sent.
 - If there is one, a bar offers **Download & install**. It fetches the package for your OS and CPU, verifies its SHA-256 against the release's `SHA256SUMS.txt`, then launches it:
   - **Windows:** the MSI.
   - **macOS:** the DMG or PKG.
@@ -190,9 +190,23 @@ With Rust installed you can also run `cargo install --git https://github.com/joa
 | Debian / Ubuntu | `sudo apt install ./cpuzeez_<ver>_amd64.deb` |
 | Arch | `sudo pacman -U cpuzeez-bin-<ver>-1-x86_64.pkg.tar.zst` |
 
+## Uninstalling
+
+CPU ZeeZ has no uninstaller program of its own: it is removed the way each platform removes things. CI checks the Windows removal on every push (the folder, the Start menu shortcut and the PATH entry go; your settings stay).
+
+| Platform | How |
+|---|---|
+| Windows (MSI) | *Settings ▸ Apps ▸ Installed apps ▸ CPU ZeeZ ▸ Uninstall*, or `msiexec /x` on the `.msi`. The PawnIO driver is **kept**: other programs (LibreHardwareMonitor, FanControl) share it. Remove it from *Installed apps* too if nothing else uses it. |
+| Windows (portable zip) | Delete the folder. |
+| Debian / Ubuntu | `sudo apt remove cpuzeez` |
+| Arch | `sudo pacman -R cpuzeez-bin` |
+| macOS | Drag `CpuZeeZ.app` to the Trash (and `/usr/local/bin/cpuzeez` if you used the `.pkg`). |
+
+**Your data** (settings, sessions, history, logs) is never deleted by an uninstall. It lives in `%APPDATA%\CpuZeeZ`, `~/Library/Application Support/CpuZeeZ` or `$XDG_CONFIG_HOME/cpuzeez`; delete it by hand, or first use *Settings ▸ Privacy & data ▸ Delete everything*.
+
 ## Privileged hardware access
 
-Like CPU-Z, some information can only come from hardware registers: MSRs, the SMBus where the SPD EEPROMs live, the Super I/O sensor chip, the memory controller and the AMD SMU. CPU-Z installs its own kernel driver for this. **CpuZeeZ has no driver of its own.** On Windows it uses [PawnIO](#windows-pawnio), a signed open-source driver that the packages include as an optional component; elsewhere it uses what the OS already offers. Whatever it can't read, it simply leaves out.
+Like CPU-Z, some information can only come from hardware registers: MSRs, the SMBus where the SPD EEPROMs live, the Super I/O sensor chip, the memory controller and the AMD SMU. CPU-Z installs its own kernel driver for this. **CPU ZeeZ has no driver of its own.** On Windows it uses [PawnIO](#windows-pawnio), a signed open-source driver that the packages include as an optional component; elsewhere it uses what the OS already offers. Whatever it can't read, it simply leaves out.
 
 | | Without privileges | With privileges |
 |---|---|---|
@@ -202,7 +216,7 @@ Like CPU-Z, some information can only come from hardware registers: MSRs, the SM
 
 ### What else needs administrator or root
 
-Most of CpuZeeZ runs as a normal user. These are the exceptions, and each screen says so when it applies:
+Most of CPU ZeeZ runs as a normal user. These are the exceptions, and each screen says so when it applies:
 
 | Feature | Windows | Linux | macOS |
 |---|---|---|---|
@@ -212,7 +226,7 @@ Most of CpuZeeZ runs as a normal user. These are the exceptions, and each screen
 | **Startup entries, service recovery and accounts** | one UAC prompt for that action | `pkexec`; recovery is a systemd drop-in you can delete | authorization for that action |
 | **Hardware registers** (see above) | PawnIO + administrator | root | not possible |
 
-An action that needs rights runs in a one-shot elevated copy of CpuZeeZ that accepts only a fixed list of operations ([threat model](docs/security/threat-model.md)). Everything it does is written to the local audit log.
+An action that needs rights runs in a one-shot elevated copy of CPU ZeeZ that accepts only a fixed list of operations ([threat model](docs/security/threat-model.md)). Everything it does is written to the local audit log.
 
 ### Windows: PawnIO
 
@@ -222,10 +236,10 @@ The Windows packages ship it, pinned and SHA-256-checked ([`packaging/pins.txt`]
 
 1. Install it:
    - **MSI:** *Hardware access (PawnIO driver)* is ticked by default under *Custom Setup*. Untick it to skip the driver. For a silent install without it, use `msiexec /i cpuzeez-….msi ADDLOCAL=Main`.
-   - **In the app:** press *Install hardware access* in the yellow banner. CpuZeeZ checks the bundled installer against the pinned hash, then Windows asks for permission.
+   - **In the app:** press *Install hardware access* in the yellow banner. CPU ZeeZ checks the bundled installer against the pinned hash, then Windows asks for permission.
    - **Yourself:** `winget install namazso.PawnIO`, or the installer from [pawnio.eu](https://pawnio.eu).
 2. The official modules ([PawnIO.Modules](https://github.com/namazso/PawnIO.Modules/releases), LGPL-2.1) come in the `pawnio-modules` folder next to `cpuzeez.exe`. For a build from source, extract them there yourself.
-3. Run CpuZeeZ **as administrator**. *About* (and the report's *Binaries* section) then shows `Hardware access: PawnIO 2.2.0 (modules: …)`.
+3. Run CPU ZeeZ **as administrator**. *About* (and the report's *Binaries* section) then shows `Hardware access: PawnIO 2.2.0 (modules: …)`.
 
 Details are in [docs/windows-pawnio.md](docs/windows-pawnio.md).
 
@@ -250,7 +264,7 @@ sudo cpuzeez                # full detail; without sudo you still get most of it
 
 ## Performance budget
 
-CpuZeeZ runs next to your game, so it is held to a budget: at most 2% of one core for the sampler at 1 s with the overlay at 4 Hz, at most 150 MB of memory, and no frame-time spikes caused by sampling. Measured numbers and how they are measured are in [docs/performance.md](docs/performance.md).
+CPU ZeeZ runs next to your game, so it is held to a budget: at most 2% of one core for the sampler at 1 s with the overlay at 4 Hz, at most 150 MB of memory, and no frame-time spikes caused by sampling. Measured numbers and how they are measured are in [docs/performance.md](docs/performance.md).
 
 ## Usage
 
@@ -357,8 +371,8 @@ Legend:
 
 ### Deliberately not included
 
-- **Online validation** (valid.x86.fr, Validator Statistics). It is CPUID's service, so CpuZeeZ doesn't submit to it. Share the HTML/JSON report instead.
-- **CPU-Z's benchmark algorithm and reference scores.** They are CPUID's work. CpuZeeZ's benchmarks are its own, and their scores are not comparable with CPU-Z's.
+- **Online validation** (valid.x86.fr, Validator Statistics). It is CPUID's service, so CPU ZeeZ doesn't submit to it. Share the HTML/JSON report instead.
+- **CPU-Z's benchmark algorithm and reference scores.** They are CPUID's work. CPU ZeeZ's benchmarks are its own, and their scores are not comparable with CPU-Z's.
 - **Obsolete targets:** Itanium/IA-64, Windows 9x, and CPUs older than i686. None of today's target OSes run on them.
 
 ## Accuracy: side by side with CPU-Z
@@ -395,7 +409,7 @@ On the reference machine (Ryzen 9 7900X, MSI PRO X870-P WIFI, Windows 11 25H2), 
 
 ## Clean-room process
 
-CpuZeeZ was built so that no expression of CPU-Z (its code, tables or text) could end up in this project:
+CPU ZeeZ was built so that no expression of CPU-Z (its code, tables or text) could end up in this project:
 
 1. **Black-box observation.** CPU-Z's documented `-txt` option produced its own report of a test machine. That report shows what CPU-Z reports and in which format, not how it does it.
 2. **Feature inventory.** The readme and the exported string and RTTI class names of `cpuz.exe`, inspected with [REA](https://github.com/morluto/rea) and Ghidra, list which features and hardware families exist. **No function was decompiled or translated.**

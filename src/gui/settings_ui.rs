@@ -97,12 +97,12 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Turned off in cpuzeez.ini (CheckUpdates=0).", "Desativado no cpuzeez.ini (CheckUpdates=0)."),
     ("Privacy & data", "Privacidade e dados"),
     (
-        "These settings were saved by a newer CpuZeeZ, so changes here aren't saved (that would lose its newer options).",
-        "Estas configurações foram salvas por um CpuZeeZ mais novo, então mudanças aqui não são salvas (isso perderia as opções mais novas).",
+        "These settings were saved by a newer CPU ZeeZ, so changes here aren't saved (that would lose its newer options).",
+        "Estas configurações foram salvas por um CPU ZeeZ mais novo, então mudanças aqui não são salvas (isso perderia as opções mais novas).",
     ),
     (
-        "Everything CpuZeeZ keeps is on this computer, in this folder. Nothing is uploaded.",
-        "Tudo o que o CpuZeeZ guarda está neste computador, nesta pasta. Nada é enviado.",
+        "Everything CPU ZeeZ keeps is on this computer, in this folder. Nothing is uploaded.",
+        "Tudo o que o CPU ZeeZ guarda está neste computador, nesta pasta. Nada é enviado.",
     ),
     ("Open data folder", "Abrir pasta de dados"),
     ("Sensor logs", "Logs de sensores"),
@@ -225,12 +225,12 @@ pub const ES: &[(&str, &str)] = &[
     ("Turned off in cpuzeez.ini (CheckUpdates=0).", "Desactivado en cpuzeez.ini (CheckUpdates=0)."),
     ("Privacy & data", "Privacidad y datos"),
     (
-        "These settings were saved by a newer CpuZeeZ, so changes here aren't saved (that would lose its newer options).",
-        "Estos ajustes los guardó un CpuZeeZ más nuevo, así que los cambios aquí no se guardan (se perderían sus opciones nuevas).",
+        "These settings were saved by a newer CPU ZeeZ, so changes here aren't saved (that would lose its newer options).",
+        "Estos ajustes los guardó un CPU ZeeZ más nuevo, así que los cambios aquí no se guardan (se perderían sus opciones nuevas).",
     ),
     (
-        "Everything CpuZeeZ keeps is on this computer, in this folder. Nothing is uploaded.",
-        "Todo lo que CpuZeeZ guarda está en este equipo, en esta carpeta. No se sube nada.",
+        "Everything CPU ZeeZ keeps is on this computer, in this folder. Nothing is uploaded.",
+        "Todo lo que CPU ZeeZ guarda está en este equipo, en esta carpeta. No se sube nada.",
     ),
     ("Open data folder", "Abrir carpeta de datos"),
     ("Sensor logs", "Registros de sensores"),
@@ -283,7 +283,7 @@ fn privacy(ui: &mut egui::Ui, s: &mut Settings, dir: &std::path::Path, report: O
     use crate::data::{self, Category};
     let p = theme::palette(ui);
     ui.label(
-        RichText::new(tr("Everything CpuZeeZ keeps is on this computer, in this folder. Nothing is uploaded."))
+        RichText::new(tr("Everything CPU ZeeZ keeps is on this computer, in this folder. Nothing is uploaded."))
             .color(p.text_secondary),
     );
     ui.horizontal(|ui| {
@@ -567,7 +567,7 @@ pub fn page(ui: &mut egui::Ui, s: &mut Settings, updates_allowed: bool, persist:
         widgets::pill(
             ui,
             tr(
-                "These settings were saved by a newer CpuZeeZ, so changes here aren't saved (that would lose its newer options).",
+                "These settings were saved by a newer CPU ZeeZ, so changes here aren't saved (that would lose its newer options).",
             ),
             widgets::Tone::Warning,
         );

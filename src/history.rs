@@ -82,9 +82,9 @@ fn update_at(p: &Path, f: impl FnOnce(&mut Vec<Entry>)) -> std::io::Result<()> {
             Vec::new()
         }
     };
-    // Entries saved by a newer CpuZeeZ may carry fields this version would drop.
+    // Entries saved by a newer CPU ZeeZ may carry fields this version would drop.
     if let Some(e) = v.iter().find(|e| crate::update::newer(crate::VERSION, &e.app_version)) {
-        return Err(std::io::Error::other(format!("saved by CpuZeeZ {}; not overwriting it", e.app_version)));
+        return Err(std::io::Error::other(format!("saved by CPU ZeeZ {}; not overwriting it", e.app_version)));
     }
     f(&mut v);
     let tmp = p.with_extension("json.tmp");

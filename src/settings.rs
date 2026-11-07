@@ -22,7 +22,7 @@ pub enum Theme {
 pub struct Settings {
     /// Schema version of the file (absent in 0.3.0 files = 1).
     pub schema: u32,
-    /// The file came from a newer CpuZeeZ: never write over it (fields this
+    /// The file came from a newer CPU ZeeZ: never write over it (fields this
     /// version doesn't know would be lost).
     #[serde(skip)]
     pub read_only: bool,
@@ -71,7 +71,7 @@ pub struct Settings {
     pub minis: Vec<cpuzeez_core::layout::mini::Mini>,
     /// ZeeZ Live overlay (S2b-01).
     pub overlay: cpuzeez_core::live::Overlay,
-    /// Default start page when CpuZeeZ opens (S2a-11, e.g. "Overview" or "System").
+    /// Default start page when CPU ZeeZ opens (S2a-11, e.g. "Overview" or "System").
     pub default_start_page: String,
     /// Keep the main window always on top (S2a-11).
     pub always_on_top: bool,
@@ -145,9 +145,10 @@ impl Default for Settings {
 /// Folder for settings, benchmark history and default logs (created on demand).
 pub fn dir() -> Option<PathBuf> {
     let base = if cfg!(windows) {
-        std::env::var_os("APPDATA").map(PathBuf::from).map(|p| p.join(crate::DISPLAY_NAME))
+        std::env::var_os("APPDATA").map(PathBuf::from).map(|p| p.join(cpuzeez_core::DATA_DIR_NAME))
     } else if cfg!(target_os = "macos") {
-        std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Library/Application Support").join(crate::DISPLAY_NAME))
+        std::env::var_os("HOME")
+            .map(|h| PathBuf::from(h).join("Library/Application Support").join(cpuzeez_core::DATA_DIR_NAME))
     } else {
         std::env::var_os("XDG_CONFIG_HOME")
             .map(PathBuf::from)
@@ -205,7 +206,7 @@ impl Settings {
     /// Atomic write (temp file + rename); refuses to replace a newer file.
     fn save_to(&self, p: &Path) -> std::io::Result<()> {
         if self.read_only {
-            return Err(std::io::Error::other("written by a newer CpuZeeZ; not overwriting it"));
+            return Err(std::io::Error::other("written by a newer CPU ZeeZ; not overwriting it"));
         }
         let tmp = p.with_extension("json.tmp");
         std::fs::write(&tmp, serde_json::to_vec_pretty(&Settings { schema: SCHEMA, ..self.clone() })?)?;
@@ -215,6 +216,18 @@ impl Settings {
 
 #[cfg(test)]
 mod tests {
+    /// The app is called "CPU ZeeZ" now; the data folder is still `CpuZeeZ`, so
+    /// the settings, history and sessions of an existing install are found.
+    #[test]
+    fn the_data_folder_keeps_its_old_name() {
+        assert_eq!(cpuzeez_core::DATA_DIR_NAME, "CpuZeeZ");
+        assert_ne!(cpuzeez_core::DATA_DIR_NAME, cpuzeez_core::DISPLAY_NAME);
+        if cfg!(any(windows, target_os = "macos")) {
+            let d = super::dir().expect("a data folder");
+            assert_eq!(d.file_name().and_then(|n| n.to_str()), Some("CpuZeeZ"), "{d:?}");
+        }
+    }
+
     #[test]
     fn roundtrip_and_defaults_for_missing_keys() {
         let s: super::Settings = serde_json::from_str(r#"{"theme":"Dark","tray":true}"#).unwrap();

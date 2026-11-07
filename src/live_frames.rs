@@ -28,7 +28,7 @@ pub enum Status {
     Running,
     /// Frame timing needs an administrator on Windows.
     NeedsAdmin,
-    /// The sidecar isn't next to CpuZeeZ (a dev build, or a damaged install).
+    /// The sidecar isn't next to CPU ZeeZ (a dev build, or a damaged install).
     Missing,
     /// It is there but its SHA-256 isn't the pinned one: it was not run.
     BadChecksum,

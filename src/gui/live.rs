@@ -1,7 +1,7 @@
 //! ZeeZ Live (S2b, docs/v1/zeez-live.md): the sidebar entry with its Live,
 //! Overlay and Sessions tabs, and the overlay window itself.
 //!
-//! The overlay is CpuZeeZ's own window above the game: transparent, always on
+//! The overlay is CPU ZeeZ's own window above the game: transparent, always on
 //! top, never focused and click-through outside edit mode. Nothing is
 //! injected into the game (P4). It shows a Widget Engine layout, the same
 //! kind the mini monitors use.
@@ -70,7 +70,7 @@ pub struct State {
 }
 
 /// `open` arguments that start `app` (a .app bundle) with Apple's Metal
-/// Performance HUD on (macOS 13+). Apple draws that HUD, not CpuZeeZ.
+/// Performance HUD on (macOS 13+). Apple draws that HUD, not CPU ZeeZ.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn metal_hud_args(app: &str) -> Option<Vec<String>> {
     let app = app.trim().trim_end_matches('/');
@@ -307,14 +307,14 @@ impl State {
             Status::Running => (Tone::Success, tr("Frame timing on (PresentMon)").to_string()),
             Status::Off | Status::Starting => (Tone::Neutral, tr("Starting frame timing…").to_string()),
             Status::NeedsAdmin => {
-                (Tone::Warning, tr("Frame timing needs CpuZeeZ to run as administrator.").to_string())
+                (Tone::Warning, tr("Frame timing needs CPU ZeeZ to run as administrator.").to_string())
             }
             Status::Missing => {
-                (Tone::Warning, tr("The PresentMon sidecar isn't next to CpuZeeZ: reinstall to get FPS.").to_string())
+                (Tone::Warning, tr("The PresentMon sidecar isn't next to CPU ZeeZ: reinstall to get FPS.").to_string())
             }
             Status::BadChecksum => (
                 Tone::Danger,
-                tr("PresentMon next to CpuZeeZ isn't the version we ship (SHA-256 differs), so it was not run.")
+                tr("PresentMon next to CPU ZeeZ isn't the version we ship (SHA-256 differs), so it was not run.")
                     .to_string(),
             ),
             Status::Failed(e) => (Tone::Danger, super::i18n::trf("Frame timing stopped: {}", &[&e])),
@@ -349,7 +349,7 @@ impl State {
     }
 
     /// macOS (experimental, zeez-live §3.1): no public API gives another
-    /// app's frame times, so CpuZeeZ offers Apple's own Metal HUD.
+    /// app's frame times, so CPU ZeeZ offers Apple's own Metal HUD.
     #[cfg(target_os = "macos")]
     fn metal_card(&mut self, ui: &mut Ui) {
         let p = theme::palette(ui);
@@ -480,7 +480,7 @@ impl State {
                 widgets::pill(ui, t, *tone);
             }
             ui.label(
-                RichText::new(tr("CpuZeeZ writes MangoHud's config from your overlay layout and reads its logs for FPS. Steam's own files are never edited."))
+                RichText::new(tr("CPU ZeeZ writes MangoHud's config from your overlay layout and reads its logs for FPS. Steam's own files are never edited."))
                     .small()
                     .color(p.text_muted),
             );
@@ -1150,7 +1150,7 @@ fn profiles_card(ui: &mut Ui, o: &mut model::Overlay) {
                     ui.checkbox(&mut pr.auto_show, tr("Show the overlay when it starts"));
                     ui.checkbox(&mut pr.auto_capture, tr("Capture while it runs"));
                     ui.checkbox(&mut pr.safe_mode, tr("Anti-cheat safe mode"))
-                        .on_hover_text(tr("While this game runs, CpuZeeZ reads nothing through the PawnIO driver: temperatures and clocks that need it go blank, GPU and OS readings stay. The driver stays loaded; if an anti-cheat refuses the driver itself, uninstall PawnIO."));
+                        .on_hover_text(tr("While this game runs, CPU ZeeZ reads nothing through the PawnIO driver: temperatures and clocks that need it go blank, GPU and OS readings stay. The driver stays loaded; if an anti-cheat refuses the driver itself, uninstall PawnIO."));
                 });
                 if pr.auto_capture {
                     ui.label(RichText::new(tr("Records every session of this game; ● REC shows while it does.")).small().color(p.warning));
@@ -1227,8 +1227,8 @@ pub const PT_BR: &[(&str, &str)] = &[
         "Copiado. Na Steam: Propriedades do jogo › Opções de inicialização.",
     ),
     (
-        "CpuZeeZ writes MangoHud's config from your overlay layout and reads its logs for FPS. Steam's own files are never edited.",
-        "O CpuZeeZ gera a config do MangoHud a partir do layout do overlay e lê os logs dele para o FPS. Os arquivos da Steam nunca são editados.",
+        "CPU ZeeZ writes MangoHud's config from your overlay layout and reads its logs for FPS. Steam's own files are never edited.",
+        "O CPU ZeeZ gera a config do MangoHud a partir do layout do overlay e lê os logs dele para o FPS. Os arquivos da Steam nunca são editados.",
     ),
     ("Per-game profiles", "Perfis por jogo"),
     (
@@ -1242,8 +1242,8 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Capture while it runs", "Capturar enquanto ele roda"),
     ("Anti-cheat safe mode", "Modo seguro para anti-cheat"),
     (
-        "While this game runs, CpuZeeZ reads nothing through the PawnIO driver: temperatures and clocks that need it go blank, GPU and OS readings stay. The driver stays loaded; if an anti-cheat refuses the driver itself, uninstall PawnIO.",
-        "Enquanto este jogo roda, o CpuZeeZ não lê nada pelo driver PawnIO: temperaturas e clocks que dependem dele ficam em branco; leituras da GPU e do sistema continuam. O driver continua carregado; se um anti-cheat recusar o próprio driver, desinstale o PawnIO.",
+        "While this game runs, CPU ZeeZ reads nothing through the PawnIO driver: temperatures and clocks that need it go blank, GPU and OS readings stay. The driver stays loaded; if an anti-cheat refuses the driver itself, uninstall PawnIO.",
+        "Enquanto este jogo roda, o CPU ZeeZ não lê nada pelo driver PawnIO: temperaturas e clocks que dependem dele ficam em branco; leituras da GPU e do sistema continuam. O driver continua carregado; se um anti-cheat recusar o próprio driver, desinstale o PawnIO.",
     ),
     (
         "Records every session of this game; ● REC shows while it does.",
@@ -1286,14 +1286,17 @@ pub const PT_BR: &[(&str, &str)] = &[
     ),
     ("Frame timing on (PresentMon)", "Medição de quadros ligada (PresentMon)"),
     ("Starting frame timing…", "Iniciando a medição de quadros…"),
-    ("Frame timing needs CpuZeeZ to run as administrator.", "A medição de quadros exige o CpuZeeZ como administrador."),
     (
-        "The PresentMon sidecar isn't next to CpuZeeZ: reinstall to get FPS.",
-        "O PresentMon não está junto do CpuZeeZ: reinstale para ter FPS.",
+        "Frame timing needs CPU ZeeZ to run as administrator.",
+        "A medição de quadros exige o CPU ZeeZ como administrador.",
     ),
     (
-        "PresentMon next to CpuZeeZ isn't the version we ship (SHA-256 differs), so it was not run.",
-        "O PresentMon junto do CpuZeeZ não é a versão que distribuímos (SHA-256 diferente), então não foi executado.",
+        "The PresentMon sidecar isn't next to CPU ZeeZ: reinstall to get FPS.",
+        "O PresentMon não está junto do CPU ZeeZ: reinstale para ter FPS.",
+    ),
+    (
+        "PresentMon next to CPU ZeeZ isn't the version we ship (SHA-256 differs), so it was not run.",
+        "O PresentMon junto do CPU ZeeZ não é a versão que distribuímos (SHA-256 diferente), então não foi executado.",
     ),
     ("Frame timing stopped: {}", "A medição de quadros parou: {}"),
     ("FPS on Linux comes from MangoHud's logs (below).", "No Linux, o FPS vem dos logs do MangoHud (abaixo)."),
@@ -1305,7 +1308,7 @@ pub const PT_BR: &[(&str, &str)] = &[
     ),
     ("Same shortcut as another action", "Mesmo atalho de outra ação"),
     ("Taken by another app", "Usado por outro app"),
-    ("Not a shortcut CpuZeeZ understands", "Atalho não reconhecido pelo CpuZeeZ"),
+    ("Not a shortcut CPU ZeeZ understands", "Atalho não reconhecido pelo CPU ZeeZ"),
     ("Hotkeys", "Atalhos"),
     ("Monitor", "Monitor"),
     ("Where the game is", "Onde o jogo está"),
@@ -1319,8 +1322,8 @@ pub const PT_BR: &[(&str, &str)] = &[
         "Seu desktop não aceitou os atalhos; escolha-os nas configurações dele",
     ),
     (
-        "This desktop has no global shortcuts portal; shortcuts work while CpuZeeZ has focus",
-        "Este desktop não tem o portal de atalhos globais; os atalhos funcionam com o CpuZeeZ em foco",
+        "This desktop has no global shortcuts portal; shortcuts work while CPU ZeeZ has focus",
+        "Este desktop não tem o portal de atalhos globais; os atalhos funcionam com o CPU ZeeZ em foco",
     ),
     ("Show/hide overlay", "Mostrar/ocultar overlay"),
     ("Next style", "Próximo estilo"),
@@ -1444,8 +1447,8 @@ pub const ES: &[(&str, &str)] = &[
         "Copiado. En Steam: Propiedades del juego › Opciones de lanzamiento.",
     ),
     (
-        "CpuZeeZ writes MangoHud's config from your overlay layout and reads its logs for FPS. Steam's own files are never edited.",
-        "CpuZeeZ genera la configuración de MangoHud desde el diseño del overlay y lee sus registros para los FPS. Los archivos de Steam nunca se editan.",
+        "CPU ZeeZ writes MangoHud's config from your overlay layout and reads its logs for FPS. Steam's own files are never edited.",
+        "CPU ZeeZ genera la configuración de MangoHud desde el diseño del overlay y lee sus registros para los FPS. Los archivos de Steam nunca se editan.",
     ),
     ("Per-game profiles", "Perfiles por juego"),
     (
@@ -1459,8 +1462,8 @@ pub const ES: &[(&str, &str)] = &[
     ("Capture while it runs", "Capturar mientras se ejecuta"),
     ("Anti-cheat safe mode", "Modo seguro para anti-trampas"),
     (
-        "While this game runs, CpuZeeZ reads nothing through the PawnIO driver: temperatures and clocks that need it go blank, GPU and OS readings stay. The driver stays loaded; if an anti-cheat refuses the driver itself, uninstall PawnIO.",
-        "Mientras este juego se ejecuta, CpuZeeZ no lee nada a través del controlador PawnIO: las temperaturas y relojes que lo necesitan quedan en blanco; las lecturas de la GPU y del sistema siguen. El controlador sigue cargado; si un anti-trampas rechaza el controlador, desinstala PawnIO.",
+        "While this game runs, CPU ZeeZ reads nothing through the PawnIO driver: temperatures and clocks that need it go blank, GPU and OS readings stay. The driver stays loaded; if an anti-cheat refuses the driver itself, uninstall PawnIO.",
+        "Mientras este juego se ejecuta, CPU ZeeZ no lee nada a través del controlador PawnIO: las temperaturas y relojes que lo necesitan quedan en blanco; las lecturas de la GPU y del sistema siguen. El controlador sigue cargado; si un anti-trampas rechaza el controlador, desinstala PawnIO.",
     ),
     (
         "Records every session of this game; ● REC shows while it does.",
@@ -1504,16 +1507,16 @@ pub const ES: &[(&str, &str)] = &[
     ("Frame timing on (PresentMon)", "Medición de fotogramas activa (PresentMon)"),
     ("Starting frame timing…", "Iniciando la medición de fotogramas…"),
     (
-        "Frame timing needs CpuZeeZ to run as administrator.",
-        "La medición de fotogramas requiere CpuZeeZ como administrador.",
+        "Frame timing needs CPU ZeeZ to run as administrator.",
+        "La medición de fotogramas requiere CPU ZeeZ como administrador.",
     ),
     (
-        "The PresentMon sidecar isn't next to CpuZeeZ: reinstall to get FPS.",
-        "PresentMon no está junto a CpuZeeZ: reinstala para tener FPS.",
+        "The PresentMon sidecar isn't next to CPU ZeeZ: reinstall to get FPS.",
+        "PresentMon no está junto a CPU ZeeZ: reinstala para tener FPS.",
     ),
     (
-        "PresentMon next to CpuZeeZ isn't the version we ship (SHA-256 differs), so it was not run.",
-        "El PresentMon junto a CpuZeeZ no es la versión que distribuimos (SHA-256 distinto), así que no se ejecutó.",
+        "PresentMon next to CPU ZeeZ isn't the version we ship (SHA-256 differs), so it was not run.",
+        "El PresentMon junto a CPU ZeeZ no es la versión que distribuimos (SHA-256 distinto), así que no se ejecutó.",
     ),
     ("Frame timing stopped: {}", "La medición de fotogramas se detuvo: {}"),
     (
@@ -1528,7 +1531,7 @@ pub const ES: &[(&str, &str)] = &[
     ),
     ("Same shortcut as another action", "Mismo atajo que otra acción"),
     ("Taken by another app", "Usado por otra app"),
-    ("Not a shortcut CpuZeeZ understands", "Atajo no reconocido por CpuZeeZ"),
+    ("Not a shortcut CPU ZeeZ understands", "Atajo no reconocido por CPU ZeeZ"),
     ("Hotkeys", "Atajos"),
     ("Monitor", "Monitor"),
     ("Where the game is", "Donde está el juego"),
@@ -1542,8 +1545,8 @@ pub const ES: &[(&str, &str)] = &[
         "Tu escritorio no aceptó los atajos; elígelos en sus ajustes",
     ),
     (
-        "This desktop has no global shortcuts portal; shortcuts work while CpuZeeZ has focus",
-        "Este escritorio no tiene el portal de atajos globales; los atajos funcionan con CpuZeeZ en foco",
+        "This desktop has no global shortcuts portal; shortcuts work while CPU ZeeZ has focus",
+        "Este escritorio no tiene el portal de atajos globales; los atajos funcionan con CPU ZeeZ en foco",
     ),
     ("Show/hide overlay", "Mostrar/ocultar overlay"),
     ("Next style", "Siguiente estilo"),

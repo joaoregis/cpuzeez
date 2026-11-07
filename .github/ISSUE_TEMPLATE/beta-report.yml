@@ -11,7 +11,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: CpuZeeZ version
+      label: CPU ZeeZ version
       description: *About* page, or `cpuzeez -checkupdate`.
       placeholder: "1.0.0-beta.8"
     validations:

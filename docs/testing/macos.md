@@ -34,7 +34,7 @@ Start it with `./target/release/cpuzeez` (from the terminal, so errors show up t
 
 | # | Do | Expected | Pass? |
 |---|---|---|---|
-| G1 | First start | A **Welcome to CpuZeeZ** screen. "Check for new versions at startup" is **unchecked**. Press **Continue** | |
+| G1 | First start | A **Welcome to CPU ZeeZ** screen. "Check for new versions at startup" is **unchecked**. Press **Continue** | |
 | G2 | **Overview** | Within ~5 s the tiles show CPU temperature and CPU clock. The clock is plausible for the chip (e.g. 3–4.5 GHz on Apple Silicon) | |
 | G3 | **Mainboard** and **Memory** pages | A yellow banner: *Not available: … (macOS doesn't allow third-party register access)*. There is **no** "Restart as administrator" button | |
 | G4 | Banner › **Hide** | It shrinks to a small "Show what's hidden" button; clicking it brings the banner back | |
@@ -57,7 +57,7 @@ Open Activity Monitor › CPU, find `cpuzeez`, and write down its **% CPU** afte
 | P2 | Window minimized (Dock) | |
 | P3 | Sensors page visible | |
 
-Expected: P2 should be close to 0. P1 rises briefly every 5 s, because macOS has no live clock counter and CpuZeeZ times a short loop to measure the clock.
+Expected: P2 should be close to 0. P1 rises briefly every 5 s, because macOS has no live clock counter and CPU ZeeZ times a short loop to measure the clock.
 
 ## 5. Screenshots
 
@@ -76,7 +76,7 @@ These help us decide how ZeeZ Live will measure FPS on macOS (spike SP6). There'
 | E1 | Start any Metal game or app with Apple's HUD: `MTL_HUD_ENABLED=1 open -a "<App Name>"` (or, for a Steam game, set its launch options to `MTL_HUD_ENABLED=1 %command%`) | Does a HUD with FPS appear in the corner? Which app/game? |
 | E2 | While E1 runs, in another terminal: `log stream --style compact --predicate 'process == "<App process name>"' \| grep -i -E "hud\|fps\|frame" \| head -50` | Do any lines with FPS/frame times appear? Paste a few |
 | E3 | Same as E1, but also add `MTL_HUD_LOG_ENABLED=1` | Any difference in E2's output? |
-| E4 | Put that game in **fullscreen** (its own Space), then open CpuZeeZ's mini monitor | Does the mini monitor show over the fullscreen game, or only on the desktop? |
+| E4 | Put that game in **fullscreen** (its own Space), then open CPU ZeeZ's mini monitor | Does the mini monitor show over the fullscreen game, or only on the desktop? |
 | E5 | `nettop -P -L 1 -x -J bytes_in,bytes_out \| head -n 15` (for the per-process network column, spike S0-X10) | Does it print per-process byte counts without `sudo`? Remove any process names you'd rather not share |
 
 ## 7. Send back

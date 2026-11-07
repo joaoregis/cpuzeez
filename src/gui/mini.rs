@@ -34,7 +34,7 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Hide while a full-screen app runs", "Ocultar com um app em tela cheia"),
     ("Expand on hover", "Expandir ao passar o mouse"),
     ("New mini monitor", "Novo mini monitor"),
-    ("Show CpuZeeZ", "Mostrar CpuZeeZ"),
+    ("Show CPU ZeeZ", "Mostrar CPU ZeeZ"),
     ("Close", "Fechar"),
     ("Mini", "Mini"),
     ("Compact", "Compacto"),
@@ -68,7 +68,7 @@ pub const ES: &[(&str, &str)] = &[
     ("Hide while a full-screen app runs", "Ocultar con una app a pantalla completa"),
     ("Expand on hover", "Ampliar al pasar el ratón"),
     ("New mini monitor", "Nuevo minimonitor"),
-    ("Show CpuZeeZ", "Mostrar CpuZeeZ"),
+    ("Show CPU ZeeZ", "Mostrar CPU ZeeZ"),
     ("Close", "Cerrar"),
     ("Mini", "Mini"),
     ("Compact", "Compacto"),
@@ -230,7 +230,7 @@ fn menu(ui: &mut egui::Ui, i: usize, m: &Mini, tjmax: f64, changes: &mut Vec<Cha
         changes.push(Change::New(i));
         ui.close();
     }
-    if ui.button(tr("Show CpuZeeZ")).clicked() {
+    if ui.button(tr("Show CPU ZeeZ")).clicked() {
         changes.push(Change::ShowApp);
         ui.close();
     }

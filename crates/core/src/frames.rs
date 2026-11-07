@@ -267,7 +267,7 @@ pub fn parse_presentmon(text: &str) -> Result<Vec<Frame>, String> {
     Ok(lines.filter_map(|l| cols.frame(l)).collect())
 }
 
-/// The CSV header CpuZeeZ writes for `frames.csv` (PresentMon 2.x names, so
+/// The CSV header CPU ZeeZ writes for `frames.csv` (PresentMon 2.x names, so
 /// CapFrameX and PresentMon's own tools read it).
 pub const FRAMES_CSV_HEADER: &str = "Application,ProcessID,PresentMode,FrameType,CPUStartTime,MsBetweenPresents,MsBetweenDisplayChange,MsUntilDisplayed,MsCPUBusy,MsGPUBusy,MsAllInputToPhotonLatency";
 

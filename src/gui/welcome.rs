@@ -1,4 +1,4 @@
-//! First-run screen (docs/v1/README.md P1–P3): what CpuZeeZ does and doesn't
+//! First-run screen (docs/v1/README.md P1–P3): what CPU ZeeZ does and doesn't
 //! do with your data, the update opt-in, recording and permissions. Shown once
 //! per `PRIVACY_VERSION`, so it comes back if any of this ever changes.
 
@@ -11,12 +11,12 @@ use eframe::egui::{self, RichText};
 pub const PRIVACY_VERSION: u32 = 1;
 
 pub const PT_BR: &[(&str, &str)] = &[
-    ("Welcome to CpuZeeZ", "Bem-vindo ao CpuZeeZ"),
+    ("Welcome to CPU ZeeZ", "Bem-vindo ao CPU ZeeZ"),
     ("A few things to know before you start.", "Algumas coisas antes de começar."),
     ("Your data stays on this computer", "Seus dados ficam neste computador"),
     (
-        "No telemetry, no account, no cloud. Everything CpuZeeZ saves stays in its data folder, and you can see and delete it in Settings › Privacy & data.",
-        "Sem telemetria, sem conta, sem nuvem. Tudo o que o CpuZeeZ salva fica na pasta de dados dele, e você pode ver e apagar em Configurações › Privacidade e dados.",
+        "No telemetry, no account, no cloud. Everything CPU ZeeZ saves stays in its data folder, and you can see and delete it in Settings › Privacy & data.",
+        "Sem telemetria, sem conta, sem nuvem. Tudo o que o CPU ZeeZ salva fica na pasta de dados dele, e você pode ver e apagar em Configurações › Privacidade e dados.",
     ),
     ("Updates", "Atualizações"),
     ("Check for new versions at startup", "Procurar novas versões ao iniciar"),
@@ -32,19 +32,19 @@ pub const PT_BR: &[(&str, &str)] = &[
     ),
     ("Permissions", "Permissões"),
     (
-        "CpuZeeZ starts without administrator rights. When a page needs more access, it says exactly what is missing and offers to restart with it.",
-        "O CpuZeeZ inicia sem permissão de administrador. Quando uma página precisa de mais acesso, ela diz exatamente o que falta e oferece reiniciar com ele.",
+        "CPU ZeeZ starts without administrator rights. When a page needs more access, it says exactly what is missing and offers to restart with it.",
+        "O CPU ZeeZ inicia sem permissão de administrador. Quando uma página precisa de mais acesso, ela diz exatamente o que falta e oferece reiniciar com ele.",
     ),
     ("Continue", "Continuar"),
 ];
 
 pub const ES: &[(&str, &str)] = &[
-    ("Welcome to CpuZeeZ", "Bienvenido a CpuZeeZ"),
+    ("Welcome to CPU ZeeZ", "Bienvenido a CPU ZeeZ"),
     ("A few things to know before you start.", "Algunas cosas antes de empezar."),
     ("Your data stays on this computer", "Tus datos se quedan en este equipo"),
     (
-        "No telemetry, no account, no cloud. Everything CpuZeeZ saves stays in its data folder, and you can see and delete it in Settings › Privacy & data.",
-        "Sin telemetría, sin cuenta, sin nube. Todo lo que CpuZeeZ guarda se queda en su carpeta de datos, y puedes verlo y borrarlo en Ajustes › Privacidad y datos.",
+        "No telemetry, no account, no cloud. Everything CPU ZeeZ saves stays in its data folder, and you can see and delete it in Settings › Privacy & data.",
+        "Sin telemetría, sin cuenta, sin nube. Todo lo que CPU ZeeZ guarda se queda en su carpeta de datos, y puedes verlo y borrarlo en Ajustes › Privacidad y datos.",
     ),
     ("Updates", "Actualizaciones"),
     ("Check for new versions at startup", "Buscar nuevas versiones al iniciar"),
@@ -60,8 +60,8 @@ pub const ES: &[(&str, &str)] = &[
     ),
     ("Permissions", "Permisos"),
     (
-        "CpuZeeZ starts without administrator rights. When a page needs more access, it says exactly what is missing and offers to restart with it.",
-        "CpuZeeZ se inicia sin permisos de administrador. Cuando una página necesita más acceso, indica exactamente qué falta y ofrece reiniciar con él.",
+        "CPU ZeeZ starts without administrator rights. When a page needs more access, it says exactly what is missing and offers to restart with it.",
+        "CPU ZeeZ se inicia sin permisos de administrador. Cuando una página necesita más acceso, indica exactamente qué falta y ofrece reiniciar con él.",
     ),
     ("Continue", "Continuar"),
 ];
@@ -78,12 +78,12 @@ pub fn page(ui: &mut egui::Ui, w: &mut Welcome, updates_allowed: bool) -> Option
     let mut done = None;
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         ui.set_max_width(720.0);
-        widgets::page_header(ui, tr("Welcome to CpuZeeZ"), tr("A few things to know before you start."), |_| {});
+        widgets::page_header(ui, tr("Welcome to CPU ZeeZ"), tr("A few things to know before you start."), |_| {});
         let text = |ui: &mut egui::Ui, s: &str| {
             ui.label(RichText::new(tr(s)).color(p.text_secondary));
         };
         widgets::card(ui, icon::LOCK_SIMPLE, tr("Your data stays on this computer"), |ui| {
-            text(ui, "No telemetry, no account, no cloud. Everything CpuZeeZ saves stays in its data folder, and you can see and delete it in Settings › Privacy & data.");
+            text(ui, "No telemetry, no account, no cloud. Everything CPU ZeeZ saves stays in its data folder, and you can see and delete it in Settings › Privacy & data.");
         });
         ui.add_space(theme::GAP);
         widgets::card(ui, icon::ARROW_CIRCLE_UP, tr("Updates"), |ui| {
@@ -99,7 +99,7 @@ pub fn page(ui: &mut egui::Ui, w: &mut Welcome, updates_allowed: bool) -> Option
         });
         ui.add_space(theme::GAP);
         widgets::card(ui, icon::SHIELD_CHECK, tr("Permissions"), |ui| {
-            text(ui, "CpuZeeZ starts without administrator rights. When a page needs more access, it says exactly what is missing and offers to restart with it.");
+            text(ui, "CPU ZeeZ starts without administrator rights. When a page needs more access, it says exactly what is missing and offers to restart with it.");
         });
         ui.add_space(theme::GAP);
         if widgets::primary_button(ui, tr("Continue")).clicked() {

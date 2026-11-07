@@ -1,4 +1,4 @@
-//! What CpuZeeZ keeps on this computer (docs/v1/README.md P1): every category,
+//! What CPU ZeeZ keeps on this computer (docs/v1/README.md P1): every category,
 //! where it lives, how much space it takes, and deleting or expiring it. All of
 //! it is local; nothing is uploaded anywhere.
 

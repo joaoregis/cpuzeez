@@ -1,5 +1,5 @@
 //! Windows only: embed the app icon and version info in cpuzeez.exe, so
-//! Explorer, the taskbar and "Apps & features" show the CpuZeeZ logo.
+//! Explorer, the taskbar and "Apps & features" show the CPU ZeeZ logo.
 
 fn main() {
     println!("cargo:rerun-if-changed=assets/cpuzeez.ico");
@@ -8,8 +8,8 @@ fn main() {
     }
     let mut res = winresource::WindowsResource::new();
     res.set_icon("assets/cpuzeez.ico")
-        .set("ProductName", "CpuZeeZ")
-        .set("FileDescription", "CpuZeeZ - CPU, mainboard, memory and GPU information")
+        .set("ProductName", "CPU ZeeZ")
+        .set("FileDescription", "CPU ZeeZ - CPU, mainboard, memory and GPU information")
         .set("OriginalFilename", "cpuzeez.exe")
         .set("LegalCopyright", "MIT OR Apache-2.0");
     if let Err(e) = res.compile() {

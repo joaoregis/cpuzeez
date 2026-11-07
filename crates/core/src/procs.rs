@@ -143,7 +143,7 @@ pub fn critical(name: &str, pid: u32) -> bool {
     pid <= 4 || WINDOWS.iter().any(|n| n.eq_ignore_ascii_case(name)) || (pid == 1) || UNIX.contains(&name)
 }
 
-/// Anti-cheat services and the games they protect. CpuZeeZ never opens these
+/// Anti-cheat services and the games they protect. CPU ZeeZ never opens these
 /// with more than the limited query right (P4): no memory dumps, no reads.
 pub fn anti_cheat(name: &str) -> bool {
     const NAMES: [&str; 22] = [

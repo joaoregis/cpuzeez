@@ -1,10 +1,10 @@
 # Performance budget (P6, S3-01)
 
-CpuZeeZ runs next to a game, so it keeps to a budget ([plan §2, P6](v1/README.md)):
+CPU ZeeZ runs next to a game, so it keeps to a budget ([plan §2, P6](v1/README.md)):
 
 | Metric | Budget | How it is checked |
 |---|---|---|
-| CPU used by CpuZeeZ, sampler at 1 s and overlay at 4 Hz | ≤ 2% of **one** logical core | `soak.py --gui … --max-cpu 2` (by hand, see below); the engine's own per-tick work is a test (`tick_overhead_budget`) |
+| CPU used by CPU ZeeZ, sampler at 1 s and overlay at 4 Hz | ≤ 2% of **one** logical core | `soak.py --gui … --max-cpu 2` (by hand, see below); the engine's own per-tick work is a test (`tick_overhead_budget`) |
 | Memory, overlay and capture on | ≤ 150 MB private | `soak.py --gui … --max-mem-mb 150` |
 | Frame-rate cost of the overlay and capture | ≤ 1% (mean of 3 runs, PresentMon) | by hand, with a game: it needs one |
 | Sampling spikes in frame time | none correlated with sampler ticks | by hand, with a game |

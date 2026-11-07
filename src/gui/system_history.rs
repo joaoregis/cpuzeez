@@ -3,7 +3,7 @@
 //! disk bytes, peak memory, run time) in a local SQLite file with configurable
 //! retention (default 30 days), period filter, per-day chart, top consumers,
 //! and "Delete usage history". It records whatever page is shown, while
-//! CpuZeeZ runs and recording is on.
+//! CPU ZeeZ runs and recording is on.
 
 use super::i18n::{tr, trf};
 use super::table::{self, Cell, Column, Table};
@@ -427,7 +427,7 @@ impl State {
         let p = theme::palette(ui);
 
         // Honest scope notice (docs/v1/task-manager.md §5)
-        widgets::pill(ui, tr("Covers only the time CpuZeeZ (or its tray icon) was running."), Tone::Neutral);
+        widgets::pill(ui, tr("Covers only the time CPU ZeeZ (or its tray icon) was running."), Tone::Neutral);
         let view = self.view();
         if let Some(e) = &view.error {
             widgets::pill(ui, &trf("History unavailable: {}", &[e]), Tone::Danger);
@@ -590,8 +590,8 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("History unavailable: {}", "Histórico indisponível: {}"),
     ("Delete every recorded day?", "Excluir todos os dias gravados?"),
     (
-        "Covers only the time CpuZeeZ (or its tray icon) was running.",
-        "Cobre apenas o período em que o CpuZeeZ (ou seu ícone na bandeja) esteve em execução.",
+        "Covers only the time CPU ZeeZ (or its tray icon) was running.",
+        "Cobre apenas o período em que o CPU ZeeZ (ou seu ícone na bandeja) esteve em execução.",
     ),
     ("Record app resource history", "Gravar histórico de uso de recursos por app"),
     ("Today", "Hoje"),
@@ -617,8 +617,8 @@ pub const ES: &[(&str, &str)] = &[
     ("History unavailable: {}", "Historial no disponible: {}"),
     ("Delete every recorded day?", "¿Eliminar todos los días registrados?"),
     (
-        "Covers only the time CpuZeeZ (or its tray icon) was running.",
-        "Cubre únicamente el tiempo en que CpuZeeZ (o su icono en la bandeja) estuvo en ejecución.",
+        "Covers only the time CPU ZeeZ (or its tray icon) was running.",
+        "Cubre únicamente el tiempo en que CPU ZeeZ (o su icono en la bandeja) estuvo en ejecución.",
     ),
     ("Record app resource history", "Registrar historial de recursos por aplicación"),
     ("Today", "Hoy"),
@@ -748,7 +748,7 @@ mod tests {
         );
         h.run();
         h.run();
-        h.get_by_label_contains("Covers only the time CpuZeeZ");
+        h.get_by_label_contains("Covers only the time CPU ZeeZ");
         h.get_by_label_contains("Top CPU: firefox.exe (00:02:05)");
     }
 }

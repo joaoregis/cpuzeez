@@ -1,4 +1,4 @@
-# CpuZeeZ threat model
+# CPU ZeeZ threat model
 
 > Status: written for `1.0.0-beta.8` (S3-05). It describes what the code does today, which test or CI check backs each control, and the risks we accept. Where a claim has no test, it says so.
 > Reporting a vulnerability: see [SECURITY.md](../../SECURITY.md).
@@ -7,7 +7,7 @@
 
 | Asset | Why it matters |
 |---|---|
-| **The user's machine** | CpuZeeZ runs elevated for some actions (kernel driver install, ending system processes, service changes). A flaw there is a privilege escalation. |
+| **The user's machine** | CPU ZeeZ runs elevated for some actions (kernel driver install, ending system processes, service changes). A flaw there is a privilege escalation. |
 | **The user's games and accounts** | An overlay or a monitor that touches a game can get its owner banned by an anti-cheat. |
 | **The user's data** | Reports, captures and histories list hardware serials, process names and play habits. |
 | **The release channel** | Users install what we publish and let the app update itself. |
@@ -22,7 +22,7 @@
 
 ```
  ┌──────────────── user session (unprivileged) ────────────────┐
- │  CpuZeeZ GUI/CLI ──► core (pure logic) ──► platform (OS)    │
+ │  CPU ZeeZ GUI/CLI ──► core (pure logic) ──► platform (OS)    │
  │        │                                                    │
  │        │ Action (closed enum, validated, hex on the wire)   │
  │        ▼                                                    │
@@ -73,7 +73,7 @@ Out of scope: an attacker who is already administrator or kernel; physical acces
 4. It performs the action, prints one line, and exits. The result, success or failure, is appended to the local `audit.log`. A cancelled prompt is not logged because nothing ran.
 5. Protected services (a documented list) are refused by `platform::services::apply` even for an administrator.
 
-What an attacker gains by starting `cpuzeez.exe --elevated-op=…` themselves: nothing the prompt doesn't show. The user sees a UAC prompt for CpuZeeZ, and the action set is the closed list in `core::actions`. An attacker who is already the same user can still **cause prompts**; we rely on the user declining unexpected ones (see §8).
+What an attacker gains by starting `cpuzeez.exe --elevated-op=…` themselves: nothing the prompt doesn't show. The user sees a UAC prompt for CPU ZeeZ, and the action set is the closed list in `core::actions`. An attacker who is already the same user can still **cause prompts**; we rely on the user declining unexpected ones (see §8).
 
 ## 7. Reading other processes
 

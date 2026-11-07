@@ -75,7 +75,7 @@ pub fn diagnostics_bundle(report: &[cpuzeez_core::report::Section]) -> std::io::
         }
     }
     let readme = format!(
-        "CpuZeeZ {} diagnostics, made on request.\n\
+        "CPU ZeeZ {} diagnostics, made on request.\n\
          report.txt / report.json: this computer's hardware report, with serial numbers, UUIDs, MAC and IP addresses removed.\n\
          app.log: the app's own log (startup, warnings, crashes).\n\
          Nothing here was sent anywhere. Attach it to an issue only if you want to.\n",

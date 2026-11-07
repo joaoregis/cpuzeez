@@ -9,7 +9,10 @@
 /// Binary, package and file-name stem.
 pub const NAME: &str = "cpuzeez";
 /// Name shown to people (window title, About, report headers).
-pub const DISPLAY_NAME: &str = "CpuZeeZ";
+pub const DISPLAY_NAME: &str = "CPU ZeeZ";
+/// The data folder's name on Windows and macOS (`%APPDATA%\CpuZeeZ`). It keeps the old spelling
+/// so settings, history and sessions of existing installs are found after the rename.
+pub const DATA_DIR_NAME: &str = "CpuZeeZ";
 
 pub mod acpi;
 pub mod actions;

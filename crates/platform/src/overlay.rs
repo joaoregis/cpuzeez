@@ -1,4 +1,4 @@
-//! Per-OS tweaks for CpuZeeZ's own HUD windows (ZeeZ Live overlay, mini
+//! Per-OS tweaks for CPU ZeeZ's own HUD windows (ZeeZ Live overlay, mini
 //! monitors), docs/v1/zeez-live.md §3.2. They touch only windows of this
 //! process, found by their title.
 //!
@@ -109,6 +109,6 @@ mod imp {
 mod tests {
     #[test]
     fn a_missing_window_is_not_found() {
-        assert!(!super::apply("CpuZeeZ test window that does not exist", super::Style::default()));
+        assert!(!super::apply("CPU ZeeZ test window that does not exist", super::Style::default()));
     }
 }

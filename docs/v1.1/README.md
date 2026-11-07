@@ -1,4 +1,4 @@
-# CpuZeeZ 1.1.0: the plan
+# CPU ZeeZ 1.1.0: the plan
 
 > Status: planned. These are the corrections and small improvements that 1.0.0 leaves partly done, found by checking each [ROADMAP](../v1/ROADMAP.md) row against the code. Each item says why it is only partial today, what finishing it takes, and how we will know it is finished. Nothing here changes what 1.0.0 promises users; it makes the promises easier to trust and the code easier to change.
 > Difficulty is the work to finish, not its value: **MEDIO** (a day or two, low risk), **ALTO** (several days, needs care), **MUITO ALTO** (a project of its own).

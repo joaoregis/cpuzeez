@@ -53,12 +53,12 @@ pub(crate) fn update_bar(ui: &mut egui::Ui, rel: &Release, installer: &mut Optio
                 ui.label(tr("Starting the installer…"));
             }
             Some(Stage::Installed) => {
-                widgets::pill(ui, tr("Installed. Restart CpuZeeZ to use the new version."), widgets::Tone::Success);
+                widgets::pill(ui, tr("Installed. Restart CPU ZeeZ to use the new version."), widgets::Tone::Success);
             }
             Some(Stage::OpenedInstaller) => {
                 widgets::pill(
                     ui,
-                    tr("The installer was opened: follow its steps, then restart CpuZeeZ."),
+                    tr("The installer was opened: follow its steps, then restart CPU ZeeZ."),
                     widgets::Tone::Accent,
                 );
             }

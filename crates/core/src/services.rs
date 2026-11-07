@@ -96,7 +96,7 @@ pub struct Recovery {
 }
 
 /// The built-in accounts a service can run as without a password. Accounts
-/// with a password are set in the OS's own tool: CpuZeeZ never handles
+/// with a password are set in the OS's own tool: CPU ZeeZ never handles
 /// passwords (they would cross the elevation boundary on a command line).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -189,12 +189,12 @@ pub fn parse_systemd_secs(v: &str) -> u32 {
     (ms / 1000.0).ceil() as u32
 }
 
-/// The systemd drop-in CpuZeeZ writes for a recovery policy.
+/// The systemd drop-in CPU ZeeZ writes for a recovery policy.
 pub fn systemd_recovery_dropin(r: &Recovery) -> String {
     let restart = if r.first == RecoveryAction::Restart { "on-failure" } else { "no" };
     let failure = if r.first == RecoveryAction::Reboot { "reboot" } else { "none" };
     format!(
-        "# Written by CpuZeeZ (System > Services > Recovery). Delete this file to undo.\n[Unit]\nFailureAction={failure}\n\n[Service]\nRestart={restart}\nRestartSec={}s\n",
+        "# Written by CPU ZeeZ (System > Services > Recovery). Delete this file to undo.\n[Unit]\nFailureAction={failure}\n\n[Service]\nRestart={restart}\nRestartSec={}s\n",
         r.restart_delay_s
     )
 }

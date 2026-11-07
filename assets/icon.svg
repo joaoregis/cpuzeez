@@ -1,51 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <title>CpuZeeZ</title>
+  <title>CPU ZeeZ</title>
+  <desc>A dark tile with an open gauge arc, an area chart as a shadow, and a two-tone Z: white bars, violet diagonal.</desc>
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#4F46E5"/>
-      <stop offset="0.55" stop-color="#7C3AED"/>
-      <stop offset="1" stop-color="#DB2777"/>
-    </linearGradient>
-    <linearGradient id="die" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#1E1B4B"/>
-      <stop offset="1" stop-color="#0B1023"/>
-    </linearGradient>
-    <linearGradient id="z" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#FFFFFF"/>
-      <stop offset="1" stop-color="#C7D2FE"/>
-    </linearGradient>
+    <clipPath id="z"><rect x="66" y="50" width="48" height="44"/></clipPath>
   </defs>
-
-  <!-- tile -->
-  <rect width="1024" height="1024" rx="228" fill="url(#bg)"/>
-  <rect x="24" y="24" width="976" height="976" rx="206" fill="none" stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="8"/>
-
-  <!-- pins: 4 per side, centred on 347/457/567/677 -->
-  <g fill="#E0E7FF">
-    <rect x="320" y="132" width="54" height="130" rx="22"/>
-    <rect x="430" y="132" width="54" height="130" rx="22"/>
-    <rect x="540" y="132" width="54" height="130" rx="22"/>
-    <rect x="650" y="132" width="54" height="130" rx="22"/>
-    <rect x="320" y="762" width="54" height="130" rx="22"/>
-    <rect x="430" y="762" width="54" height="130" rx="22"/>
-    <rect x="540" y="762" width="54" height="130" rx="22"/>
-    <rect x="650" y="762" width="54" height="130" rx="22"/>
-    <rect x="132" y="320" width="130" height="54" rx="22"/>
-    <rect x="132" y="430" width="130" height="54" rx="22"/>
-    <rect x="132" y="540" width="130" height="54" rx="22"/>
-    <rect x="132" y="650" width="130" height="54" rx="22"/>
-    <rect x="762" y="320" width="130" height="54" rx="22"/>
-    <rect x="762" y="430" width="130" height="54" rx="22"/>
-    <rect x="762" y="540" width="130" height="54" rx="22"/>
-    <rect x="762" y="650" width="130" height="54" rx="22"/>
+  <!-- designed in 180 units; 1024 / 180 = 5.688889 -->
+  <g transform="scale(5.688889)">
+    <rect width="180" height="180" rx="40" fill="#14102A"/>
+    <path d="M43.3 136.7 A66 66 0 1 1 136.7 136.7" fill="none" stroke="#8B5CF6" stroke-width="9" stroke-linecap="round"/>
+    <path d="M54 132 V121 C62 115 70 117 78 119 S92 107 100 111 S116 105 126 109 V132 Z" fill="#7C3AED" fill-opacity="0.5"/>
+    <path d="M54 121 C62 115 70 117 78 119 S92 107 100 111 S116 105 126 109" fill="none" stroke="#A78BFA" stroke-width="3" stroke-linecap="round"/>
+    <path clip-path="url(#z)" d="M103.09 59 H117.09 L76.91 85 H62.91 Z" fill="#A78BFA"/>
+    <rect x="66" y="50" width="48" height="11" rx="2" fill="#F5F3FF"/>
+    <rect x="66" y="83" width="48" height="11" rx="2" fill="#F5F3FF"/>
   </g>
-
-  <!-- package -->
-  <rect x="232" y="232" width="560" height="560" rx="84" fill="url(#die)"/>
-  <rect x="232" y="232" width="560" height="560" rx="84" fill="none" stroke="#A5B4FC" stroke-opacity="0.55" stroke-width="10"/>
-  <circle cx="298" cy="298" r="18" fill="#A5B4FC" fill-opacity="0.7"/>
-
-  <!-- Z with a pink echo behind it: "ZeeZ" -->
-  <path d="M352 352 H672 V430 L478 594 H672 V672 H352 V594 L546 430 H352 Z" fill="#F472B6" fill-opacity="0.9" transform="translate(26 26)"/>
-  <path d="M352 352 H672 V430 L478 594 H672 V672 H352 V594 L546 430 H352 Z" fill="url(#z)"/>
 </svg>

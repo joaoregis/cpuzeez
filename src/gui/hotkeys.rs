@@ -3,7 +3,7 @@
 //! Accessibility permission) and `XGrabKey` on X11. Wayland has no global
 //! grabs for apps: there the XDG GlobalShortcuts portal asks the desktop
 //! (`hotkeys_portal.rs`, ADR 0015); on a desktop without it the shortcuts only
-//! work while a CpuZeeZ window has focus, and the tray menu is the way.
+//! work while a CPU ZeeZ window has focus, and the tray menu is the way.
 
 use super::i18n::tr;
 use cpuzeez_core::live::{HotkeyAction, normalize_keys};
@@ -74,7 +74,7 @@ impl Hotkeys {
                     Ok(()) => self.active.push((*a, hk)),
                     Err(_) => self.problems.push((*a, tr("Taken by another app").into())),
                 },
-                Err(_) => self.problems.push((*a, tr("Not a shortcut CpuZeeZ understands").into())),
+                Err(_) => self.problems.push((*a, tr("Not a shortcut CPU ZeeZ understands").into())),
             }
         }
         self.applied = wanted.to_vec();
@@ -110,7 +110,7 @@ impl Hotkeys {
                 Some(tr("Your desktop did not accept the shortcuts; choose them in its settings").into())
             }
             Status::Unavailable(_) => {
-                Some(tr("This desktop has no global shortcuts portal; shortcuts work while CpuZeeZ has focus").into())
+                Some(tr("This desktop has no global shortcuts portal; shortcuts work while CPU ZeeZ has focus").into())
             }
         };
     }

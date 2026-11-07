@@ -19,8 +19,8 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::{Duration, Instant};
 
 pub const PT_BR: &[(&str, &str)] = &[
-    ("Show CpuZeeZ", "Mostrar CpuZeeZ"),
-    ("Hide CpuZeeZ", "Ocultar CpuZeeZ"),
+    ("Show CPU ZeeZ", "Mostrar CPU ZeeZ"),
+    ("Hide CPU ZeeZ", "Ocultar CPU ZeeZ"),
     ("Mini monitor", "Mini monitor"),
     ("Sensors", "Sensores"),
     ("Pause monitoring", "Pausar monitoramento"),
@@ -30,8 +30,8 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Quit", "Sair"),
 ];
 pub const ES: &[(&str, &str)] = &[
-    ("Show CpuZeeZ", "Mostrar CpuZeeZ"),
-    ("Hide CpuZeeZ", "Ocultar CpuZeeZ"),
+    ("Show CPU ZeeZ", "Mostrar CPU ZeeZ"),
+    ("Hide CPU ZeeZ", "Ocultar CPU ZeeZ"),
     ("Mini monitor", "Minimonitor"),
     ("Sensors", "Sensores"),
     ("Pause monitoring", "Pausar la supervisión"),
@@ -124,7 +124,7 @@ pub fn menu(s: &MenuState) -> Vec<Row> {
         })
         .collect();
     let mut rows = vec![
-        item("toggle", tr(if s.visible { "Hide CpuZeeZ" } else { "Show CpuZeeZ" }), None),
+        item("toggle", tr(if s.visible { "Hide CPU ZeeZ" } else { "Show CPU ZeeZ" }), None),
         item("mini", tr("Mini monitor"), Some(s.mini)),
     ];
     if let Some(l) = s.lock {
@@ -440,11 +440,11 @@ mod tests {
     fn menu_follows_its_state() {
         let s = MenuState { visible: true, mini: false, paused: false, speed_ms: 1000, lock: None };
         let m = menu(&s);
-        assert!(matches!(&m[0], Row::Item { label, .. } if label == "Hide CpuZeeZ"));
+        assert!(matches!(&m[0], Row::Item { label, .. } if label == "Hide CPU ZeeZ"));
         let Row::Sub { items, .. } = &m[5] else { panic!("speed submenu") };
         assert!(items.iter().any(|r| matches!(r, Row::Item { id, checked: Some(true), .. } if id == "speed-1000")));
         let hidden = menu(&MenuState { visible: false, paused: true, ..s });
-        assert!(matches!(&hidden[0], Row::Item { label, .. } if label == "Show CpuZeeZ"));
+        assert!(matches!(&hidden[0], Row::Item { label, .. } if label == "Show CPU ZeeZ"));
         assert!(matches!(&hidden[4], Row::Item { label, .. } if label == "Resume monitoring"));
     }
 

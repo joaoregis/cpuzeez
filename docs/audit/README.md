@@ -1,6 +1,6 @@
 # Audit guide
 
-For whoever audits CpuZeeZ 1.0, human or AI. It says what the project claims, where to look, how to reproduce the evidence, and what is known to be weak. It does not hide limits: a finding that matches a known limit is still a finding, but it is not news.
+For whoever audits CPU ZeeZ 1.0, human or AI. It says what the project claims, where to look, how to reproduce the evidence, and what is known to be weak. It does not hide limits: a finding that matches a known limit is still a finding, but it is not news.
 
 Audit scope: **code, architecture, design, UI, UX, CI, CD, pipelines, vulnerabilities, safety.**
 

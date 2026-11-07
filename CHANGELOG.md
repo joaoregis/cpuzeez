@@ -9,6 +9,7 @@ generated from its section below.
 
 ### Changed
 
+- **A new name and icon: CPU ZeeZ.** The window, About, tray, installer, shortcut, reports and docs say "CPU ZeeZ". The icon is new: a gauge arc, an area chart and a two-tone Z, in the app's violet. What stays as it was so nothing breaks: the `cpuzeez` command and file names, the install folder (`C:\Program Files\CpuZeeZ`), the data folder (`%APPDATA%\CpuZeeZ`, so your settings, history and sessions are found), the `cpuzeez.ini` file and the repository name. Windows shows the new name in *Installed apps* after the next upgrade.
 - The minimum Rust version is now `1.95` and CI builds with it (it said `1.89`, which the GUI toolkit does not build on).
 - A starting corpus for the fuzz targets is committed (`fuzz/corpus/`).
 - [docs/v1.1/README.md](docs/v1.1/README.md) plans the 1.1.0 corrections that 1.0.0 leaves partly done.

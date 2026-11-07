@@ -265,7 +265,7 @@ jobs:
       - name: Upgrade in place along the chain, refuse downgrade, uninstall cleanly
         shell: pwsh
         run: |
-          function Installed { Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object DisplayName -eq 'CpuZeeZ' }
+          function Installed { Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object { $_.DisplayName -in 'CpuZeeZ', 'CPU ZeeZ' } }
           function PawnIo { Test-Path HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO }
           if (PawnIo) { throw 'the runner already has PawnIO: the feature test would prove nothing' }
           foreach ($v in '1.0.0-beta.1', '1.0.0-rc.1', '1.0.0', '1.0.1') {
@@ -321,7 +321,7 @@ jobs:
       - name: Upgrade through every published release to this commit, then remove
         shell: pwsh
         run: |
-          function Installed { Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object DisplayName -eq 'CpuZeeZ' }
+          function Installed { Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object { $_.DisplayName -in 'CpuZeeZ', 'CPU ZeeZ' } }
           function PawnIo { Test-Path HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO }
           function Msi($args_) { $p = Start-Process msiexec -ArgumentList $args_ -Wait -PassThru; $p.ExitCode }
           $dir = 'C:\Program Files\CpuZeeZ'
@@ -342,7 +342,7 @@ jobs:
           if (Msi "/x $id /qn") { throw 'removal failed' }
           if (Installed) { throw 'removal left an uninstall entry' }
           if (Test-Path $dir) { throw "removal left $dir : $((Get-ChildItem $dir -Recurse -Name) -join ', ')" }
-          if (Get-ChildItem "$env:ProgramData\Microsoft\Windows\Start Menu\Programs" -Recurse -Filter 'CpuZeeZ*.lnk') { throw 'removal left the Start menu shortcut' }
+          if (Get-ChildItem "$env:ProgramData\Microsoft\Windows\Start Menu\Programs" -Recurse -Include 'CpuZeeZ*.lnk', 'CPU ZeeZ*.lnk') { throw 'removal left the Start menu shortcut' }
           if (([Environment]::GetEnvironmentVariable('Path', 'Machine') -split ';') -contains $dir) { throw 'removal left the PATH entry' }
           if (-not (Test-Path "$env:APPDATA\CpuZeeZ\settings.json")) { throw 'removal deleted the user data' }
 

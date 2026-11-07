@@ -279,7 +279,7 @@ pub enum StartupOp {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Action {
-    /// Linux: load a kernel module that exposes hardware to CpuZeeZ.
+    /// Linux: load a kernel module that exposes hardware to CPU ZeeZ.
     LoadKernelModule { module: KernelModule },
     /// Windows: run the PawnIO installer shipped next to the exe, after
     /// checking it against the SHA-256 pinned at build time.

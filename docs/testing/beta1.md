@@ -2,7 +2,7 @@
 
 Thanks for trying the first 1.0 beta. These are the checks the automated tests can't do: they need your hardware, your games or your judgement. Each one says what "good" looks like. Report anything that isn't, with the report (*Tools › Reports › Save .TXT*) if you can.
 
-Install the MSI with *Hardware access (PawnIO)* ticked and run CpuZeeZ **as administrator** for the full picture. Some checks also say what to expect without admin.
+Install the MSI with *Hardware access (PawnIO)* ticked and run CPU ZeeZ **as administrator** for the full picture. Some checks also say what to expect without admin.
 
 ## 1. First look (5 minutes)
 
@@ -48,7 +48,7 @@ Close games and heavy apps first; the results record the power plan and the star
 
 ## 7. Games and anti-cheat (your call, your account)
 
-- [ ] Play a match with CpuZeeZ open (sensors on, PawnIO loaded) in games with kernel anti-cheat (Vanguard, FACEIT, EAC, BattlEye). Nothing should happen: CpuZeeZ never touches game processes. If an anti-cheat complains, tell us which and when; that's spike X08.
+- [ ] Play a match with CPU ZeeZ open (sensors on, PawnIO loaded) in games with kernel anti-cheat (Vanguard, FACEIT, EAC, BattlEye). Nothing should happen: CPU ZeeZ never touches game processes. If an anti-cheat complains, tell us which and when; that's spike X08.
 - [ ] With a game that has DLSS or FSR Frame Generation, and one that runs above 240 FPS: nothing to do in the app yet (ZeeZ Live is the next beta), but note the games; we'll use them for spike X02.
 
 ## 8. Mac and Linux

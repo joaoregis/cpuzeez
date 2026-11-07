@@ -934,7 +934,7 @@ impl State {
                 let protected = procs::anti_cheat(&first.name);
                 if ui
                     .add_enabled(!protected, egui::Button::new(tr("Create dump file")))
-                    .on_disabled_hover_text(tr("Protected by an anti-cheat: CpuZeeZ never reads its memory."))
+                    .on_disabled_hover_text(tr("Protected by an anti-cheat: CPU ZeeZ never reads its memory."))
                     .clicked()
                 {
                     ctx_action = Some(CtxCmd::Dump(first.pid));
@@ -1510,8 +1510,8 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("UAC virtualization", "Virtualização do UAC"),
     ("Close window", "Fechar janela"),
     (
-        "Protected by an anti-cheat: CpuZeeZ never reads its memory.",
-        "Protegido por um anti-cheat: o CpuZeeZ nunca lê a memória dele.",
+        "Protected by an anti-cheat: CPU ZeeZ never reads its memory.",
+        "Protegido por um anti-cheat: o CPU ZeeZ nunca lê a memória dele.",
     ),
     ("System", "Sistema"),
     ("{} processes · {} threads · {} handles", "{} processos · {} threads · {} handles"),
@@ -1696,8 +1696,8 @@ pub const ES: &[(&str, &str)] = &[
     ("UAC virtualization", "Virtualización de UAC"),
     ("Close window", "Cerrar ventana"),
     (
-        "Protected by an anti-cheat: CpuZeeZ never reads its memory.",
-        "Protegido por un anti-cheat: CpuZeeZ nunca lee su memoria.",
+        "Protected by an anti-cheat: CPU ZeeZ never reads its memory.",
+        "Protegido por un anti-cheat: CPU ZeeZ nunca lee su memoria.",
     ),
     ("System", "Sistema"),
     ("{} processes · {} threads · {} handles", "{} procesos · {} hilos · {} identificadores"),

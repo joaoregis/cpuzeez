@@ -10,7 +10,7 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Advanced", "Avançado"),
     ("Expert", "Especialista"),
     ("The essentials", "O essencial"),
-    ("Everything CpuZeeZ reads", "Tudo o que o CpuZeeZ lê"),
+    ("Everything CPU ZeeZ reads", "Tudo o que o CPU ZeeZ lê"),
     ("Plus raw values: CPUID leaves, registers", "Mais valores brutos: folhas CPUID, registradores"),
     ("CPUID leaves (thread 0)", "Folhas CPUID (thread 0)"),
     ("MSRs (thread 0)", "MSRs (thread 0)"),
@@ -21,7 +21,7 @@ pub const ES: &[(&str, &str)] = &[
     ("Advanced", "Avanzado"),
     ("Expert", "Experto"),
     ("The essentials", "Lo esencial"),
-    ("Everything CpuZeeZ reads", "Todo lo que lee CpuZeeZ"),
+    ("Everything CPU ZeeZ reads", "Todo lo que lee CPU ZeeZ"),
     ("Plus raw values: CPUID leaves, registers", "Más valores en bruto: hojas CPUID, registros"),
     ("CPUID leaves (thread 0)", "Hojas CPUID (hilo 0)"),
     ("MSRs (thread 0)", "MSRs (hilo 0)"),
@@ -46,7 +46,7 @@ pub fn switch(ui: &mut egui::Ui, l: &mut Level) -> bool {
     // Drawn right to left (page header actions): Expert first.
     for (lv, hint) in [
         (Level::Expert, "Plus raw values: CPUID leaves, registers"),
-        (Level::Advanced, "Everything CpuZeeZ reads"),
+        (Level::Advanced, "Everything CPU ZeeZ reads"),
         (Level::Basic, "The essentials"),
     ] {
         ui.selectable_value(l, lv, tr(lv.label())).on_hover_text(tr(hint));
