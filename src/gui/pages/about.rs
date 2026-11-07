@@ -50,9 +50,10 @@ impl App {
                 let slot = self.update_manual.clone();
                 *slot.lock().unwrap() = Some(tr("Checking...").into());
                 let found = self.update.clone();
+                let channel = self.mon.settings.channel();
                 self.update_dismissed = false;
                 std::thread::spawn(move || {
-                    let r = crate::update::check();
+                    let r = crate::update::check(channel);
                     // Translated when the check ends (the language can't change mid-check in practice).
                     let text = match &r {
                         Some(r) => trf("{} {} is available.", &[&crate::DISPLAY_NAME, &r.version]),

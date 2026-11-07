@@ -44,6 +44,9 @@ pub struct Settings {
     /// Ask GitHub for a newer release at startup. None = not asked yet: the
     /// first-run screen asks, and nothing is checked until then (P1).
     pub update_check: Option<bool>,
+    /// Which releases the check offers. None = follow this build: a beta
+    /// build is told about newer betas, a release only about releases.
+    pub update_channel: Option<crate::update::Channel>,
     /// Version of the first-run privacy screen the user has seen (0 = never).
     pub privacy_seen: u32,
     /// Delete sensor logs older than this many days (0 = keep them).
@@ -113,6 +116,7 @@ impl Default for Settings {
             warn_temp_c: 95.0,
             mini: false,
             update_check: None,
+            update_channel: None,
             privacy_seen: 0,
             log_retention_days: 0,
             units: Default::default(),
@@ -165,6 +169,11 @@ fn file() -> Option<PathBuf> {
 }
 
 impl Settings {
+    /// The update channel in effect.
+    pub fn channel(&self) -> crate::update::Channel {
+        self.update_channel.unwrap_or_else(|| crate::update::Channel::of(crate::VERSION))
+    }
+
     pub fn load() -> Settings {
         file().map(|p| Settings::load_from(&p)).unwrap_or_default()
     }

@@ -267,3 +267,83 @@ jobs:
           $p = Start-Process msiexec -ArgumentList "/x $($e[0].PSChildName) /qn" -Wait -PassThru; if ($p.ExitCode) { throw "uninstall: $($p.ExitCode)" }
           if (Installed) { throw 'uninstall left an entry' } else { 'uninstalled cleanly' }
           if (-not (PawnIo)) { throw 'uninstalling CpuZeeZ removed the shared PawnIO driver' }
+
+  msi-releases:
+    name: MSI upgrade from every published release, optional driver, clean removal
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - run: cargo build --release
+      - name: Build this commit's MSI and download the published ones
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          head=$(cargo pkgid | sed 's/.*[#@]//')
+          echo "head version $head"
+          bash .github/scripts/fetch_pawnio.sh pawnio
+          dotnet tool install --global wix --version 5.0.2
+          wix extension add -g WixToolset.UI.wixext/5.0.2
+          msi=$(python .github/scripts/pkgver.py "$head" | sed -n 's/^MSI_VER=//p')
+          wix build packaging/windows/cpuzeez.wxs -wx -ext WixToolset.UI.wixext -arch x64 -d Version=$msi -d Bin=target/release/cpuzeez.exe -d IconFile=assets/cpuzeez.ico -d PawnIo="$(pwd -W)/pawnio" -o head.msi
+          mkdir published
+          # Every 1.x pre-release or release with an MSI, oldest first, except this very version.
+          for tag in $(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName -q '.[].tagName' | grep '^v1\.' | sort -V); do
+            [ "$tag" = "v$head" ] && continue
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" -p '*-windows-x64.msi' -D published 2>/dev/null || echo "no MSI in $tag"
+          done
+          ls published
+      - name: Upgrade through every published release to this commit, then remove
+        shell: pwsh
+        run: |
+          function Installed { Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object DisplayName -eq 'CpuZeeZ' }
+          function PawnIo { Test-Path HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO }
+          function Msi($args_) { $p = Start-Process msiexec -ArgumentList $args_ -Wait -PassThru; $p.ExitCode }
+          $dir = 'C:\Program Files\CpuZeeZ'
+          if (PawnIo) { throw 'the runner already has PawnIO: the feature test would prove nothing' }
+
+          # 1. Optional component: leaving "Hardware access" out installs the app and no driver.
+          if (Msi '/i head.msi ADDLOCAL=Main /qn') { throw 'install without the driver failed' }
+          if (PawnIo) { throw 'ADDLOCAL=Main still installed the PawnIO driver' }
+          if (-not (Test-Path "$dir\cpuzeez.exe")) { throw 'the app is missing without the driver' }
+          & "$dir\cpuzeez.exe" -core=0
+          if (Msi "/x $((Installed).PSChildName) /qn") { throw 'removal failed' }
+
+          # 2. Clean removal: no folder, no shortcut, no PATH entry; the user's data stays.
+          New-Item -ItemType Directory -Force "$env:APPDATA\CpuZeeZ" | Out-Null
+          Set-Content "$env:APPDATA\CpuZeeZ\settings.json" '{}'
+          if (Msi '/i head.msi ADDLOCAL=Main /qn') { throw 'reinstall failed' }
+          $id = (Installed).PSChildName
+          if (Msi "/x $id /qn") { throw 'removal failed' }
+          if (Installed) { throw 'removal left an uninstall entry' }
+          if (Test-Path $dir) { throw "removal left $dir : $((Get-ChildItem $dir -Recurse -Name) -join ', ')" }
+          if (Get-ChildItem "$env:ProgramData\Microsoft\Windows\Start Menu\Programs" -Recurse -Filter 'CpuZeeZ*.lnk') { throw 'removal left the Start menu shortcut' }
+          if (([Environment]::GetEnvironmentVariable('Path', 'Machine') -split ';') -contains $dir) { throw 'removal left the PATH entry' }
+          if (-not (Test-Path "$env:APPDATA\CpuZeeZ\settings.json")) { throw 'removal deleted the user data' }
+
+          # 3. Upgrade in place from every published release, oldest first, ending on this commit.
+          # Numbers compare as numbers: beta.2 before beta.10.
+          $chain = @(Get-ChildItem published -Filter *.msi | Sort-Object { [regex]::Replace($_.Name, '\d+', { param($m) $m.Value.PadLeft(6, '0') }) })
+          foreach ($m in $chain + (Get-Item head.msi)) {
+            $code = Msi "/i $($m.FullName) ADDLOCAL=Main /qn /l*v i-$($m.BaseName).log"
+            if ($code) { throw "installing $($m.Name): exit $code" }
+            $e = @(Installed)
+            "$($m.Name) -> $($e.Count) entry, version $($e.DisplayVersion)"
+            if ($e.Count -ne 1) { throw "after $($m.Name) there are $($e.Count) entries" }
+          }
+          & "$dir\cpuzeez.exe" -core=0
+          if (Msi "/x $((Installed).PSChildName) /qn") { throw 'final removal failed' }
+          if (Installed) { throw 'final removal left an entry' }
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: msi-releases-logs
+          path: i-*.log
+          if-no-files-found: ignore

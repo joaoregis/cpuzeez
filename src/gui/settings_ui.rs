@@ -82,6 +82,14 @@ pub const PT_BR: &[(&str, &str)] = &[
         "Usada pelo monitor de estresse quando o Tjmax da CPU é desconhecido.",
     ),
     ("Check for updates at startup", "Procurar atualizações ao iniciar"),
+    ("Update channel", "Canal de atualização"),
+    ("Stable", "Estável"),
+    ("Beta", "Beta"),
+    ("Alpha", "Alfa"),
+    (
+        "Stable: releases only. Beta: also betas and release candidates. Alpha: everything that is published. Pre-releases may be unfinished.",
+        "Estável: só versões finais. Beta: também betas e candidatas a versão final. Alfa: tudo o que foi publicado. Pré-versões podem estar inacabadas.",
+    ),
     (
         "One anonymous request to GitHub's releases page at startup; nothing about your computer is sent.",
         "Uma consulta anônima à página de versões do GitHub ao iniciar; nada sobre o seu computador é enviado.",
@@ -202,6 +210,14 @@ pub const ES: &[(&str, &str)] = &[
         "La usa el monitor de estrés cuando se desconoce el Tjmax de la CPU.",
     ),
     ("Check for updates at startup", "Buscar actualizaciones al iniciar"),
+    ("Update channel", "Canal de actualización"),
+    ("Stable", "Estable"),
+    ("Beta", "Beta"),
+    ("Alpha", "Alfa"),
+    (
+        "Stable: releases only. Beta: also betas and release candidates. Alpha: everything that is published. Pre-releases may be unfinished.",
+        "Estable: solo versiones finales. Beta: también betas y candidatas a versión final. Alfa: todo lo publicado. Las preversiones pueden estar inacabadas.",
+    ),
     (
         "One anonymous request to GitHub's releases page at startup; nothing about your computer is sent.",
         "Una consulta anónima a la página de versiones de GitHub al iniciar; no se envía nada sobre tu equipo.",
@@ -625,7 +641,22 @@ pub fn page(ui: &mut egui::Ui, s: &mut Settings, updates_allowed: bool, persist:
                 s.update_check = Some(on);
             }
         });
+        row(ui, tr("Update channel"), |ui| {
+            let cur = s.channel();
+            egui::ComboBox::from_id_salt("update-channel").selected_text(tr(cur.name())).show_ui(ui, |ui| {
+                for c in crate::update::Channel::ALL {
+                    if ui.selectable_label(cur == c, tr(c.name())).clicked() {
+                        s.update_channel = Some(c);
+                    }
+                }
+            });
+        });
         let p = theme::palette(ui);
+        ui.label(RichText::new(tr(
+            "Stable: releases only. Beta: also betas and release candidates. Alpha: everything that is published. Pre-releases may be unfinished.",
+        ))
+        .small()
+        .color(p.text_muted));
         let note = if updates_allowed {
             "One anonymous request to GitHub's releases page at startup; nothing about your computer is sent."
         } else {

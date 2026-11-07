@@ -870,7 +870,8 @@ impl App {
     fn check_updates_if_allowed(&self) {
         if crate::update::startup_check_allowed(self.ctx.cfg.check_updates, self.mon.settings.update_check) {
             let slot = self.update.clone();
-            std::thread::spawn(move || *slot.lock().unwrap() = crate::update::check());
+            let channel = self.mon.settings.channel();
+            std::thread::spawn(move || *slot.lock().unwrap() = crate::update::check(channel));
         }
     }
 

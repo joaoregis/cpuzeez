@@ -131,7 +131,7 @@ enum Out {
 }
 
 const USAGE: &str = "usage: cpuzeez [-txt=FILE] [-html=FILE] [-json=FILE] [-jsontxt=FILE] [-console] \
-[-bench] [-membench] [-core=ID] [-coremask=HEX] [-sensors] [-log=FILE[,SECONDS]] [-diff=OLD.json,NEW.json|now] [-checkupdate] [-screenshots=DIR]\nWith no output option the GUI opens.";
+[-bench] [-membench] [-core=ID] [-coremask=HEX] [-sensors] [-log=FILE[,SECONDS]] [-diff=OLD.json,NEW.json|now] [-checkupdate[=stable|beta|alpha]] [-screenshots=DIR]\nWith no output option the GUI opens.";
 
 fn main() {
     applog::install_panic_hook();
@@ -149,7 +149,7 @@ fn main() {
             "json" => outs.push(Out::Json(v.into())),
             "jsontxt" => outs.push(Out::JsonTxt(v.into())),
             "console" => console = true,
-            "checkupdate" => return update::cli(),
+            "checkupdate" => return update::cli(v),
             "sensors" => return telemetry::cli_once(&Ctx::new(config::Config::load())),
             "membench" => return membench::cli(&Ctx::new(config::Config::load())),
             "diff" => return diff::cli(&Ctx::new(config::Config::load()), v),
