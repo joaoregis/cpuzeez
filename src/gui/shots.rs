@@ -68,7 +68,7 @@ impl App {
                     // symlink would redirect the write. The README promises
                     // masking for everything this mode produces.
                     let masked = report.map(report::masked);
-                    let dir = self.auto.as_ref().map_or_else(|| std::env::temp_dir(), |a| a.dir.clone());
+                    let dir = self.auto.as_ref().map_or_else(std::env::temp_dir, |a| a.dir.clone());
                     let path = dir.join(format!("{}-screenshot-report.json", crate::NAME));
                     let _ = std::fs::write(&path, masked.as_deref().map(report::to_json).unwrap_or_default());
                     self.compare.current = true;
