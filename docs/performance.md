@@ -53,7 +53,7 @@ The CPU figure is the main window touring every page, which is heavier than the 
 | Handles / threads | 490 → 493 / 24 → 24 | no leak |
 | CPU | mean **3.51 %**, p95 4.58 % of one core (includes the synthetic game's thread) | ≤ 2 %: **not met** |
 
-Where it goes (per-thread CPU over 30 s): the interface thread about 1–1.9 %, two worker threads about 1 % each. With the overlay up, eframe keeps running the main window's interface while it is minimised (the overlay is its child viewport); not building the hidden page was tried and saved little (≈ 3 % instead of 3.5 %), so it was left out. Reaching 2 % is open work before the final release.
+Where it goes (per-thread CPU over 30 s): the interface thread about 1–1.9 %, two worker threads about 1 % each. With the overlay up, eframe keeps running the main window's interface while it is minimised (the overlay is its child viewport); not building the hidden page was tried and saved little (≈ 3 % instead of 3.5 %), so it was left out. 1.0.0 ships with this number; reaching 2 % is a 1.1.0 goal ([plan, item 9](v1.1/README.md#9-overlay-cpu-down-to-the-2--goal)).
 
 ## Not measured yet
 

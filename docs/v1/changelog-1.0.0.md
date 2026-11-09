@@ -124,7 +124,7 @@ CPU ZeeZ 1.0 is the CPU-Z feature set grown into a complete tool for the PC on W
 - **The name is CPU ZeeZ**, with a new icon (a gauge arc, an area chart and a two-tone Z). The `cpuzeez` command and files, the install folder, the data folder (`%APPDATA%\CpuZeeZ`, `~/Library/Application Support/CpuZeeZ`, `$XDG_CONFIG_HOME/cpuzeez`) and `cpuzeez.ini` keep their names, so nothing breaks on upgrade.
 - **The update check is off until you allow it** (it was on by default in 0.3.0), and pre-releases are only offered on the channels that include them.
 - **A release ladder**: release, then snapshot (a preview with every new feature), beta and alpha; installers order them correctly for upgrades.
-- **Monitoring costs less**: sources are read only while a page, the overlay, a tray icon or a mini monitor shows them; slow sources (SMART, batteries) are read every few seconds, never on the interface thread; the sampler's CPU use fell (3.2 % → 2.4 % of one core reading every sensor in the S0 measurement ⚠ replace with the final P6 numbers).
+- **Monitoring costs less**: sources are read only while a page, the overlay, a tray icon or a mini monitor shows them; slow sources (SMART, batteries) are read every few seconds, never on the interface thread; the sampler's CPU use fell (3.2 % → 2.4 % of one core reading every sensor in the S0 measurement).
 - **App history** is kept in SQLite with the retention setting applied.
 - **Mainboard sensors** labelled "CPU …" stay with the mainboard on Windows and Linux.
 - **Session reports** record the refresh rate and the kind of each throttling span.
@@ -188,7 +188,7 @@ Problems that appeared in the betas and were fixed before 1.0, for testers who s
 - ⚠ Releases are not code-signed: Windows SmartScreen and macOS Gatekeeper warn on first run ([ADR 0009](../adr/0009-releases-stay-unsigned-for-now.md)). Every release has `SHA256SUMS.txt`.
 - ⚠ Games in true exclusive fullscreen hide the overlay (capture still works).
 - ⚠ Wayland shortcuts, KMS refresh and Linux/macOS desktop behaviour were checked by CI and testers, not on every desktop; see [FEATURES.md](../../FEATURES.md).
-- ⚠ The performance budget (2 % of a core, 150 MB, ≤ 1 % FPS cost): memory is met (~120 MB with the overlay); CPU with the overlay measured 3.5 % of one core on 2026-11-09, over budget; replace with the final numbers from [docs/performance.md](../performance.md).
+- The overlay next to a game uses about 3.5 % of one CPU core (measured with a synthetic game, the main window minimised) against a 2 % goal; memory stays around 120 MB with no growth. Bringing CPU down to 2 % is planned for 1.1.0 ([docs/performance.md](../performance.md)).
 
 ### Thanks
 

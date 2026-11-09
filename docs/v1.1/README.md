@@ -15,6 +15,7 @@ Items rated BAIXO were fixed during the 1.0.0 hardening instead of being listed 
 | 6 | [`gui/mod.rs` down to navigation and composition](#6-guimodrs-down-to-navigation-and-composition) | S0-E04 | ALTO | 6 |
 | 7 | [Screenshots of the new pages on Linux and macOS](#7-screenshots-of-the-new-pages-on-linux-and-macos) | S3-07 | ALTO | 7 |
 | 8 | [`unsafe` only in `platform`](#8-unsafe-only-in-platform) | S0-E06 | MUITO ALTO | 8 |
+| 9 | [Overlay CPU down to the 2 % goal](#9-overlay-cpu-down-to-the-2--goal) | S3-01 (P6) | ALTO | 9 |
 
 Also waiting for a free machine, not for work: the long GUI soak and the overlay's CPU and memory against the budget ([performance.md](../performance.md)), and the Windows screenshots of the new pages. Both open a window, so they are scheduled with the owner.
 
@@ -101,6 +102,18 @@ Also waiting for a free machine, not for work: the long GUI soak and the overlay
 **Done when.** `grep -rn unsafe src/` finds nothing and the lint forbids it.
 
 **Risks.** The largest item here: many files, FFI signatures that are easy to get subtly wrong, and no behaviour to show for it. Better done module by module while touching each one than as a single change.
+
+---
+
+## 9. Overlay CPU down to the 2 % goal
+
+**Why it is partial.** 1.0.0 meets the memory budget and has no leaks (8 hours with every page: memory flat at ~143 MB; 30 minutes overlay-only: ~120 MB), but the overlay-only soak measured **3.5 % of one core** (p95 4.6 %) against the 2 % goal ([performance](../performance.md)). 1.0.0 ships with that number, accepted.
+
+**What finishing takes.** Find where the cost goes before changing anything: per-thread CPU puts about 1–1.9 % on the interface thread and about 1 % on each of two workers. Known lead: with the overlay up, eframe keeps running the main window's interface while it is minimised (the overlay is its child viewport). Not building the hidden page was tried in 1.0 and saved little (≈ 3 %); a first version of it also made memory grow ~1.5 MB/min, so any change there needs the overlay soak for memory too. Other candidates: the overlay's repaint rate, the sources its default style leases (≈ 1.3 % estimated for sampling), moving the overlay to its own deferred viewport.
+
+**Done when.** `soak.py --gui --overlay-only … 30 --max-cpu 2 --max-mem-mb 150` passes on Windows, with memory still flat.
+
+**Risks.** The interface and the overlay share one event loop; changes there can break repaint (a frozen overlay) or leak, as the 1.0 attempt showed.
 
 ---
 

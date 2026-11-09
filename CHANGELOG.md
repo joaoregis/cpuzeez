@@ -7,6 +7,10 @@ generated from its section below.
 
 ## [Unreleased]
 
+### Changed
+
+- The 2 % CPU goal for the overlay moves to 1.1.0 ([plan, item 9](docs/v1.1/README.md#9-overlay-cpu-down-to-the-2--goal)); 1.0.0 ships with the measured 3.5 % of one core and flat memory.
+
 ## [1.0.0-snapshot.2] - 2026-11-09
 
 The second snapshot of 1.0: the fixes from a security review of the whole tree, and the results of the long overnight runs ([docs/performance.md](docs/performance.md)).
