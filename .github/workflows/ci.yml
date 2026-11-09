@@ -133,9 +133,18 @@ jobs:
       - name: Install toolchain prerequisites
         run: |
           if command -v pacman >/dev/null; then
-            pacman -Syu --noconfirm --needed base-devel curl git python
+            for i in 1 2 3; do
+              pacman -Syu --noconfirm --needed base-devel curl git python && break
+              [ "$i" = 3 ] && exit 1
+              echo "pacman attempt $i failed; retrying in 30 s"; sleep 30
+            done
           else
-            apt-get update && apt-get install -y --no-install-recommends build-essential curl ca-certificates git python3
+            # The distro mirror times out now and then: retry before giving up.
+            for i in 1 2 3; do
+              apt-get -o Acquire::Retries=5 update && apt-get -o Acquire::Retries=5 install -y --no-install-recommends build-essential curl ca-certificates git python3 && break
+              [ "$i" = 3 ] && exit 1
+              echo "apt attempt $i failed; retrying in 30 s"; sleep 30
+            done
           fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
