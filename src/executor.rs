@@ -148,7 +148,10 @@ fn perform_process(op: &actions::ProcessOp) -> Result<String, String> {
         ProcessOp::Dump { pid } => {
             let dir = std::env::temp_dir();
             let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
-            let path = dir.join(format!("cpuzeez-pid{pid}-{ts}.dmp"));
+            // The elevated copy writes here, in the user's own temp folder: an
+            // unpredictable name and an exclusive create (in proc_ops::dump) so
+            // nothing planted there beforehand is overwritten or followed.
+            let path = dir.join(format!("cpuzeez-pid{pid}-{ts}-{}.dmp", cpuzeez_platform::tempdir::token()));
             proc_ops::dump(*pid, &path)?;
             Ok(path.display().to_string())
         }

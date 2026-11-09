@@ -232,7 +232,8 @@ mod imp {
     }
 
     pub fn send_message(_session_id: u32, title: &str, body: &str) -> Result<String, String> {
-        let out = std::process::Command::new("notify-send").args([title, body]).output().map_err(|e| e.to_string())?;
+        let out =
+            std::process::Command::new("notify-send").args(["--", title, body]).output().map_err(|e| e.to_string())?;
         if out.status.success() {
             Ok("Sent desktop notification".into())
         } else {

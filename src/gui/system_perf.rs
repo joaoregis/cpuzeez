@@ -113,10 +113,10 @@ impl State {
             }
             ui.separator();
             if ui.button(format!("{} {}", icon::EXPORT, tr("Export CSV"))).clicked() {
-                let path = "performance.csv";
+                let path = crate::settings::export_path("performance.csv");
                 let csv = export_series_csv(series);
-                self.message = Some(match std::fs::write(path, csv) {
-                    Ok(()) => trf("Saved {}", &[&path]),
+                self.message = Some(match std::fs::write(&path, csv) {
+                    Ok(()) => trf("Saved {}", &[&path.display()]),
                     Err(e) => e.to_string(),
                 });
             }
@@ -721,7 +721,13 @@ pub fn export_series_csv(series: &[Series]) -> String {
     for s in series {
         out.push_str(&format!(
             "{},\"{}\",\"{}\",{:.2},{:.2},{:.2},{:.2}\n",
-            s.id, s.group, s.label, s.current, s.min, s.max, s.avg
+            s.id,
+            cpuzeez_core::report::spreadsheet_safe(&s.group).replace('"', "\"\""),
+            cpuzeez_core::report::spreadsheet_safe(&s.label).replace('"', "\"\""),
+            s.current,
+            s.min,
+            s.max,
+            s.avg
         ));
     }
     out

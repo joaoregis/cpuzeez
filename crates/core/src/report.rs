@@ -45,6 +45,21 @@ pub fn is_private(key: &str) -> bool {
 }
 
 /// A copy with private values replaced and raw dumps (which can hold serials) removed.
+/// Text made safe to open in a spreadsheet: a cell that starts with `=`, `@`,
+/// a tab or a carriage return, or with `+`/`-` not followed by a number, is a
+/// formula to Excel and LibreOffice (process names, paths and window titles come
+/// from other programs, so `=cmd|'/c calc'!A1` is possible). Such text gets a
+/// leading `'`, which spreadsheets show as plain text. Numbers like `-3.5` stay.
+pub fn spreadsheet_safe(s: &str) -> std::borrow::Cow<'_, str> {
+    let mut c = s.chars();
+    let risky = match c.next() {
+        Some('=' | '@' | '\t' | '\r') => true,
+        Some('+' | '-') => !c.next().is_some_and(|d| d.is_ascii_digit() || d == '.'),
+        _ => false,
+    };
+    if risky { std::borrow::Cow::Owned(format!("'{s}")) } else { std::borrow::Cow::Borrowed(s) }
+}
+
 pub fn masked(sections: &[Section]) -> Vec<Section> {
     fn mask(nodes: &[Node]) -> Vec<Node> {
         nodes
@@ -249,6 +264,16 @@ pub fn to_json(report: &[Section]) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn spreadsheet_formulas_are_neutralised() {
+        for bad in ["=cmd|'/c calc'!A1", "@SUM(1)", "+cmd", "-cmd", "\t=1", "\r=1"] {
+            assert!(spreadsheet_safe(bad).starts_with('\''), "{bad:?}");
+        }
+        for ok in ["chrome.exe", "-3.5", "+12", "-.5", "C:\\x", "", "a=b"] {
+            assert_eq!(spreadsheet_safe(ok), ok, "{ok:?}");
+        }
+    }
+
     use super::*;
 
     #[test]

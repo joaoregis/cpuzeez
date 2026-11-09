@@ -129,7 +129,7 @@ pub(crate) fn release_from(v: &Value) -> Option<Release> {
                 .filter_map(|x| {
                     Some(Asset {
                         name: x["name"].as_str()?.to_string(),
-                        url: x["browser_download_url"].as_str()?.to_string(),
+                        url: https(x["browser_download_url"].as_str()?)?,
                         size: x["size"].as_u64().unwrap_or(0),
                     })
                 })
@@ -138,10 +138,18 @@ pub(crate) fn release_from(v: &Value) -> Option<Release> {
         .unwrap_or_default();
     Some(Release {
         version: tag.trim_start_matches('v').to_string(),
-        page: v["html_url"].as_str().unwrap_or(crate::REPO_URL).to_string(),
+        page: v["html_url"].as_str().and_then(https).unwrap_or_else(|| crate::REPO_URL.to_string()),
         asset: pick(&assets, &platform_suffixes()),
         sums: assets.iter().find(|a| a.name == "SHA256SUMS.txt").map(|a| a.url.clone()),
     })
+}
+
+/// A URL from the releases answer, kept only if it is plain `https://`: it is
+/// passed to curl (an argument starting with `-` would be read as an option)
+/// and opened in the browser by the update bar (a `file:` URL or a local path
+/// would run a program).
+fn https(u: &str) -> Option<String> {
+    (u.starts_with("https://") && !u.chars().any(|c| c.is_whitespace() || c.is_control())).then(|| u.to_string())
 }
 
 /// Asset-name endings to try, best first, for this OS / distro / CPU.
@@ -310,7 +318,7 @@ fn download_and_verify(rel: &Release, stage: &Mutex<Stage>) -> Result<PathBuf, S
 /// The download + checksum half of [`download_and_verify`], into `path`.
 fn fetch_and_verify(a: &Asset, sums_url: &str, path: &Path, stage: &Mutex<Stage>) -> Result<(), String> {
     let mut child = command("curl")
-        .args(["-fL", "--retry", "2", "--max-time", "900", "-o"])
+        .args(["-fL", "--proto", "=https", "--proto-redir", "=https", "--retry", "2", "--max-time", "900", "-o"])
         .arg(path)
         .arg(&a.url)
         .stdout(std::process::Stdio::null())
@@ -335,8 +343,11 @@ fn fetch_and_verify(a: &Asset, sums_url: &str, path: &Path, stage: &Mutex<Stage>
     }
 
     *stage.lock().unwrap() = Stage::Verifying;
-    let sums =
-        crate::os::cmd("curl", &["-fsSL", "--max-time", "30", sums_url]).ok_or("could not download SHA256SUMS.txt")?;
+    let sums = crate::os::cmd(
+        "curl",
+        &["-fsSL", "--proto", "=https", "--proto-redir", "=https", "--max-time", "30", sums_url],
+    )
+    .ok_or("could not download SHA256SUMS.txt")?;
     let want = sum_for(&sums, &a.name).ok_or_else(|| format!("SHA256SUMS.txt has no entry for {}", a.name))?;
     let got = sha256_file(path).map_err(|e| format!("{}: {e}", path.display()))?;
     if !got.eq_ignore_ascii_case(&want) {
@@ -731,6 +742,20 @@ mod tests {
             "version must be sanitized into one path component: {name:?}"
         );
         assert!(!name.contains(['/', '\\']));
+    }
+
+    /// URLs from the network are https only: no option-looking or local ones.
+    #[test]
+    fn release_urls_are_https_only() {
+        let body = r#"{"tag_name":"v9.9.9","html_url":"file:///C:/Windows/System32/calc.exe","assets":[
+            {"name":"cpuzeez-9.9.9-windows-x64.msi","browser_download_url":"--config=/etc/passwd","size":1},
+            {"name":"SHA256SUMS.txt","browser_download_url":"http://example/sums","size":1}]}"#;
+        let r = parse(body).unwrap();
+        assert_eq!(r.page, crate::REPO_URL, "a non-https page falls back to the project page");
+        assert!(r.asset.is_none(), "an option-looking download URL is dropped");
+        assert!(r.sums.is_none(), "plain http is dropped");
+        assert_eq!(https("https://github.com/x"), Some("https://github.com/x".into()));
+        assert_eq!(https("https://github.com/x y"), None);
     }
 
     #[test]

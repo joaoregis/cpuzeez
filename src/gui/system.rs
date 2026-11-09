@@ -176,7 +176,7 @@ pub fn export_csv(rows: &[Row]) -> String {
     let mut s = String::from(
         "pid,ppid,name,cpu_pct,working_set_bytes,private_bytes,disk_bps,gpu_pct,vram_bytes,threads,handles,user,publisher,path\n",
     );
-    let esc = |t: &str| format!("\"{}\"", t.replace('"', "\"\""));
+    let esc = |t: &str| format!("\"{}\"", cpuzeez_core::report::spreadsheet_safe(t).replace('"', "\"\""));
     for r in rows {
         s.push_str(&format!(
             "{},{},{},{:.2},{},{},{:.0},{:.2},{},{},{},{},{},{}\n",
@@ -529,17 +529,17 @@ impl State {
             }
             ui.menu_button(format!("{} {}", icon::EXPORT, tr("Export")), |ui| {
                 if ui.button(tr("Export CSV")).clicked() {
-                    let path = "processes.csv";
-                    match std::fs::write(path, export_csv(&snap.rows)) {
-                        Ok(()) => self.message = Some((trf("Saved {}", &[&path]), Tone::Success)),
+                    let path = crate::settings::export_path("processes.csv");
+                    match std::fs::write(&path, export_csv(&snap.rows)) {
+                        Ok(()) => self.message = Some((trf("Saved {}", &[&path.display()]), Tone::Success)),
                         Err(e) => self.message = Some((e.to_string(), Tone::Danger)),
                     }
                     ui.close();
                 }
                 if ui.button(tr("Export JSON")).clicked() {
-                    let path = "processes.json";
-                    match std::fs::write(path, export_json(&snap.rows)) {
-                        Ok(()) => self.message = Some((trf("Saved {}", &[&path]), Tone::Success)),
+                    let path = crate::settings::export_path("processes.json");
+                    match std::fs::write(&path, export_json(&snap.rows)) {
+                        Ok(()) => self.message = Some((trf("Saved {}", &[&path.display()]), Tone::Success)),
                         Err(e) => self.message = Some((e.to_string(), Tone::Danger)),
                     }
                     ui.close();

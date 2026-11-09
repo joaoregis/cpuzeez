@@ -767,8 +767,10 @@ fn export_view(mon: &Monitor, tel: &Telemetry) -> Result<PathBuf, String> {
         Column::new("id", "", 0.0, |s: &Series| Cell::Text(s.id.clone())),
     ];
     let shown = super::table::view(&series, &cols, &mon.view.table, None);
-    let q =
-        |s: &str| if s.contains([',', '"', '\n']) { format!("\"{}\"", s.replace('"', "\"\"")) } else { s.to_string() };
+    let q = |s: &str| {
+        let s = cpuzeez_core::report::spreadsheet_safe(s);
+        if s.contains([',', '"', '\n']) { format!("\"{}\"", s.replace('"', "\"\"")) } else { s.into_owned() }
+    };
     let mut out = String::from("group,sensor,id,unit,current,min,max,avg\n");
     for it in shown {
         if let super::table::Item::Row(i) = it {

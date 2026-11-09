@@ -9,13 +9,18 @@ use crate::{actions, gpu::edid, layout::Layout, pci, query, sensors::amd_pm, smb
 
 use crate::testkit::Rng;
 
-const N: usize = 20_000;
+/// Rounds per test: 20_000 by default; `CZ_ROBUST_N` raises it for a long
+/// campaign (`CZ_ROBUST_N=2000000 cargo test robustness`), `CZ_ROBUST_SEED` varies
+/// the inputs between campaigns.
+fn n() -> usize {
+    std::env::var("CZ_ROBUST_N").ok().and_then(|v| v.parse().ok()).unwrap_or(20_000)
+}
 
 #[test]
 fn elevated_op_parser() {
-    let mut r = Rng(0xC0FFEE);
+    let mut r = Rng::seeded(0xC0FFEE);
     let good = actions::encode(&actions::Action::LoadKernelModule { module: actions::KernelModule::Msr });
-    for _ in 0..N {
+    for _ in 0..n() {
         let s: String = String::from_utf8_lossy(&r.mutate(good.as_bytes())).into_owned();
         let _ = actions::decode(&s);
         let hex: String = r.bytes(64).iter().map(|b| format!("{b:02x}")).collect();
@@ -25,9 +30,9 @@ fn elevated_op_parser() {
 
 #[test]
 fn layout_files() {
-    let mut r = Rng(1);
+    let mut r = Rng::seeded(1);
     let samples: Vec<String> = crate::layout::presets::all(95.0).iter().map(Layout::to_json).collect();
-    for i in 0..N {
+    for i in 0..n() {
         let base = samples[i % samples.len()].as_bytes();
         let _ = Layout::from_json(&String::from_utf8_lossy(&r.mutate(base)));
     }
@@ -35,9 +40,9 @@ fn layout_files() {
 
 #[test]
 fn filter_syntax() {
-    let mut r = Rng(2);
+    let mut r = Rng::seeded(2);
     let alphabet = b"name:cpu>=<10GB%ms\"- chrome.exe1234";
-    for _ in 0..N {
+    for _ in 0..n() {
         let q: String = (0..r.below(40)).map(|_| alphabet[r.below(alphabet.len())] as char).collect();
         let terms = query::parse(&q);
         let vals = [query::Value::Text("chrome.exe"), query::Value::Num(12.5)];
@@ -47,13 +52,13 @@ fn filter_syntax() {
 
 #[test]
 fn smbios_tables() {
-    let mut r = Rng(3);
+    let mut r = Rng::seeded(3);
     // A minimal valid table: type 0 (BIOS) with two strings, then end-of-table.
     let mut valid = vec![0u8, 0x18, 0, 0, 1, 2, 0, 0, 3, 0x80];
     valid.resize(0x18, 0);
     valid.extend(b"Vendor\0v1.0\0\0");
     valid.extend([127, 4, 1, 0, 0, 0]);
-    for _ in 0..N {
+    for _ in 0..n() {
         let t = smbios::Table::parse(3, 7, &r.mutate(&valid));
         let _ = smbios::bios_info(&t);
         let _ = smbios::memory_devices_of(&t);
@@ -64,8 +69,8 @@ fn smbios_tables() {
 
 #[test]
 fn spd_images() {
-    let mut r = Rng(4);
-    for _ in 0..N / 4 {
+    let mut r = Rng::seeded(4);
+    for _ in 0..n() / 4 {
         // DDR4 (0x0C) and DDR5 (0x12) headers on otherwise random images.
         let mut b = r.bytes(1024);
         if b.len() > 2 {
@@ -79,10 +84,10 @@ fn spd_images() {
 
 #[test]
 fn edid_blocks() {
-    let mut r = Rng(5);
+    let mut r = Rng::seeded(5);
     let mut header = vec![0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00];
     header.resize(128, 0);
-    for _ in 0..N {
+    for _ in 0..n() {
         let _ = edid::parse(&r.mutate(&header));
         let _ = edid::parse(&r.bytes(256));
     }
@@ -90,8 +95,8 @@ fn edid_blocks() {
 
 #[test]
 fn pci_config_space() {
-    let mut r = Rng(6);
-    for _ in 0..N / 4 {
+    let mut r = Rng::seeded(6);
+    for _ in 0..n() / 4 {
         let mut d = pci::Device::new(pci::Bdf { seg: 0, bus: 1, dev: 0, func: 0 });
         d.config = r.bytes(4096);
         if d.config.len() > 0x34 {
@@ -104,9 +109,9 @@ fn pci_config_space() {
 
 #[test]
 fn smu_pm_tables() {
-    let mut r = Rng(7);
+    let mut r = Rng::seeded(7);
     let versions = [0x240903, 0x380804, 0x380905, 0x370003, 0x400005, 0x5D0008, 0x620205, 0x650005];
-    for _ in 0..N / 4 {
+    for _ in 0..n() / 4 {
         let ver = if r.below(4) == 0 { r.next() as u32 } else { versions[r.below(versions.len())] };
         let t: Vec<f32> = (0..r.below(1100)).map(|_| f32::from_bits(r.next() as u32)).collect();
         let groups: Vec<usize> = (0..r.below(4)).map(|_| r.below(16)).collect();
@@ -124,9 +129,9 @@ const FIXTURE: &str = include_str!("../tests/fixtures/presentmon-2.6-deadlock.cs
 
 #[test]
 fn presentmon_csv_files() {
-    let mut r = Rng(0xF2A3E5);
+    let mut r = Rng::seeded(0xF2A3E5);
     let head: String = FIXTURE.lines().take(40).collect::<Vec<_>>().join("\n");
-    for _ in 0..N {
+    for _ in 0..n() {
         let t = r.mutate_text(&head);
         let _ = frames::parse_presentmon(&t);
         let _ = frames::PresentMonColumns::parse(&r.mutate_text(FIXTURE.lines().next().unwrap_or("")));
@@ -140,7 +145,7 @@ fn presentmon_csv_files() {
 /// Feeding a stream in any chunking gives the same lines, in both encodings.
 #[test]
 fn output_lines_ignore_chunking() {
-    let mut r = Rng(0x0DDBA11);
+    let mut r = Rng::seeded(0x0DDBA11);
     let text: String = FIXTURE.lines().take(30).collect::<Vec<_>>().join("\n") + "\n";
     let utf16: Vec<u8> = [0xFF, 0xFE].into_iter().chain(text.encode_utf16().flat_map(|u| u.to_le_bytes())).collect();
     for stream in [text.as_bytes().to_vec(), utf16] {
@@ -165,7 +170,7 @@ fn output_lines_ignore_chunking() {
         }
     }
     // And random bytes never panic.
-    for _ in 0..N {
+    for _ in 0..n() {
         let mut d = frames::OutputLines::default();
         let _ = d.feed(&r.bytes(300));
         let _ = d.feed(&r.bytes(300));
@@ -175,10 +180,10 @@ fn output_lines_ignore_chunking() {
 
 #[test]
 fn hardware_and_mangohud_logs() {
-    let mut r = Rng(0xAB1E);
+    let mut r = Rng::seeded(0xAB1E);
     let hw = "time,cpu/load/total,gpu0/load/core\n# units,%,%\n2026-11-05T23:59:59.000Z,10,50\n2026-11-06T00:00:01.500Z,20,\n";
     let mh = "os,cpu\nLinux,x\nfps,frametime,elapsed\n144,6.9,1000000000\n143,7.0,1007000000\n";
-    for _ in 0..N {
+    for _ in 0..n() {
         let h = session::parse_hw_csv(&r.mutate_text(hw));
         for id in &h.ids {
             let _ = h.series(id);
@@ -240,7 +245,7 @@ fn random_window(r: &mut Rng) -> Window {
 /// as placeholders (a mismatch would show `{}` on screen or drop a number).
 #[test]
 fn detector_rules_on_random_windows() {
-    let mut r = Rng(0x00B0_771E);
+    let mut r = Rng::seeded(0x00B0_771E);
     let t = Thresholds::default();
     let holes = |key: &str| key.matches("{}").count();
     for _ in 0..4_000 {
@@ -274,7 +279,7 @@ fn detector_rules_on_random_windows() {
 /// Statistics keep their order whatever the frame times are.
 #[test]
 fn frame_statistics_invariants() {
-    let mut r = Rng(0x57A7);
+    let mut r = Rng::seeded(0x57A7);
     for _ in 0..5_000 {
         let ms: Vec<f64> = (0..r.below(300)).map(|_| r.float()).collect();
         for conv in [frames::LowConvention::Percentile, frames::LowConvention::Average] {
@@ -297,7 +302,7 @@ fn frame_statistics_invariants() {
 /// counts. Building windows and the report must stay bounded in memory and time.
 #[test]
 fn corrupt_sessions_stay_bounded() {
-    let mut r = Rng(0xDEAD_5E55);
+    let mut r = Rng::seeded(0xDEAD_5E55);
     let started = std::time::Instant::now();
     for _ in 0..120 {
         let frames: Vec<Frame> = (0..r.below(200)).map(|_| random_frame(&mut r)).collect();
@@ -340,7 +345,7 @@ fn long_sessions_are_linear() {
 
 #[test]
 fn session_json_files() {
-    let mut r = Rng(0x5E5510);
+    let mut r = Rng::seeded(0x5E5510);
     let good = serde_json::to_string(&Session {
         game: "cs2.exe".into(),
         markers: vec![session::Marker { t_s: 1.0, label: "m".into() }],
@@ -348,15 +353,15 @@ fn session_json_files() {
         ..Default::default()
     })
     .unwrap();
-    for _ in 0..N {
+    for _ in 0..n() {
         let _ = serde_json::from_str::<Session>(&r.mutate_text(&good));
     }
 }
 
 #[test]
 fn small_text_parsers() {
-    let mut r = Rng(0x7E57);
-    for _ in 0..N {
+    let mut r = Rng::seeded(0x7E57);
+    for _ in 0..n() {
         let _ = crate::services::parse_systemd_show(&r.mutate_text(
             "TriggeredBy=a.socket\nRestart=on-failure\nRestartUSec=1min 30s\nFailureAction=none\nCapabilityBoundingSet=cap_chown\n",
         ));
@@ -390,7 +395,7 @@ fn write_fuzz_seeds() {
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join(name), bytes).unwrap();
     };
-    let mut r = Rng(0x5EED);
+    let mut r = Rng::seeded(0x5EED);
 
     // Text and JSON formats.
     put("presentmon_csv", "deadlock.csv", FIXTURE.as_bytes());

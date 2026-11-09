@@ -7,6 +7,16 @@ generated from its section below.
 
 ## [Unreleased]
 
+### Security
+
+From a review of the whole tree after snapshot.1 ([docs/security/review-2026-11-09.md](docs/security/review-2026-11-09.md)):
+
+- *Create dump file* (Windows, run elevated) wrote to a predictable name in your temp folder and overwrote whatever was there, following a planted link; the name is now unpredictable and the file is created only if nothing has that name.
+- The update check only accepts `https://` URLs from GitHub's answer, and `curl` stays on HTTPS, redirects included.
+- Exports and copied rows no longer carry spreadsheet formulas: text from other programs that Excel would run as a formula is prefixed with `'`.
+- Process and performance exports go to `exports/` in the data folder, with the full path shown, instead of the current folder.
+- Linux: a message sent to another session can no longer be read by `notify-send` as an option.
+
 ## [1.0.0-snapshot.1] - 2026-11-09
 
 The first snapshot of 1.0: every 1.0 feature together, with the security fixes from the contributor review. From here on, a snapshot is the preview before the release.

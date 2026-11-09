@@ -4,11 +4,16 @@
 
 use cpuzeez_core::testkit::Rng;
 
-const N: usize = 20_000;
+/// Rounds per test: 20_000 by default; `CZ_ROBUST_N` raises it for a long
+/// campaign (`CZ_ROBUST_N=2000000 cargo test robustness`), `CZ_ROBUST_SEED` varies
+/// the inputs between campaigns.
+fn n() -> usize {
+    std::env::var("CZ_ROBUST_N").ok().and_then(|v| v.parse().ok()).unwrap_or(20_000)
+}
 
 #[test]
 fn network_and_process_text() {
-    let mut r = Rng(0x9E7_4E7);
+    let mut r = Rng::seeded(0x9E7_4E7);
     let nettop = ",bytes_in,bytes_out,\nlaunchd.1,0,0,\nGoogle Chrome He.812,1500,300,\nbad line\n";
     let args = {
         let mut a = 2u32.to_ne_bytes().to_vec();
@@ -23,7 +28,7 @@ fn network_and_process_text() {
     diag.extend(140u16.to_ne_bytes());
     diag.extend(2u16.to_ne_bytes());
     diag.extend(vec![1u8; 136]);
-    for _ in 0..N {
+    for _ in 0..n() {
         let _ = crate::proc_net::parse_nettop(&r.mutate_text(nettop));
         let _ = crate::proc_net::parse_inet_diag(&r.mutate(&diag));
         let _ = crate::procs::parse_procargs2(&r.mutate(&args));
@@ -33,7 +38,7 @@ fn network_and_process_text() {
         let _ = crate::memory::parse_major_faults(&r.mutate_text("pgfault 1\npgmajfault 42\n"));
     }
     // Random bytes of any size never panic the netlink decoder.
-    for _ in 0..N {
+    for _ in 0..n() {
         let _ = crate::proc_net::parse_inet_diag(&r.bytes(400));
     }
 }
@@ -43,8 +48,8 @@ fn network_and_process_text() {
 #[test]
 fn display_modes_from_any_bytes() {
     use crate::display_drm::{best_hz, parse_modeinfo};
-    let mut r = Rng(0xD15_91A7);
-    for _ in 0..N {
+    let mut r = Rng::seeded(0xD15_91A7);
+    for _ in 0..n() {
         let n = r.below(200);
         let Some(m) = parse_modeinfo(&r.bytes(n)) else { continue };
         assert!(m.hz().is_finite() && m.hz() >= 0.0);

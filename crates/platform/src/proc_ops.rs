@@ -203,7 +203,9 @@ mod imp {
             MiniDumpWithFullMemory, MiniDumpWithHandleData, MiniDumpWriteDump,
         };
         let h = open(pid, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ)?;
-        let f = std::fs::File::create(path).map_err(|e| e.to_string())?;
+        // CREATE_NEW: fails if anything (a file, a link) already has the name,
+        // so an elevated dump never overwrites or follows what was planted there.
+        let f = std::fs::OpenOptions::new().write(true).create_new(true).open(path).map_err(|e| e.to_string())?;
         // SAFETY: our process and file handles.
         let ok = unsafe {
             MiniDumpWriteDump(

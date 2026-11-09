@@ -142,6 +142,21 @@ impl Default for Settings {
     }
 }
 
+/// Where an export named `name` goes: `exports/<date-time>-<name>` in the data
+/// folder, never the current directory (an elevated copy runs in System32 or
+/// /root, and a fixed name in a shared folder is someone else's to plant).
+pub fn export_path(name: &str) -> PathBuf {
+    let stamp = cpuzeez_core::metrics::iso8601(std::time::SystemTime::now()).replace([':', '.'], "-");
+    let file = format!("{}-{name}", stamp.get(..19).unwrap_or(&stamp));
+    match dir().map(|d| d.join("exports")) {
+        Some(d) if std::fs::create_dir_all(&d).is_ok() => d.join(file),
+        // No data folder: a fresh private folder, never a fixed name in a shared one.
+        _ => {
+            cpuzeez_platform::tempdir::create("cpuzeez-export").map_or_else(|_| PathBuf::from(&file), |d| d.join(&file))
+        }
+    }
+}
+
 /// Folder for settings, benchmark history and default logs (created on demand).
 pub fn dir() -> Option<PathBuf> {
     let base = if cfg!(windows) {

@@ -217,7 +217,8 @@ pub fn move_column(full: &[String], visible: &[&str], from: usize, to: usize) ->
 /// Tab-separated text of `items`' rows (visible columns), with a header.
 pub fn to_tsv<R>(rows: &[R], cols: &[Column<R>], items: &[Item], st: &State) -> String {
     let shown: Vec<&Column<R>> = shown(cols, st);
-    let clean = |s: &str| s.replace(['\t', '\n'], " ");
+    // Pasted into a spreadsheet, so text that reads as a formula is neutralised.
+    let clean = |s: &str| cpuzeez_core::report::spreadsheet_safe(&s.replace(['\t', '\n', '\r'], " ")).into_owned();
     let mut s = shown.iter().map(|c| clean(&c.title)).collect::<Vec<_>>().join("\t") + "\n";
     for it in items {
         if let Item::Row(i) = it {

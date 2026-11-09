@@ -6,6 +6,15 @@
 pub struct Rng(pub u64);
 
 impl Rng {
+    /// `Rng(base)`, or mixed with `CZ_ROBUST_SEED` when set, so a long campaign
+    /// can try other inputs than the default run.
+    pub fn seeded(base: u64) -> Rng {
+        match std::env::var("CZ_ROBUST_SEED").ok().and_then(|v| v.parse::<u64>().ok()) {
+            Some(s) => Rng((base ^ s.wrapping_mul(0x9E37_79B9_7F4A_7C15)) | 1),
+            None => Rng(base),
+        }
+    }
+
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> u64 {
         self.0 ^= self.0 >> 12;
