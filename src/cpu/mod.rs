@@ -297,6 +297,7 @@ fn thread_dump(
 }
 
 /// MSRs worth dumping per vendor (architectural ones from the SDM/PPR).
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn interesting_msrs(amd: bool) -> &'static [u32] {
     if amd {
         &[

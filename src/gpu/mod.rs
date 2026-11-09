@@ -279,6 +279,7 @@ fn apply_nvml(ads: &mut Vec<Adapter>, apis: &mut Vec<Node>) {
 }
 
 /// PCIe generation → GT/s.
+#[cfg(any(windows, target_os = "linux", test))]
 pub fn gen_speed(g: u32) -> Option<f64> {
     [2.5, 5.0, 8.0, 16.0, 32.0, 64.0].get(g.checked_sub(1)? as usize).copied()
 }
