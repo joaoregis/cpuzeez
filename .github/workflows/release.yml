@@ -48,7 +48,7 @@ jobs:
       - name: Portable zip
         shell: pwsh
         run: Compress-Archive -Path target/release/cpuzeez.exe, pawnio/PawnIO_setup.exe, pawnio/pawnio-modules, pawnio/PresentMon.exe, pawnio/PresentMon-LICENSE.txt, README.md, THIRD_PARTY.md, LICENSE-MIT, LICENSE-APACHE -DestinationPath "cpuzeez-$env:VER-windows-x64-portable.zip"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows
           path: |
@@ -102,7 +102,7 @@ jobs:
           codesign --verify --all-architectures --deep --strict --verbose=2 verify/pkg/Payload/Applications/CpuZeeZ.app
           verify/tar/cpuzeez -help
           verify/pkg/Payload/usr/local/bin/cpuzeez -help
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with: { name: macos, path: "cpuzeez-*" }
 
   linux:
@@ -129,7 +129,7 @@ jobs:
         run: |
           mkdir -p "cpuzeez-$VER" && cp target/release/cpuzeez README.md LICENSE-MIT LICENSE-APACHE packaging/linux/cpuzeez.desktop assets/icon.svg assets/icon-*.png "cpuzeez-$VER/"
           tar -czf "cpuzeez-$VER-linux-${{ matrix.arch }}.tar.gz" "cpuzeez-$VER"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: "linux-${{ matrix.arch }}"
           path: |
@@ -157,7 +157,7 @@ jobs:
           chown -R builder /home/builder/pkg
           su builder -c "cd /home/builder/pkg && makepkg --nodeps --noconfirm"
           cp /home/builder/pkg/*.pkg.tar.zst .
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with: { name: arch, path: "*.pkg.tar.zst" }
 
   publish:
