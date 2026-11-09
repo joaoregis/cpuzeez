@@ -35,9 +35,19 @@ That run reads *everything*, which the app does not: a page or the overlay *leas
 
 The overlay in its default styles leases `cpu`, `gpu`, `memory` and `frames`: about 12.7 ms per second, i.e. **≈ 1.3% of a core** for sampling. That is an estimate from the table, not a measurement of the running overlay.
 
+**The GUI soak, 8 hours** (2026-11-09, Windows 11, `soak.py --gui … 480`): the main window stays open and a tour visits every page and tab, records captures and runs the analysis, with the overlay shown and a synthetic game feeding it.
+
+| | Result |
+|---|---|
+| Private memory after warm-up | 143.5 → 143.3 MB, peak 147.9 MB (+0.48 MB/h): within 150 MB |
+| Handles / threads | 498 → 492 / 23 → 23: no leak |
+| CPU, whole run | mean 3.17 %, p95 4.79 % of one core |
+
+The CPU figure is the main window touring every page, which is heavier than the 2 % budget's case (sampler plus overlay next to a game), so it is not a measurement of that budget.
+
 ## Not measured yet
 
-- **The GUI with the overlay at 4 Hz** (drawing included) against the 2% and 150 MB budgets. It needs a window, so it is a run of the soak by hand:
+- **The overlay alone at 4 Hz** (main window hidden or minimised, drawing included) against the 2% budget. It needs a window, so it is a run of the soak by hand:
 
   ```bash
   cargo build --release --features soak --target-dir target/soak
