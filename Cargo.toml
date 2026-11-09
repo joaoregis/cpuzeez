@@ -37,7 +37,7 @@ libc = "0.2.190"
 # Tray / menu-bar mini monitor. tray-icon 0.24 is the newest within our MSRV
 # (no gtk/xdo features: those are its Linux backend, which we don't use).
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
-tray-icon = { version = "0.24", default-features = false, optional = true }
+tray-icon = { version = "0.26", default-features = false, optional = true }
 
 # Linux: StatusNotifierItem over D-Bus, pure Rust (zbus + async-io, no system libs).
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
