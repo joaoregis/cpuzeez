@@ -7,6 +7,15 @@ generated from its section below.
 
 ## [Unreleased]
 
+### Changed
+
+- Dependencies: `tray-icon` 0.24 → 0.26 (the Windows and macOS tray icon; five indirect dependencies are gone), `libc` 0.2.191.
+- CI: `actions/checkout` v7, `actions/upload-artifact` v7, `actions/download-artifact` v8 and a newer `dtolnay/rust-toolchain` pin for the fuzz job. Dependabot now proposes the egui crates together in one pull request, and the CI actions in one weekly pull request.
+
+### Fixed
+
+- A test of the background cache waited a fixed 100 ms for a refresh and could fail on a busy CI runner; it now waits for the refresh with a deadline.
+
 ## [1.0.0] - 2026-11-09
 
 CPU ZeeZ 1.0 is the CPU-Z feature set grown into a complete tool for the PC on Windows, Linux and macOS: a hardware monitor, a Task Manager, a game overlay with FPS and capture, a bottleneck detector, a benchmark suite and a stability test, all local, with nothing sent anywhere. It was built in the open over ten betas and two snapshots; every pre-release is listed below this entry.

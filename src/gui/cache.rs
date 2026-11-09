@@ -111,8 +111,15 @@ mod tests {
         assert_eq!(v.as_deref(), Some(&1), "the first read lands");
         std::thread::sleep(Duration::from_millis(80));
         assert_eq!(C.get(&ctx, read).as_deref(), Some(&1), "a stale value is still served at once");
-        std::thread::sleep(Duration::from_millis(100));
-        assert_eq!(C.get(&ctx, read).as_deref(), Some(&2), "…while the refresh replaces it");
+        // The refresh runs on another thread: wait for it with a deadline, not
+        // a fixed sleep (a busy CI runner can take longer than 100 ms).
+        let t0 = Instant::now();
+        let mut v = C.get(&ctx, read);
+        while v.as_deref() != Some(&2) && t0.elapsed() < Duration::from_secs(5) {
+            std::thread::sleep(Duration::from_millis(5));
+            v = C.get(&ctx, read);
+        }
+        assert_eq!(v.as_deref(), Some(&2), "…while the refresh replaces it");
     }
 
     /// Slow probes never run on the UI thread: pages go through this cache
