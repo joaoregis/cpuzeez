@@ -318,12 +318,12 @@ Goal: everything CpuZeeZ already does becomes complete, configurable and polishe
 
 | Item | Source |
 |---|---|
-| Read-only helper service (privilege option C): FPS and sensors without UAC at every launch | README §4.3 |
-| Native Rust ETW consumer (`ferrisetw`) replacing the PresentMon sidecar | zeez-live §3.1 |
+| Read-only helper service (privilege option C): FPS and sensors without UAC at every launch | README §4.3 · **2.0** (decided 2026-11-09, [1.1 roadmap D1](../v1.1/ROADMAP.md#1-decisions-2026-11-09)) |
+| Native Rust ETW consumer (`ferrisetw`) replacing the PresentMon sidecar | zeez-live §3.1 · **2.0** (decided 2026-11-09, [1.1 roadmap D1](../v1.1/ROADMAP.md#1-decisions-2026-11-09)) |
 | Our own Vulkan frame-time layer on Linux | zeez-live §3.1 |
 | Xbox Game Bar widget | zeez-live §3.2 |
-| Import Windows history (SRUM) | task-manager §5 |
-| Startup "Advanced" view with enable/disable | task-manager §6 |
+| Import Windows history (SRUM) | task-manager §5 · **2.0** (decided 2026-11-09, [1.1 roadmap D1](../v1.1/ROADMAP.md#1-decisions-2026-11-09)) |
+| Startup "Advanced" view with enable/disable | task-manager §6 · **2.0** (decided 2026-11-09, [1.1 roadmap D1](../v1.1/ROADMAP.md#1-decisions-2026-11-09)) |
 | Drive optimization: defrag/ReTrim/fstrim through the OS engines | core-pages §7.4 |
 | Code signing and notarization, when funded or through a free OSS program | dependencies §3.1, Q9 |
 | Storage audit and safe cleanup: space map, duplicates, reclaimable space, installed programs (a later version, 2.0 or 3.0) | [ideas/storage-and-cleanup.md](../ideas/storage-and-cleanup.md) |

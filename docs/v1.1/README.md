@@ -1,28 +1,30 @@
 # CPU ZeeZ 1.1.0: the plan
 
-> Status: planned. These are the corrections and small improvements that 1.0.0 leaves partly done, found by checking each [ROADMAP](../v1/ROADMAP.md) row against the code. Each item says why it is only partial today, what finishing it takes, and how we will know it is finished. Nothing here changes what 1.0.0 promises users; it makes the promises easier to trust and the code easier to change.
+> Status: **decided** (2026-11-09): corrections and debt only, no new features. The order, the releases and one row per pull request are in the [roadmap](ROADMAP.md). These are the corrections and small improvements that 1.0.0 leaves partly done, found by checking each [ROADMAP](../v1/ROADMAP.md) row against the code. Each item says why it is only partial today, what finishing it takes, and how we will know it is finished. Nothing here changes what 1.0.0 promises users; it makes the promises easier to trust and the code easier to change.
 > Difficulty is the work to finish, not its value: **MEDIO** (a day or two, low risk), **ALTO** (several days, needs care), **MUITO ALTO** (a project of its own).
 
 Items rated BAIXO were fixed during the 1.0.0 hardening instead of being listed here: the MSRV job (the declared `rust-version` was wrong: egui 0.36 needs 1.95; it is now declared and checked in CI) and the committed fuzz corpus.
 
-| # | Item | ROADMAP row | Difficulty | Order |
+| # | Item | ROADMAP row | Difficulty | Milestone · release |
 |---|---|---|---|---|
-| 1 | [Permissions map checked against the code](#1-permissions-map-checked-against-the-code) | S0-B04 | MEDIO | 1 |
-| 2 | [Interaction tests for the remaining pages](#2-interaction-tests-for-the-remaining-pages) | S0-T05 | MEDIO | 2 |
-| 3 | [More pages in the scale test](#3-more-pages-in-the-scale-test) | S3-03 | MEDIO | 3 |
-| 4 | [An overlay frame budget that counts work](#4-an-overlay-frame-budget-that-counts-work) | S0-T08 | MEDIO | 4 |
-| 5 | [A long fuzz campaign, with its results](#5-a-long-fuzz-campaign-with-its-results) | S0-T07 | MEDIO | 5 |
-| 6 | [`gui/mod.rs` down to navigation and composition](#6-guimodrs-down-to-navigation-and-composition) | S0-E04 | ALTO | 6 |
-| 7 | [Screenshots of the new pages on Linux and macOS](#7-screenshots-of-the-new-pages-on-linux-and-macos) | S3-07 | ALTO | 7 |
-| 8 | [`unsafe` only in `platform`](#8-unsafe-only-in-platform) | S0-E06 | MUITO ALTO | 8 |
-| 9 | [Overlay CPU down to the 2 % goal](#9-overlay-cpu-down-to-the-2--goal) | S3-01 (P6) | ALTO | 9 |
-| 10 | [Small fixes found while taking the 1.0.0 screenshots](#10-small-fixes-found-while-taking-the-100-screenshots) | — | BAIXO | 10 |
-| 11 | [Services: a change the service's own permissions refuse](#11-services-a-change-the-services-own-permissions-refuse) | — | BAIXO–MEDIO | 11 |
-| 12 | [Side panels that fit, and can be resized](#12-side-panels-that-fit-and-can-be-resized) | S3-03 | MEDIO | 12 |
-| 13 | [egui 0.37, when the icon font supports it](#13-egui-037-when-the-icon-font-supports-it) | — | MEDIO | 13 |
-| 14 | [Find the tests that hang or fail now and then](#14-find-the-tests-that-hang-or-fail-now-and-then) | S0-T | BAIXO–MEDIO | 14 |
+| 1 | [Permissions map checked against the code](#1-permissions-map-checked-against-the-code) | S0-B04 | MEDIO | M2 · beta.1 |
+| 2 | [Interaction tests for the remaining pages](#2-interaction-tests-for-the-remaining-pages) | S0-T05 | MEDIO | M2 · beta.1 |
+| 3 | [More pages in the scale test](#3-more-pages-in-the-scale-test) | S3-03 | MEDIO | M2 · beta.1 |
+| 4 | [An overlay frame budget that counts work](#4-an-overlay-frame-budget-that-counts-work) | S0-T08 | MEDIO | M2 · beta.1 |
+| 5 | [A long fuzz campaign, with its results](#5-a-long-fuzz-campaign-with-its-results) | S0-T07 | MEDIO | M5 · 1.1.0 (runs from M1) |
+| 6 | [`gui/mod.rs` down to navigation and composition](#6-guimodrs-down-to-navigation-and-composition) | S0-E04 | ALTO | M4 · beta.3 |
+| 7 | [Screenshots of the new pages on Linux and macOS](#7-screenshots-of-the-new-pages-on-linux-and-macos) | S3-07 | ALTO | M5 · 1.1.0 |
+| 8 | [`unsafe` only in `platform`](#8-unsafe-only-in-platform) | S0-E06 | MUITO ALTO (partial in 1.1: ALTO) | M4 · beta.3 |
+| 9 | [Overlay CPU down to the 2 % goal](#9-overlay-cpu-down-to-the-2--goal) | S3-01 (P6) | ALTO | M3 · beta.2 |
+| 10 | [Small fixes found while taking the 1.0.0 screenshots](#10-small-fixes-found-while-taking-the-100-screenshots) | — | BAIXO | M1 · 1.0.2 and M2 |
+| 11 | [Services: a change the service's own permissions refuse](#11-services-a-change-the-services-own-permissions-refuse) | — | BAIXO–MEDIO | M1 · 1.0.2 |
+| 12 | [Side panels that fit, and can be resized](#12-side-panels-that-fit-and-can-be-resized) | S3-03 | MEDIO | M2 · beta.1 |
+| 13 | [egui 0.37, with the icon font vendored](#13-egui-037-with-the-icon-font-vendored) | — | MEDIO | M3 · beta.2 |
+| 14 | [Find the tests that hang or fail now and then](#14-find-the-tests-that-hang-or-fail-now-and-then) | S0-T | BAIXO–MEDIO | M1 · 1.0.2 |
+| 15 | [Notes from the 2026-11-09 security review](#15-notes-from-the-2026-11-09-security-review) | S3-05 | BAIXO | M1 · 1.0.2 |
+| 16 | [macOS and Arch installers exercised in CI](#16-macos-and-arch-installers-exercised-in-ci) | S3-06 | MEDIO | M5 · 1.1.0 |
 
-Also waiting for a free machine, not for work: the long GUI soak and the overlay's CPU and memory against the budget ([performance.md](../performance.md)), and the Windows screenshots of the new pages. Both open a window, so they are scheduled with the owner.
+Out of scope (decision D1 in the [roadmap](ROADMAP.md)): the read-only helper service, the native ETW consumer, the Startup *Advanced* view and the SRUM history import wait for a future major version. What needs a person or specific hardware is in the roadmap's carry-over.
 
 ---
 
@@ -100,11 +102,13 @@ Also waiting for a free machine, not for work: the long GUI soak and the overlay
 
 ## 8. `unsafe` only in `platform`
 
-**Why it is partial.** `core` and `gui` forbid `unsafe`. The root binary's older hardware modules (`src/**` outside `gui`) have about 95 `unsafe` uses, each with a `SAFETY:` comment, but they sit next to the code that uses them instead of in `platform`.
+**Why it is partial.** `core` and `gui` forbid `unsafe`. The root binary's older hardware modules (`src/**` outside `gui`) have 136 `unsafe` blocks, 9 `unsafe fn` and 8 `unsafe impl` in 21 files (counted 2026-11-09), each with a `SAFETY:` comment, but they sit next to the code that uses them instead of in `platform`.
 
 **What finishing takes.** Move each module's OS calls behind a safe function in `platform` and leave the decoding where it is; module by module (storage, sensors, GPU, chipset, SPD, memory tests), each with its own pull request and the same tests passing. Then `#![forbid(unsafe_code)]` on the binary crate.
 
 **Done when.** `grep -rn unsafe src/` finds nothing and the lint forbids it.
+
+**In 1.1 (decision D3): partial.** A CI ratchet stops it growing, the small modules move, and benchmark kernels (SIMD intrinsics, pointer chasing) stay as a documented exception, since they are not OS calls. `gpu/win` (53 lines), `gpu/nvml` (32), `storage` (20), `network` (16) and `gpu/dl` (8) wait for 1.2. *1.1 is done when* the allowlist holds only those and the kernels.
 
 **Risks.** The largest item here: many files, FFI signatures that are easy to get subtly wrong, and no behaviour to show for it. Better done module by module while touching each one than as a single change.
 
@@ -126,11 +130,11 @@ Also waiting for a free machine, not for work: the long GUI soak and the overlay
 
 Found on 2026-11-09 with `cpuzeez -screenshots` on Windows 11 and Ubuntu 24.04 (WSLg); none blocks 1.0.0.
 
-- **ZeeZ Live ▸ Live is wider than the window.** At the screenshot size (about 1120 px), the FPS / 1 % low cards in the *Game* card are cut at the right edge. *Done when:* the cards wrap or shrink, and the scale test covers the Live tab.
-- **Wrong frame source text on Linux.** ZeeZ Live (*Bottleneck* tab, and the Live tab's note) says "Frames are read from the graphics kernel's events", which is the Windows path (ETW via PresentMon); on Linux frames come from MangoHud's logs, as the line above it says. *Done when:* the note is per OS (pt-BR and es included).
-- **Three compiler warnings in the Linux release build** (`cargo build --release` on Ubuntu 24.04). The cross-checked `clippy -D warnings` in CI does not show them, so they are probably `cfg`-dependent. *Done when:* the Linux build has no warnings and a CI job builds natively on Linux with `-D warnings`.
+- **10.1 ZeeZ Live ▸ Live is wider than the window.** At the screenshot size (about 1120 px), the FPS / 1 % low cards in the *Game* card are cut at the right edge. *Done when:* the cards wrap or shrink, and the scale test covers the Live tab.
+- **10.2 Wrong frame source text on Linux.** ZeeZ Live (*Bottleneck* tab, and the Live tab's note) says "Frames are read from the graphics kernel's events", which is the Windows path (ETW via PresentMon); on Linux frames come from MangoHud's logs, as the line above it says. *Done when:* the note is per OS (pt-BR and es included).
+- **10.3 Three compiler warnings in the Linux release build** (`cargo build --release` on Ubuntu 24.04). *Cause (found 2026-11-09):* all three are dead code that exists only on Linux (`live_frames.rs:32` and `:62`, `peripherals.rs:85`). CI and the local gate run clippy with `-A dead_code`, which hides them; without it, Windows has 0, Linux 5 and macOS 15. *Done when:* each item is gated with `cfg`, the allowance is gone from CI and the gate, and the Linux build has no warnings.
 
-Also seen: the screenshot run measures whatever app is in front when no game runs (another copy of CPU ZeeZ, at 2 FPS), so the Live tab is not in the README. A demo frame source for `-screenshots`, like the one the bottleneck shot uses, would fix that.
+- **10.4 No Live tab in the screenshots.** The screenshot run measures whatever app is in front when no game runs (another copy of CPU ZeeZ, at 2 FPS), so the Live tab is not in the README. *Done when:* `-screenshots` uses a demo frame source, like the one the bottleneck shot uses.
 
 ---
 
@@ -185,9 +189,11 @@ The *Processes* tab's *Details panel* does better (`(available × 0.36).clamp(28
 
 ---
 
-## 13. egui 0.37, when the icon font supports it
+## 13. egui 0.37, with the icon font vendored
 
 **Why it waits.** Dependabot proposed `eframe` 0.36 → 0.37 and `egui_kittest` 0.36 → 0.37 as two pull requests (joaoregis/cpuzeez#10, #12). Each fails alone: the three crates share egui's API, which changed in 0.37. They can't move together yet either: `egui-phosphor` 0.14.0 (the icon font) requires `egui ^0.36` and has no release for 0.37. Both pull requests were closed on 2026-11-09, and Dependabot now groups the egui crates into one pull request.
+
+**Decided (D4).** A fork for 0.37 exists (`egui-pop-phosphor` 0.15), but a third party in the supply chain for a font file is not worth it. The app uses 104 icons: ship the Phosphor *Regular* font (MIT) with a generated module of those constants, still on egui 0.36 (no pixel change), and drop `egui-phosphor`. No future egui release waits for an icon crate again.
 
 **What finishing takes.** When `egui-phosphor` supports 0.37 (or by vendoring its font and the icon constants we use): bump eframe, egui, egui_kittest and egui-phosphor together, fix the API changes, re-run the visual regression and scale tests, refresh the screenshots.
 
@@ -210,6 +216,23 @@ Seen on 2026-11-09, both once and not reproduced:
 
 ---
 
+## 15. Notes from the 2026-11-09 security review
+
+From [review-2026-11-09.md](../security/review-2026-11-09.md#notes-for-110-no-fix-tonight):
+
+- `proc_ops` (Windows) reads the TCP and UDP tables through a `Vec<u8>` cast to 4-byte-aligned rows. It works because the allocator aligns every allocation, but the language does not promise it. *Fix:* a `Vec<u32>` buffer, sound by construction.
+- *Privacy & data* does not list the `exports/` folder as a category to see and delete.
+
+**Done when.** Both are fixed. The dump-folder note stays out of scope (UAC is not a security boundary).
+
+## 16. macOS and Arch installers exercised in CI
+
+**Why it is partial.** S3-06: the MSI chain and the `.deb` are installed, upgraded and removed in CI; the macOS `.pkg` and the Arch package are built but never installed there.
+
+**What finishing takes.** A macOS job that installs the `.pkg`, runs `cpuzeez --version` and removes it (the files `pkgutil --files` lists, then `pkgutil --forget`); an `archlinux` container job that installs the `.pkg.tar.zst` with `pacman -U`, runs it and removes it.
+
+**Done when.** Both jobs are green on every pull request that touches packaging.
+
 ## Order and release
 
-Items 1–5 are independent and can ship as `1.0.x` patches if they are ready earlier. Items 6 and 8 are refactors: they go into `1.1.0` only with no visible change. Item 7 needs the screenshot jobs to be stable first.
+Decided on 2026-11-09: `1.0.1` now, small fixes as `1.0.x`, then `1.1.0-beta.N` to `1.1.0`. The milestones, the pull requests and the gates are in the [roadmap](ROADMAP.md).
