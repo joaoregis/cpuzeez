@@ -7,6 +7,10 @@ generated from its section below.
 
 ## [Unreleased]
 
+## [1.0.0-snapshot.1] - 2026-11-09
+
+The first snapshot of 1.0: every 1.0 feature together, with the security fixes from the contributor review. From here on, a snapshot is the preview before the release.
+
 ### Changed
 
 - **A release ladder with snapshots.** From steadiest to earliest: **release** (production), **snapshot** (a preview with every new feature), **beta** (pieces of the new features while they are built), **alpha** (early, unstable code). Tags `vX.0.0-snapshot.N` build like the others (MSI `X-1.99.(100+N)`, above every beta and release candidate; `.deb` `X.0.0~snapshot.N`; Arch `X.0.0snapshotN`), and *Settings ▸ Updates* has a **Snapshot** channel. The Beta channel also offers snapshots, so beta testers move up to them.

@@ -85,7 +85,7 @@ jobs:
           codesign --force --deep -s - "$APP"
           codesign --verify --all-architectures --deep --strict --verbose=2 "$APP"
           mkdir -p dmg && cp -R "$APP" dmg/ && ln -s /Applications dmg/Applications
-          hdiutil create -volname CpuZeeZ -srcfolder dmg -ov -format UDZO "cpuzeez-$VER-macos-universal.dmg"
+          hdiutil create -volname "CPU ZeeZ" -srcfolder dmg -ov -format UDZO "cpuzeez-$VER-macos-universal.dmg"
           mkdir -p pkgroot/Applications pkgroot/usr/local/bin
           cp -R "$APP" pkgroot/Applications/
           cp dist/cpuzeez pkgroot/usr/local/bin/cpuzeez
@@ -178,7 +178,8 @@ jobs:
           awk -v v="## [$VER]" 'index($0, v) == 1 { on = 1; next } on && /^## \[/ { exit } on' CHANGELOG.md > notes.md
           test -s notes.md || { echo "CHANGELOG.md has no section for $VER"; exit 1; }
           printf '\n---\n\n' >> notes.md
-          cat packaging/RELEASE_NOTES.md >> notes.md
+          # {TAG}: links point at this release's tag (main may not have the file yet).
+          sed "s/{TAG}/$TAG/g" packaging/RELEASE_NOTES.md >> notes.md
           printf '\nFull changelog: [CHANGELOG.md](https://github.com/%s/blob/%s/CHANGELOG.md)\n' "$GITHUB_REPOSITORY" "$TAG" >> notes.md
           cat notes.md
       - name: Create release
@@ -187,5 +188,5 @@ jobs:
         run: |
           # Pre-releases (X.Y.Z-beta.N / -rc.N) are never "latest", so stable users' update check skips them.
           PRE=$(python3 .github/scripts/pkgver.py "${TAG#v}" | sed -n 's/^PRERELEASE=true$/--prerelease/p')
-          gh release create "$TAG" dist/* --title "CpuZeeZ ${TAG#v}" --notes-file notes.md --verify-tag $PRE || \
+          gh release create "$TAG" dist/* --title "CPU ZeeZ ${TAG#v}" --notes-file notes.md --verify-tag $PRE || \
           { gh release upload "$TAG" dist/* --clobber && gh release edit "$TAG" --notes-file notes.md; }
