@@ -95,6 +95,10 @@ Geradas com `cpuzeez -screenshots=DIR`, que renderiza cada página e salva um PN
 
 ### Windows 11
 
+| Sistema (Gerenciador de Tarefas) | O que limita meu FPS? | Benchmarks |
+|---|---|---|
+| ![Sistema: desempenho](docs/screenshots/windows/system-performance.png) | ![O detector de gargalo](docs/screenshots/windows/bottleneck.png) | ![Benchmarks](docs/screenshots/windows/bench.png) |
+
 | Visão geral | Processador | Memória |
 |---|---|---|
 | ![Visão geral](docs/screenshots/windows/overview.png) | ![Processador](docs/screenshots/windows/processor.png) | ![Memória e SPD](docs/screenshots/windows/memory.png) |
@@ -114,6 +118,8 @@ Ubuntu 24.04 (WSLg, Wayland), na mesma máquina, NVIDIA via NVML:
 | Visão geral | Sensores | Dispositivos |
 |---|---|---|
 | ![Visão geral no Linux](docs/screenshots/linux/overview.png) | ![Sensores no Linux](docs/screenshots/linux/sensors.png) | ![Dispositivos no Linux](docs/screenshots/linux/devices.png) |
+| **Sistema (Gerenciador de Tarefas)** | **O que limita meu FPS?** | **Processador** |
+| ![Sistema no Linux: desempenho](docs/screenshots/linux/system-performance.png) | ![Detector de gargalo no Linux](docs/screenshots/linux/bottleneck.png) | ![Processador no Linux](docs/screenshots/linux/processor.png) |
 
 ### macOS
 
