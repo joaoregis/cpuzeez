@@ -16,6 +16,10 @@ generated from its section below.
 
 - A test of the background cache waited a fixed 100 ms for a refresh and could fail on a busy CI runner; it now waits for the refresh with a deadline.
 
+### Documentation
+
+- The 1.1.0 [roadmap](docs/v1.1/ROADMAP.md): corrections and debt only, in six milestones (`1.0.1`, `1.0.2`, three `1.1.0` betas, `1.1.0`), one row per pull request with its gate. The [plan](docs/v1.1/README.md) gains two items (the security review's notes, the macOS and Arch installers in CI) and the counts checked against the code.
+
 ## [1.0.0] - 2026-11-09
 
 CPU ZeeZ 1.0 is the CPU-Z feature set grown into a complete tool for the PC on Windows, Linux and macOS: a hardware monitor, a Task Manager, a game overlay with FPS and capture, a bottleneck detector, a benchmark suite and a stability test, all local, with nothing sent anywhere. It was built in the open over ten betas and two snapshots; every pre-release is listed below this entry.
