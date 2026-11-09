@@ -43,7 +43,9 @@ pub enum Outcome {
 pub struct Pending {
     #[cfg(target_os = "linux")]
     child: std::process::Child,
-    marker: PathBuf,
+    /// The private marker file the elevated copy signals with (None when the
+    /// relaunch already has its answer, or no marker could be created).
+    marker: Option<PathBuf>,
     done: Option<Outcome>,
 }
 
@@ -53,13 +55,16 @@ impl Pending {
         if let Some(o) = self.done.take() {
             return Some(o);
         }
-        if self.marker.exists() {
-            let _ = std::fs::remove_file(&self.marker);
-            return Some(Outcome::Started);
+        // Only a plain file at the marker name is "up": the directory is
+        // exclusively ours and 0700, and the elevated copy refuses to follow
+        // symlinks, so nobody else can put any entry there — anything that is
+        // not a regular file is not a signal (symlink_metadata does not follow).
+        if self.marker.as_ref().is_some_and(|m| m.symlink_metadata().is_ok_and(|md| md.is_file())) {
+            return self.finish(Outcome::Started);
         }
         #[cfg(target_os = "linux")]
         if let Ok(Some(st)) = self.child.try_wait() {
-            return Some(match st.code() {
+            return self.finish(match st.code() {
                 // pkexec: 126 = dialog dismissed or not authorized, 127 = authentication failed.
                 Some(126 | 127) => Outcome::Cancelled,
                 Some(c) => {
@@ -70,30 +75,44 @@ impl Pending {
         }
         None
     }
+
+    /// Report `o` and reclaim the private handoff directory, which held only
+    /// the marker: every "Restart as root" used to leave one behind in /tmp.
+    fn finish(&mut self, o: Outcome) -> Option<Outcome> {
+        if let Some(m) = self.marker.take() {
+            let _ = std::fs::remove_dir_all(m.parent().unwrap_or(&m));
+        }
+        Some(o)
+    }
 }
 
 /// Start an elevated copy of this program with `args` (the caller's own
 /// arguments, minus the program name).
 pub fn relaunch(args: &[String]) -> Pending {
-    let marker = std::env::temp_dir().join(format!("cpuzeez-handoff-{}", std::process::id()));
-    let _ = std::fs::remove_file(&marker);
-    let fail = |o: Outcome, marker: PathBuf| Pending {
+    let fail = |o: Outcome| Pending {
         #[cfg(target_os = "linux")]
         child: std::process::Command::new("true").spawn().expect("`true` runs"),
-        marker,
+        marker: None,
         done: Some(o),
     };
     let Ok(exe) = std::env::current_exe() else {
-        return fail(Outcome::Failed("cannot find this program's path".into()), marker);
+        return fail(Outcome::Failed("cannot find this program's path".into()));
     };
     #[cfg(windows)]
     {
         let done = win::runas(&exe, args);
-        Pending { marker, done: Some(done) }
+        Pending { marker: None, done: Some(done) }
     }
     #[cfg(target_os = "linux")]
     {
-        let Some(pkexec) = which("pkexec") else { return fail(Outcome::Unsupported, marker) };
+        let Some(pkexec) = which("pkexec") else { return fail(Outcome::Unsupported) };
+        // A predictable marker name in shared /tmp would let any local user
+        // pre-plant a symlink and have the ROOT copy truncate a file of their
+        // choosing when it signals (CWE-59): only a private, unpredictable
+        // directory we just created is acceptable.
+        let Some(marker) = handoff_marker() else {
+            return fail(Outcome::Failed("could not create a private handoff directory".into()));
+        };
         // pkexec clears the environment; pass what a GUI needs to reach this session's display.
         let mut c = std::process::Command::new(pkexec);
         c.arg("env");
@@ -104,14 +123,19 @@ pub fn relaunch(args: &[String]) -> Pending {
         }
         c.arg(exe).args(args).arg(format!("--elevated-handoff={}", marker.display()));
         match c.spawn() {
-            Ok(child) => Pending { child, marker, done: None },
-            Err(e) => fail(Outcome::Failed(format!("pkexec: {e}")), marker),
+            Ok(child) => Pending { child, marker: Some(marker), done: None },
+            Err(e) => {
+                // The directory was created for this relaunch only; a spawn
+                // failure must not leave it behind in /tmp.
+                let _ = std::fs::remove_dir_all(marker.parent().unwrap_or(&marker));
+                fail(Outcome::Failed(format!("pkexec: {e}")))
+            }
         }
     }
     #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = (exe, args);
-        Pending { marker, done: Some(Outcome::Unsupported) }
+        Pending { marker: None, done: Some(Outcome::Unsupported) }
     }
 }
 
@@ -170,8 +194,122 @@ fn sh_quote(a: &str) -> String {
 }
 
 /// Called by the elevated copy once it is up: tells the waiting original.
+/// This runs as ROOT: only ever inside a fresh 0700 `cpuzeez-handoff-*`
+/// directory the unprivileged original created ([`handoff_marker`]), and only
+/// through a new, non-symlink file — a plain `fs::write` to a path from argv
+/// would follow a planted symlink and truncate a file of an attacker's
+/// choosing (CWE-59).
 pub fn signal_handoff(marker: &str) {
-    let _ = std::fs::write(marker, b"ok");
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+        let p = std::path::Path::new(marker);
+        // pkexec tells us which user asked for elevation: the marker directory
+        // must be theirs as well (absent when not launched through pkexec,
+        // e.g. in tests). Defense in depth on top of the mode/name checks.
+        let invoking = std::env::var("PKEXEC_UID").ok().and_then(|u| u.parse::<u32>().ok());
+        let dir_ok = |d: &std::path::Path| {
+            std::fs::symlink_metadata(d).is_ok_and(|md| {
+                md.is_dir()
+                    && md.permissions().mode() & 0o777 == 0o700
+                    && d.file_name().is_some_and(|n| n.to_string_lossy().starts_with("cpuzeez-handoff-"))
+                    && invoking.is_none_or(|uid| md.uid() == uid)
+            })
+        };
+        if !p.parent().is_some_and(dir_ok) {
+            return;
+        }
+        let _ = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(p)
+            .and_then(|mut f| f.write_all(b"ok"));
+    }
+    #[cfg(not(unix))]
+    {
+        // No handoff flow exists outside Linux (Windows `runas` answers
+        // synchronously; nothing relaunches with a marker). In particular this
+        // must NEVER write a path from argv: the argument parser is
+        // case-insensitive while the relaunch argument filter historically
+        // matched case-sensitively, so a `--ELEVATED-HANDOFF=<file>` variant
+        // could ride along into an administrator copy and truncate any
+        // admin-writable file. A no-op cannot write anything.
+        let _ = marker;
+    }
+}
+
+/// A fresh private directory for the handoff marker: unpredictable name,
+/// exclusive `create` (fails if taken, so a pre-planted symlink or squatted
+/// name can never be used), mode 0700, verified ours, under a base directory
+/// owned by root or us where nobody else can replace entries (sticky, like
+/// /tmp). Same recipe as the updater's `private_download_dir`: the root copy
+/// will write into whatever this returns.
+#[cfg(target_os = "linux")]
+fn handoff_marker() -> Option<PathBuf> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
+    // SAFETY: geteuid takes no arguments, has no preconditions and cannot fail.
+    let euid = unsafe { libc::geteuid() };
+    let mode_of = |md: &std::fs::Metadata| md.permissions().mode();
+    let entry_ok = |md: &std::fs::Metadata| {
+        // Not a symlink, root- or self-owned, and writable by others only
+        // with the sticky bit (in a sticky dir only the entry's owner, the
+        // dir's owner or root can rename/unlink, so ours can't be swapped).
+        md.is_dir() && (md.uid() == 0 || md.uid() == euid) && (mode_of(md) & 0o022 == 0 || mode_of(md) & 0o1000 != 0)
+    };
+    let base_safe = |p: &std::path::Path| {
+        std::fs::symlink_metadata(p).is_ok_and(|md| entry_ok(&md))
+            // The base itself passing is not enough: a base inside a directory
+            // someone else can rename in (e.g. TMPDIR=/srv/team/tmp with a
+            // team-writable /srv/team) can be swapped wholesale during the
+            // polkit prompt, and a listable 0755 base makes the random
+            // directory name observable. Every ancestor must be un-swap too.
+            && p.ancestors().skip(1).all(|a| std::fs::symlink_metadata(a).is_ok_and(|md| entry_ok(&md)))
+    };
+    let mut bases = vec![std::env::temp_dir(), PathBuf::from("/tmp")];
+    bases.retain(|b| base_safe(b));
+    for base in &bases {
+        for _ in 0..8 {
+            let dir = base.join(format!("cpuzeez-handoff-{}", random_token()));
+            if std::fs::DirBuilder::new().mode(0o700).create(&dir).is_ok() {
+                // Pin the mode explicitly: with a restrictive umask (e.g.
+                // 0o277) the create above yields 0500, which this side's
+                // check would accept but the root side (exactly 0700) would
+                // refuse — set it so both sides always agree.
+                let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
+                let ours =
+                    std::fs::symlink_metadata(&dir).is_ok_and(|md| md.uid() == euid && mode_of(&md) & 0o077 == 0);
+                if ours {
+                    return Some(dir.join("up"));
+                }
+                let _ = std::fs::remove_dir_all(&dir);
+            }
+        }
+    }
+    None
+}
+
+/// Unpredictable hex token: OS entropy (`/dev/urandom`) mixed with the time,
+/// the pid, an address (ASLR) and `RandomState`'s OS-seeded keys — the same
+/// recipe as the updater's `random_token`.
+#[cfg(target_os = "linux")]
+fn random_token() -> String {
+    use std::hash::{BuildHasher, Hasher};
+    let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+    if let Ok(mut f) = std::fs::File::open("/dev/urandom") {
+        use std::io::Read;
+        let mut buf = [0u8; 16];
+        if f.read_exact(&mut buf).is_ok() {
+            h.write(&buf);
+        }
+    }
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
+    h.write(&t.to_ne_bytes());
+    h.write(&std::process::id().to_ne_bytes());
+    let probe = 0u8;
+    h.write(&(std::ptr::addr_of!(probe) as usize).to_ne_bytes());
+    format!("{:016x}", h.finish())
 }
 
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
@@ -323,22 +461,112 @@ mod tests {
 
     #[test]
     fn handoff_marker_reports_started() {
-        let marker = std::env::temp_dir().join(format!("cpuzeez-handoff-test-{}", std::process::id()));
+        #[cfg(target_os = "linux")]
+        let marker = handoff_marker().expect("a private handoff directory");
+        // macOS/BSD: signal_handoff's disciplined write only accepts a marker
+        // inside a fresh 0700 `cpuzeez-handoff-*` directory — build the test
+        // one by hand, so this platform exercises the validation, not skip it.
+        #[cfg(all(unix, not(target_os = "linux")))]
+        let marker = {
+            use std::os::unix::fs::DirBuilderExt;
+            let d = std::env::temp_dir().join(format!("cpuzeez-handoff-test-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&d);
+            std::fs::DirBuilder::new().mode(0o700).create(&d).unwrap();
+            d.join("up")
+        };
+        // Windows: no handoff flow (runas answers synchronously); a scratch
+        // directory stands in so the cleanup below cannot touch %TEMP% itself.
+        #[cfg(not(unix))]
+        let marker = {
+            let d = std::env::temp_dir().join(format!("cpuzeez-handoff-test-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&d);
+            std::fs::create_dir_all(&d).unwrap();
+            d.join("up")
+        };
         #[cfg(target_os = "linux")]
         let child = std::process::Command::new("sleep").arg("5").spawn().unwrap();
         let mut p = Pending {
             #[cfg(target_os = "linux")]
             child,
-            marker: marker.clone(),
+            marker: Some(marker.clone()),
             done: None,
         };
         #[cfg(not(target_os = "linux"))]
         assert_eq!(p.poll(), None, "no marker yet");
+        #[cfg(unix)]
         signal_handoff(marker.to_str().unwrap());
+        #[cfg(not(unix))]
+        // Windows has no handoff flow (signal_handoff is a no-op there by
+        // design); write the marker directly to exercise the waiting side.
+        std::fs::write(&marker, b"ok").unwrap();
         assert_eq!(p.poll(), Some(Outcome::Started));
         assert!(!marker.exists(), "marker cleaned up");
+        assert!(!marker.parent().unwrap().exists(), "the handoff directory is reclaimed");
         #[cfg(target_os = "linux")]
         let _ = p.child.kill();
+    }
+
+    /// The root-side write is disciplined: nothing outside a fresh private
+    /// `cpuzeez-handoff-*` directory is ever written, and a symlink planted
+    /// at the marker name is not followed (CWE-59).
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn signal_handoff_refuses_foreign_and_planted_paths() {
+        // A path in plain /tmp (or anywhere non-private) must not be written.
+        let foreign = std::env::temp_dir().join(format!("cpuzeez-handoff-evil-{}", std::process::id()));
+        signal_handoff(foreign.to_str().unwrap());
+        assert!(!foreign.exists(), "must not write outside a private handoff directory");
+
+        // A valid private directory, but a symlink planted at the marker name.
+        let marker = handoff_marker().expect("a private handoff directory");
+        let dir = marker.parent().unwrap().to_path_buf();
+        let bait = dir.parent().unwrap().join(format!("cpuzeez-handoff-bait-{}", std::process::id()));
+        std::fs::write(&bait, b"precious").unwrap();
+        std::os::unix::fs::symlink(&bait, &marker).unwrap();
+        signal_handoff(marker.to_str().unwrap());
+        assert_eq!(std::fs::read_to_string(&bait).unwrap(), "precious", "a planted symlink must not be followed");
+        assert!(
+            std::fs::symlink_metadata(&marker).is_ok_and(|m| m.file_type().is_symlink()),
+            "the entry at the marker name must still be the planted symlink, not a written file"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_file(&bait);
+    }
+
+    /// The waiting side only accepts a plain file as the signal: a symlink at
+    /// the marker name (even a dangling one) must not report `Started`.
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn poll_ignores_a_planted_or_dangling_symlink_marker() {
+        let marker = handoff_marker().expect("a private handoff directory");
+        let dir = marker.parent().unwrap();
+        let bait = dir.parent().unwrap().join(format!("cpuzeez-handoff-bait-{}", std::process::id())); // deliberately absent
+        std::os::unix::fs::symlink(&bait, &marker).unwrap();
+        let child = std::process::Command::new("sleep").arg("5").spawn().unwrap();
+        let mut p = Pending { child, marker: Some(marker.clone()), done: None };
+        assert_eq!(p.poll(), None, "a symlink at the marker name is not a signal");
+        assert!(std::fs::symlink_metadata(&marker).is_ok_and(|m| m.file_type().is_symlink()), "untouched");
+        let _ = p.child.kill();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Two handoff directories never share a name, and they are private.
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn handoff_dirs_are_fresh_private_and_unique() {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let (a, b) = (handoff_marker().unwrap(), handoff_marker().unwrap());
+        let (ok_a, ok_b) = (a.parent().unwrap(), b.parent().unwrap());
+        let check = |d: &std::path::Path| {
+            let md = std::fs::symlink_metadata(d).unwrap();
+            // SAFETY: geteuid takes no arguments, has no preconditions and cannot fail.
+            md.is_dir() && md.uid() == unsafe { libc::geteuid() } && md.permissions().mode() & 0o777 == 0o700
+        };
+        let (good, distinct) = (check(ok_a) && check(ok_b), ok_a != ok_b);
+        let _ = std::fs::remove_dir_all(ok_a);
+        let _ = std::fs::remove_dir_all(ok_b);
+        assert!(good, "handoff directories must be 0700 and owned by us");
+        assert!(distinct, "each relaunch must get its own unpredictable directory");
     }
 
     #[test]

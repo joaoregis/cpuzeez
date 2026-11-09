@@ -134,7 +134,10 @@ impl Access {
     /// Restart CPU ZeeZ elevated (a page outside the banner asked for it).
     pub fn restart_elevated(&mut self) {
         if self.pending.is_none() && elevation::can_relaunch() {
-            let args: Vec<String> = std::env::args().skip(1).filter(|a| !a.contains("elevated-handoff")).collect();
+            let args: Vec<String> = // Case-insensitive like the parser (main.rs lowercases option names): a
+// case-variant `--ELEVATED-HANDOFF=…` must not ride along into the
+// elevated copy, where it would be parsed back as a handoff path.
+                        std::env::args().skip(1).filter(|a| !a.to_ascii_lowercase().contains("elevated-handoff")).collect();
             self.pending = Some(elevation::relaunch(&args));
         }
     }
@@ -251,7 +254,10 @@ impl Access {
                             if widgets::primary_button(ui, &format!("{} {}", icon::SHIELD_CHECK, tr(label))).clicked() {
                                 self.message = None;
                                 let args: Vec<String> =
-                                    std::env::args().skip(1).filter(|a| !a.contains("elevated-handoff")).collect();
+                                    // Case-insensitive like the parser (main.rs lowercases option names): a
+// case-variant `--ELEVATED-HANDOFF=…` must not ride along into the
+// elevated copy, where it would be parsed back as a handoff path.
+                        std::env::args().skip(1).filter(|a| !a.to_ascii_lowercase().contains("elevated-handoff")).collect();
                                 self.pending = Some(elevation::relaunch(&args));
                             }
                         }
