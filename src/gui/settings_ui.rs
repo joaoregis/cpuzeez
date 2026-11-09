@@ -84,11 +84,12 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Check for updates at startup", "Procurar atualizações ao iniciar"),
     ("Update channel", "Canal de atualização"),
     ("Stable", "Estável"),
+    ("Snapshot", "Snapshot"),
     ("Beta", "Beta"),
     ("Alpha", "Alfa"),
     (
-        "Stable: releases only. Beta: also betas and release candidates. Alpha: everything that is published. Pre-releases may be unfinished.",
-        "Estável: só versões finais. Beta: também betas e candidatas a versão final. Alfa: tudo o que foi publicado. Pré-versões podem estar inacabadas.",
+        "Stable: releases only. Snapshot: also previews with every new feature. Beta: also pieces of new features while they are built. Alpha: everything, including unstable code.",
+        "Estável: só versões finais. Snapshot: também prévias com todas as novidades. Beta: também partes das novidades em desenvolvimento. Alfa: tudo, inclusive código instável.",
     ),
     (
         "One anonymous request to GitHub's releases page at startup; nothing about your computer is sent.",
@@ -212,11 +213,12 @@ pub const ES: &[(&str, &str)] = &[
     ("Check for updates at startup", "Buscar actualizaciones al iniciar"),
     ("Update channel", "Canal de actualización"),
     ("Stable", "Estable"),
+    ("Snapshot", "Snapshot"),
     ("Beta", "Beta"),
     ("Alpha", "Alfa"),
     (
-        "Stable: releases only. Beta: also betas and release candidates. Alpha: everything that is published. Pre-releases may be unfinished.",
-        "Estable: solo versiones finales. Beta: también betas y candidatas a versión final. Alfa: todo lo publicado. Las preversiones pueden estar inacabadas.",
+        "Stable: releases only. Snapshot: also previews with every new feature. Beta: also pieces of new features while they are built. Alpha: everything, including unstable code.",
+        "Estable: solo versiones finales. Snapshot: también vistas previas con todas las novedades. Beta: también partes de las novedades en desarrollo. Alfa: todo, incluido código inestable.",
     ),
     (
         "One anonymous request to GitHub's releases page at startup; nothing about your computer is sent.",
@@ -653,7 +655,7 @@ pub fn page(ui: &mut egui::Ui, s: &mut Settings, updates_allowed: bool, persist:
         });
         let p = theme::palette(ui);
         ui.label(RichText::new(tr(
-            "Stable: releases only. Beta: also betas and release candidates. Alpha: everything that is published. Pre-releases may be unfinished.",
+            "Stable: releases only. Snapshot: also previews with every new feature. Beta: also pieces of new features while they are built. Alpha: everything, including unstable code.",
         ))
         .small()
         .color(p.text_muted));

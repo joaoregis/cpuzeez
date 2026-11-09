@@ -31,6 +31,7 @@ pub mod procs;
 mod robustness;
 pub mod services;
 pub mod startup;
+pub mod tempdir;
 pub mod users;
 
 pub mod cpu {

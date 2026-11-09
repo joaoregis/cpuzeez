@@ -84,7 +84,7 @@ Processador, caches, placa-mãe, memória e SPD, gráficos, sensores, discos, re
   - Clocks ao vivo de cada núcleo e da GPU, timers e exportação TXT/HTML/JSON.
 - **A linha de comando do CPU-Z:**
   - As opções do CPU-Z: `-txt=`, `-html=`, `-json=`, `-console`, `-bench`, `-core=`, `-coremask=`.
-  - Opções novas: `-sensors`, `-log=`, `-membench`, `-diff=`, `-checkupdate[=stable|beta|alpha]`.
+  - Opções novas: `-sensors`, `-log=`, `-membench`, `-diff=`, `-checkupdate[=stable|snapshot|beta|alpha]`.
   - Um `cpuzeez.ini` com as mesmas chaves do `cpuz.ini`.
 - **Atualização em um clique.** O app encontra releases novas e instala o pacote certo para o seu SO, depois de conferir o SHA-256.
 - **Um único binário nativo**, de cerca de 20 MB (a maior parte é o renderizador e o benchmark de GPU), sem dependências em tempo de execução.
@@ -175,8 +175,9 @@ Com Rust instalado, também dá para usar `cargo install --git https://github.co
 - Também dá para checar em *Sobre ▸ Procurar atualizações*, ou com `cpuzeez -checkupdate`.
 - **Canais de atualização.** *Configurações ▸ Atualizações ▸ Canal de atualização* escolhe o que a verificação pode oferecer:
   - **Estável:** só versões finais (o padrão numa versão final).
-  - **Beta:** também betas e candidatas a versão final (o padrão quando você roda uma beta).
-  - **Alfa:** tudo o que foi publicado.
+  - **Snapshot:** também snapshots, prévias com todas as novidades (o padrão quando você roda um snapshot).
+  - **Beta:** também betas, partes das novidades em desenvolvimento (o padrão quando você roda uma beta).
+  - **Alfa:** tudo o que foi publicado, inclusive código instável.
   A verificação ao abrir segue o canal escolhido, depois que você a permitiu. `cpuzeez -checkupdate=beta` mostra o que um canal ofereceria sem mudar nada. Pré-versões podem estar inacabadas; há um modelo de issue *Beta report* para o que você encontrar.
 - Para desligar, use `CheckUpdates=0` no `cpuzeez.ini`.
 - O aviso usa o `curl` do sistema, que já vem no Windows 10+, no macOS e nas distros Linux desktop.
@@ -283,7 +284,7 @@ Rode `cpuzeez` sem argumentos para abrir o app. Todas as opções do CPU-Z funci
 | `-diff=ANTIGO.json,NOVO.json` | Compara dois relatórios (`NOVO` pode ser `now`; acrescente `,all` para incluir valores ao vivo) |
 | `-core=N` | Mostra o clock do núcleo N e sai |
 | `-coremask=HEX` | Restringe o `-bench` a essas CPUs lógicas |
-| `-checkupdate[=canal]` | Verifica se há release mais nova no GitHub (`stable`, `beta` ou `alpha`; sem valor, o canal das Configurações) |
+| `-checkupdate[=canal]` | Verifica se há release mais nova no GitHub (`stable`, `snapshot`, `beta` ou `alpha`; sem valor, o canal das Configurações) |
 | `-screenshots=DIR` | Renderiza cada página em PNG e sai (para docs e CI) |
 
 Atalhos da interface, como no CPU-Z:

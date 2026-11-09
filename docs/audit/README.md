@@ -41,6 +41,7 @@ Each claim names where the evidence is. A claim without evidence is a finding.
 | **No code injection; other processes opened with limited rights only** (P4) | [ADR 0012](../adr/0012-no-code-injection-ever.md); grep `OpenProcess`, `PROCESS_`, `WriteProcessMemory`, `CreateRemoteThread` |
 | **Destructive actions confirm and warn on critical targets** (P4) | `src/gui/pages/`, the critical-process list in `crates/core/src/procs.rs` |
 | **Third-party binaries are what we pinned** | `packaging/pins.txt`; the release job checks SHA-256; the app re-checks PawnIO and PresentMon before running them; [THIRD_PARTY.md](../../THIRD_PARTY.md) |
+| **Paths a privileged process opens are private** | `crates/platform/src/tempdir.rs` and its tests; the updater, the handoff marker and the PresentMon hold ([threat model §5](../security/threat-model.md)) |
 | **Child processes start in every launch mode** | `crates/platform/src/os.rs` (`hide_own_console`, `nul_std_handles`) and its test, which starts a real child under a console of its own; `update::command` never inherits stdin. Probe every other `Command::…spawn()` / `.status()` |
 | **Parsers survive hostile input** | `crates/core/src/robustness.rs`, `crates/platform/src/robustness.rs`, `src/robustness.rs`, `fuzz/fuzz_targets/` and the corpus |
 | **The detector explains itself** (evidence, thresholds, lower confidence on fallback) | `crates/core/src/bottleneck.rs` and its tests; [bottleneck-detector.md](../v1/bottleneck-detector.md) |
@@ -169,6 +170,7 @@ Each was found late, so each deserves a second look elsewhere:
 - **A declared version nobody tested** (`rust-version` said 1.89; the GUI toolkit needs 1.95). Look for other declared-but-unchecked claims.
 - **Links to files only on an unmerged branch** (404 in the app). Look for URLs built from `main`.
 - **Layout bugs at large text sizes** (a title running into a button) that screenshots at 100% hid.
+- **Paths handed to a more privileged process** (joaoregis/cpuzeez#4, #5, found by a contributor): a predictable `/tmp` folder for the updater's package, a predictable root-written marker, a sidecar checked once and run many times by path. Look for any path prepared by one process and opened by a more privileged one; the rule is in the [threat model §8](../security/threat-model.md).
 - **Hostile input** found by deterministic tests before any fuzzer ran: an overflow in a histogram, a quadratic loop in session windows, and an allocation sized by a timestamp.
 
 ## 10. How to report

@@ -117,6 +117,15 @@ pub struct Access {
     pub restarted: bool,
 }
 
+/// Start an elevated copy of the app. None of our own arguments is forwarded:
+/// the only ones the GUI reads are `--elevated-handoff` (relaunch sets its own)
+/// and `-screenshots=DIR`, which would make the elevated copy write where the
+/// launching process chose (and the parser accepts any letter case, so a
+/// filter by name is easy to get wrong). The elevated copy opens like a fresh start.
+fn relaunch_elevated() -> elevation::Pending {
+    elevation::relaunch(&[])
+}
+
 impl Access {
     fn gaps(&mut self, ctx: &Ctx) -> &[Gap] {
         self.gaps.get_or_insert_with(|| crate::access::gaps(ctx))
@@ -134,11 +143,7 @@ impl Access {
     /// Restart CPU ZeeZ elevated (a page outside the banner asked for it).
     pub fn restart_elevated(&mut self) {
         if self.pending.is_none() && elevation::can_relaunch() {
-            let args: Vec<String> = // Case-insensitive like the parser (main.rs lowercases option names): a
-// case-variant `--ELEVATED-HANDOFF=…` must not ride along into the
-// elevated copy, where it would be parsed back as a handoff path.
-                        std::env::args().skip(1).filter(|a| !a.to_ascii_lowercase().contains("elevated-handoff")).collect();
-            self.pending = Some(elevation::relaunch(&args));
+            self.pending = Some(relaunch_elevated());
         }
     }
 
@@ -253,12 +258,7 @@ impl Access {
                             let label = if cfg!(windows) { "Restart as administrator" } else { "Restart as root" };
                             if widgets::primary_button(ui, &format!("{} {}", icon::SHIELD_CHECK, tr(label))).clicked() {
                                 self.message = None;
-                                let args: Vec<String> =
-                                    // Case-insensitive like the parser (main.rs lowercases option names): a
-// case-variant `--ELEVATED-HANDOFF=…` must not ride along into the
-// elevated copy, where it would be parsed back as a handoff path.
-                        std::env::args().skip(1).filter(|a| !a.to_ascii_lowercase().contains("elevated-handoff")).collect();
-                                self.pending = Some(elevation::relaunch(&args));
+                                self.pending = Some(relaunch_elevated());
                             }
                         }
                     }

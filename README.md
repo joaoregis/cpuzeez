@@ -84,9 +84,9 @@ Processor, caches, mainboard, memory and SPD, graphics, sensors, drives, network
   - Live clocks of every core and GPU, timers, and TXT/HTML/JSON export.
 - **CPU-Z's command line**:
   - CPU-Z's own flags: `-txt=`, `-html=`, `-json=`, `-console`, `-bench`, `-core=`, `-coremask=`.
-  - New flags: `-sensors`, `-log=`, `-membench`, `-diff=`, `-checkupdate[=stable|beta|alpha]`.
+  - New flags: `-sensors`, `-log=`, `-membench`, `-diff=`, `-checkupdate[=stable|snapshot|beta|alpha]`.
   - A `cpuzeez.ini` with the same keys as `cpuz.ini`.
-- **One-click updates**, on the channel you choose (Stable, Beta or Alpha). The app finds new releases and installs the right package for your OS, after verifying its SHA-256.
+- **One-click updates**, on the channel you choose (Stable, Snapshot, Beta or Alpha). The app finds new releases and installs the right package for your OS, after verifying its SHA-256.
 - **A single native binary**, about 20 MB (most of it the GPU renderer and the GPU benchmark), with no runtime dependencies.
 
 ## Screenshots
@@ -175,8 +175,9 @@ With Rust installed you can also run `cargo install --git https://github.com/joa
 - You can also check from *About ▸ Check for updates*, or with `cpuzeez -checkupdate`.
 - **Update channels.** *Settings ▸ Updates ▸ Update channel* picks what the check may offer:
   - **Stable:** releases only (the default for a release build).
-  - **Beta:** also betas and release candidates (the default when you run a beta).
-  - **Alpha:** everything that is published.
+  - **Snapshot:** also snapshots, previews with every new feature (the default when you run a snapshot).
+  - **Beta:** also betas, pieces of the new features while they are built (the default when you run a beta).
+  - **Alpha:** everything that is published, including unstable code.
   The startup check follows the channel you chose, once you have allowed it. `cpuzeez -checkupdate=beta` shows what a channel would offer without changing anything. Pre-releases can be unfinished; a *Beta report* issue template is there for what you find.
 - To turn the check off, set `CheckUpdates=0` in `cpuzeez.ini`.
 - It uses the system `curl`, which ships with Windows 10+, macOS and desktop Linux distros.
@@ -283,7 +284,7 @@ Run `cpuzeez` with no arguments to open the app. All of CPU-Z's command-line opt
 | `-diff=OLD.json,NEW.json` | Compare two reports (`NEW` can be `now`; add `,all` to include live values) |
 | `-core=N` | Print core #N's clock and exit |
 | `-coremask=HEX` | Restrict `-bench` to these logical CPUs |
-| `-checkupdate[=channel]` | Checks GitHub for a newer release (`stable`, `beta` or `alpha`; without a value, the channel in Settings) |
+| `-checkupdate[=channel]` | Checks GitHub for a newer release (`stable`, `snapshot`, `beta` or `alpha`; without a value, the channel in Settings) |
 | `-screenshots=DIR` | Render every page to PNG and exit (docs/CI) |
 
 GUI keys, as in CPU-Z:

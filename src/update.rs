@@ -15,12 +15,20 @@ use std::sync::{Arc, Mutex};
 const API: &str = "https://api.github.com/repos/joaoregis/cpuzeez/releases?per_page=30";
 
 /// Which releases the update check may offer. Each channel also offers
-/// everything steadier than itself: Beta sees stable releases too.
+/// everything steadier than itself: Beta sees snapshots and releases too.
+///
+/// The project's release ladder, steadiest first: **release** (production),
+/// **snapshot** (a preview with every new feature), **beta** (pieces of the new
+/// features while they are being built), **alpha** (early, unstable code).
+/// SemVer orders the labels the same way (`alpha` < `beta` < `snapshot`), so
+/// `1.0.0-snapshot.1` is newer than `1.0.0-beta.10`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 pub enum Channel {
     /// Releases only (`1.0.0`).
     #[default]
     Stable,
+    /// Plus snapshots (`1.0.0-snapshot.1`).
+    Snapshot,
     /// Plus betas and release candidates (`1.0.0-beta.8`, `1.0.0-rc.1`).
     Beta,
     /// Plus alphas (`1.1.0-alpha.1`): everything that is published.
@@ -28,7 +36,7 @@ pub enum Channel {
 }
 
 impl Channel {
-    pub const ALL: [Channel; 3] = [Channel::Stable, Channel::Beta, Channel::Alpha];
+    pub const ALL: [Channel; 4] = [Channel::Stable, Channel::Snapshot, Channel::Beta, Channel::Alpha];
 
     /// The channel a version belongs to, from its pre-release label.
     pub fn of(version: &str) -> Channel {
@@ -37,6 +45,7 @@ impl Channel {
         match v.split_once('-').map(|(_, pre)| pre) {
             None => Channel::Stable,
             Some(pre) if pre.to_ascii_lowercase().starts_with("alpha") => Channel::Alpha,
+            Some(pre) if pre.to_ascii_lowercase().starts_with("snapshot") => Channel::Snapshot,
             Some(_) => Channel::Beta,
         }
     }
@@ -49,12 +58,13 @@ impl Channel {
     pub fn name(self) -> &'static str {
         match self {
             Channel::Stable => "Stable",
+            Channel::Snapshot => "Snapshot",
             Channel::Beta => "Beta",
             Channel::Alpha => "Alpha",
         }
     }
 
-    /// `stable`, `beta` or `alpha` (the `-checkupdate=` argument).
+    /// `stable`, `snapshot`, `beta` or `alpha` (the `-checkupdate=` argument).
     pub fn from_arg(s: &str) -> Option<Channel> {
         Channel::ALL.into_iter().find(|c| c.name().eq_ignore_ascii_case(s.trim()))
     }
@@ -335,184 +345,14 @@ fn fetch_and_verify(a: &Asset, sums_url: &str, path: &Path, stage: &Mutex<Stage>
     Ok(())
 }
 
-/// A fresh directory for one download: an unpredictable name, an exclusive
-/// `create` (fails if the name is already taken) and, on Unix, mode 0700
-/// inside a validated base directory (see [`base_is_safe`]) and verified to be
-/// owned by the current user.
-///
-/// The verified installer is later opened *by path* by a privileged installer
-/// (pkexec apt-get/pacman, msiexec, open), so its path must live where no
-/// other local user can create files, write, or swap: the old predictable
-/// shared `/tmp/cpuzeez-update-<version>` let anyone pre-create it world-
-/// writable and rename the verified file during the polkit/UAC prompt,
-/// installing a swapped package as root (CWE-377/59/426). On Windows the
-/// default per-user %TEMP% ACL already provides this; on Unix the base is
-/// validated so a non-sticky or user-owned `TMPDIR` (e.g. preserved through
-/// sudo) cannot re-enable the directory-swap attack.
+/// A fresh private directory for one download (`cpuzeez-update-<version>-<random>`):
+/// see [`cpuzeez_platform::tempdir::create`] for why it must be private. The
+/// verified installer is later opened *by path* by a privileged installer
+/// (pkexec apt-get/pacman, msiexec, open), so nobody else may be able to swap it.
 fn private_download_dir(version: &str) -> Result<PathBuf, String> {
-    // The version is a network-provided tag: keep it to one path component
-    // (no `/`, `\`, `..` tricks — those become `_`).
-    let v: String = version
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') { c } else { '_' })
-        .collect();
-    // The /tmp fallback, push and retain below are Unix-only.
-    #[allow(unused_mut)]
-    let mut bases = vec![std::env::temp_dir()];
-    #[cfg(unix)]
-    bases.push(PathBuf::from("/tmp")); // fallback when TMPDIR is unusable
-    #[cfg(unix)]
-    bases.retain(|b| base_is_safe(b));
-    let mut last = "no usable temporary directory".to_string();
-    'base: for base in &bases {
-        for _ in 0..8 {
-            let dir = base.join(format!("{}-update-{v}-{}", crate::NAME, random_token()));
-            match create_exclusive_private(&dir) {
-                Ok(()) => return Ok(dir),
-                // Name taken: try another name in the same base.
-                Err((e, true)) => last = e,
-                // Anything else (EACCES on a validated-but-unwritable base
-                // such as TMPDIR=/root, read-only FS, deterministic
-                // ownership/mode failure): another *name* cannot help, but
-                // the next *base* might — e.g. the /tmp fallback.
-                Err((e, false)) => {
-                    last = e;
-                    continue 'base;
-                }
-            }
-        }
-    }
-    Err(format!("could not create a private download directory: {last}"))
-}
-
-/// Create `dir` with mode 0700, failing if it (or a symlink at that name)
-/// already exists. `Ok` means it exists, is ours, and is private; on failure
-/// returns the message and whether another name might still succeed.
-fn create_exclusive_private(dir: &Path) -> Result<(), (String, bool)> {
-    // mode() is Unix-only; create() takes &self.
-    #[allow(unused_mut)]
-    let mut b = std::fs::DirBuilder::new();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        b.mode(0o700);
-    }
-    b.create(dir).map_err(|e| (format!("{}: {e}", dir.display()), e.kind() == std::io::ErrorKind::AlreadyExists))?;
-    #[cfg(unix)]
-    {
-        if let Err(e) = private_and_ours(dir) {
-            // Deterministic for a given filesystem (NFS root-squash, FAT,
-            // FUSE): retrying a different name cannot help.
-            return Err((e, false));
-        }
-    }
-    Ok(())
-}
-
-/// `dir` must be owned by the effective user and give nobody else access;
-/// otherwise remove it and say why. Complements the exclusive create: only
-/// proceed with a directory nobody else made, owns, or can reach into.
-#[cfg(unix)]
-fn private_and_ours(dir: &Path) -> Result<(), String> {
-    use std::os::unix::fs::{MetadataExt, PermissionsExt};
-    let md = std::fs::symlink_metadata(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    // SAFETY: geteuid takes no arguments, has no preconditions and cannot fail.
-    let euid = unsafe { libc::geteuid() };
-    let mode = md.permissions().mode();
-    if md.uid() != euid || mode & 0o077 != 0 {
-        let _ = std::fs::remove_dir_all(dir);
-        return Err(format!(
-            "{} is owned by uid {} with mode {:o}; need uid {euid} (us) and mode 0700",
-            dir.display(),
-            md.uid(),
-            mode & 0o777
-        ));
-    }
-    Ok(())
-}
-
-/// A base directory our private subdirectory cannot be renamed out of or
-/// replaced in: every directory on the way to it — the base, each ancestor,
-/// and each directory a symlink passes through — must be owned by root or us
-/// and not writable by others unless sticky like /tmp: in a sticky directory
-/// only the entry's owner, the directory's owner or root can rename or unlink
-/// entries, so nobody can swap our subdirectory. Symlink components (macOS
-/// `/tmp` → `/private/tmp`, `/var` → `/private/var`) are followed one
-/// component at a time: a link must itself be root-or-ours and sit in a safe
-/// directory, so nobody can swap the link to redirect the path. A base inside
-/// a directory someone else can rename in (e.g. `TMPDIR=/srv/team/tmp` with a
-/// team-writable `/srv/team`) is rejected: it can be swapped wholesale during
-/// the polkit prompt — and a listable 0755 base makes the random directory
-/// name observable, so the replacement can even carry the same name.
-#[cfg(unix)]
-fn base_is_safe(p: &Path) -> bool {
-    use std::os::unix::fs::{MetadataExt, PermissionsExt};
-    // SAFETY: geteuid takes no arguments, has no preconditions and cannot fail.
-    let euid = unsafe { libc::geteuid() };
-    let ours = |md: &std::fs::Metadata| md.uid() == 0 || md.uid() == euid;
-    let dir_ok = |md: &std::fs::Metadata| {
-        let mode = md.permissions().mode();
-        md.is_dir() && ours(md) && (mode & 0o022 == 0 || mode & 0o1000 != 0)
-    };
-    if !p.is_absolute() || !std::fs::symlink_metadata("/").is_ok_and(|md| dir_ok(&md)) {
-        return false; // a relative TMPDIR is not a path we can validate; `/` gates `/tmp` itself
-    }
-    // Walk `p` one component at a time from the root; hitting a symlink
-    // continues the walk at its target (with the rest of the path appended),
-    // so a link chained through an unsafe directory still meets every check.
-    let mut queue = vec![p.to_path_buf()];
-    let mut links = 64u32; // symlink budget: a cycle must not hang the check
-    while let Some(path) = queue.pop() {
-        let comps: Vec<_> = path.components().collect();
-        let mut cur = PathBuf::from("/");
-        for i in 0..comps.len() {
-            let c = match &comps[i] {
-                std::path::Component::RootDir => continue,
-                // `.`/`..`/prefix components have no place in a temp base.
-                std::path::Component::Normal(c) => c,
-                _ => return false,
-            };
-            let next = cur.join(c); // the entry lives in `cur`, already validated
-            let Ok(md) = std::fs::symlink_metadata(&next) else { return false };
-            if md.is_symlink() {
-                if links == 0 || !ours(&md) {
-                    return false;
-                }
-                links -= 1;
-                let Ok(t) = std::fs::read_link(&next) else { return false };
-                let t = if t.is_absolute() { t } else { cur.join(t) };
-                let rest: PathBuf = comps[i + 1..].iter().map(|c| c.as_os_str()).collect();
-                queue.push(t.join(rest));
-                break;
-            }
-            if !dir_ok(&md) {
-                return false;
-            }
-            cur = next;
-        }
-    }
-    true
-}
-
-/// An unpredictable hex token for the download directory name: OS entropy
-/// (`/dev/urandom` where present) mixed with the time, the pid, an address
-/// (ASLR) and `RandomState`'s OS-seeded keys.
-fn random_token() -> String {
-    use std::hash::{BuildHasher, Hasher};
-    let mut h = std::collections::hash_map::RandomState::new().build_hasher();
-    if let Ok(mut f) = std::fs::File::open("/dev/urandom") {
-        use std::io::Read;
-        let mut buf = [0u8; 16];
-        if f.read_exact(&mut buf).is_ok() {
-            h.write(&buf);
-        }
-    }
-    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
-    h.write(&t.to_ne_bytes());
-    h.write(&std::process::id().to_ne_bytes());
-    let probe = 0u8;
-    h.write(&(std::ptr::addr_of!(probe) as usize).to_ne_bytes());
-    format!("{:016x}", h.finish())
+    // Directories kept by earlier updates (msiexec and `open` still needed them).
+    cpuzeez_platform::tempdir::sweep(&format!("{}-update-", crate::NAME), std::time::Duration::from_secs(7 * 86_400));
+    cpuzeez_platform::tempdir::create(&format!("{}-update-{version}", crate::NAME))
 }
 
 /// Hand the verified package to the OS.
@@ -753,6 +593,7 @@ mod tests {
         {"tag_name":"v1.1.0-alpha.1","draft":false,"prerelease":true,"html_url":"u-a1","assets":[]},
         {"tag_name":"v1.0.0-beta.8","draft":false,"prerelease":true,"html_url":"u-b8","assets":[]},
         {"tag_name":"v1.0.0-rc.1","draft":false,"prerelease":true,"html_url":"u-rc1","assets":[]},
+        {"tag_name":"v1.0.0-snapshot.1","draft":false,"prerelease":true,"html_url":"u-s1","assets":[]},
         {"tag_name":"v0.9.0","draft":false,"prerelease":false,"html_url":"u-090","assets":[]},
         {"tag_name":"v9.9.9","draft":true,"prerelease":false,"html_url":"u-draft","assets":[]}
         ]"#
@@ -765,6 +606,13 @@ mod tests {
         assert_eq!(Channel::of("1.0.0-beta.7"), Channel::Beta);
         assert_eq!(Channel::of("1.0.0-rc.1"), Channel::Beta);
         assert_eq!(Channel::of("1.1.0-alpha.2"), Channel::Alpha);
+        assert_eq!(Channel::of("1.0.0-snapshot.1"), Channel::Snapshot);
+        assert!(Channel::Snapshot.sees("1.0.0") && Channel::Snapshot.sees("1.0.0-snapshot.1"));
+        assert!(!Channel::Snapshot.sees("1.0.0-beta.10") && !Channel::Stable.sees("1.0.0-snapshot.1"));
+        assert!(Channel::Beta.sees("1.0.0-snapshot.1"), "beta testers get the snapshots too");
+        assert!(newer("1.0.0-beta.10", "1.0.0-snapshot.1"), "a snapshot is newer than every beta of its version");
+        assert!(newer("1.0.0-snapshot.9", "1.0.0"), "the release beats its snapshots");
+        assert_eq!(Channel::from_arg("snapshot"), Some(Channel::Snapshot));
         assert!(
             Channel::Beta.sees("1.0.0") && Channel::Beta.sees("1.0.0-rc.1") && !Channel::Beta.sees("1.1.0-alpha.1")
         );
@@ -779,7 +627,8 @@ mod tests {
     fn each_channel_gets_its_newest() {
         let v = |c| newest(listing(), c).map(|r| r.version);
         assert_eq!(v(Channel::Stable).as_deref(), Some("0.9.0"));
-        assert_eq!(v(Channel::Beta).as_deref(), Some("1.0.0-rc.1"));
+        assert_eq!(v(Channel::Snapshot).as_deref(), Some("1.0.0-snapshot.1"));
+        assert_eq!(v(Channel::Beta).as_deref(), Some("1.0.0-snapshot.1"), "beta sees the newer snapshot");
         assert_eq!(v(Channel::Alpha).as_deref(), Some("1.1.0-alpha.1"));
         assert!(newest("[]", Channel::Alpha).is_none());
         assert!(newest("not json", Channel::Alpha).is_none());
@@ -787,7 +636,7 @@ mod tests {
         let mut l: Vec<serde_json::Value> = serde_json::from_str(listing()).unwrap();
         l.reverse();
         let rev = serde_json::to_string(&l).unwrap();
-        assert_eq!(newest(&rev, Channel::Beta).unwrap().version, "1.0.0-rc.1");
+        assert_eq!(newest(&rev, Channel::Beta).unwrap().version, "1.0.0-snapshot.1");
     }
 
     /// A beta build follows betas, a release follows releases, unless chosen.
@@ -882,114 +731,6 @@ mod tests {
             "version must be sanitized into one path component: {name:?}"
         );
         assert!(!name.contains(['/', '\\']));
-    }
-
-    /// Exclusive creation: a squatted name is refused, never written into.
-    #[test]
-    fn refuses_a_pre_existing_directory() {
-        let squat = std::env::temp_dir().join(format!("cpuzeez-test-squat-{}", random_token()));
-        std::fs::create_dir(&squat).unwrap();
-        let r = create_exclusive_private(&squat);
-        let _ = std::fs::remove_dir(&squat);
-        assert!(r.is_err(), "a pre-existing name must be rejected, never reused");
-    }
-
-    /// The post-create check rejects anything not 0700-and-ours, and cleans up.
-    #[cfg(unix)]
-    #[test]
-    fn private_dir_check_rejects_shared_permissions() {
-        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
-        let d = std::env::temp_dir().join(format!("cpuzeez-test-shared-{}", random_token()));
-        std::fs::DirBuilder::new().mode(0o777).create(&d).unwrap();
-        std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o777)).unwrap();
-        let r = private_and_ours(&d);
-        let gone = !d.exists();
-        assert!(r.is_err(), "a 0777 directory must never be accepted");
-        assert!(gone, "a rejected directory must be removed");
-    }
-
-    /// Base validation: writable by others only with the sticky bit, and the
-    /// default temp dir must pass on every platform we test.
-    #[cfg(unix)]
-    #[test]
-    fn base_validation_requires_sticky_when_shared() {
-        use std::os::unix::fs::PermissionsExt;
-        let mk = |mode: u32| {
-            let d = std::env::temp_dir().join(format!("cpuzeez-test-base-{mode:o}-{}", random_token()));
-            std::fs::create_dir(&d).unwrap();
-            std::fs::set_permissions(&d, std::fs::Permissions::from_mode(mode)).unwrap();
-            d
-        };
-        let shared = mk(0o777); // world-writable, not sticky: others can rename our dir
-        let sticky = mk(0o1777); // world-writable but sticky (like /tmp)
-        let closed = mk(0o700); // not writable by others at all
-        let results =
-            (base_is_safe(&shared), base_is_safe(&sticky), base_is_safe(&closed), base_is_safe(&std::env::temp_dir()));
-        for d in [shared, sticky, closed] {
-            let _ = std::fs::remove_dir(&d);
-        }
-        let (bad, sticky_ok, closed_ok, default_ok) = results;
-        assert!(!bad, "0777 without sticky lets others replace our directory");
-        assert!(sticky_ok, "a sticky base like /tmp must be accepted");
-        assert!(closed_ok, "a private base must be accepted");
-        assert!(default_ok, "the default temp dir must validate on this platform");
-    }
-
-    /// A safe base inside a swappable directory must be rejected: renaming a
-    /// non-sticky writable ancestor during the polkit prompt swaps the whole
-    /// path, and a listable 0755 base even exposes the random name to replay.
-    #[cfg(unix)]
-    #[test]
-    fn base_validation_rejects_swappable_ancestors() {
-        use std::os::unix::fs::PermissionsExt;
-        let parent = std::env::temp_dir().join(format!("cpuzeez-test-swap-{}", random_token()));
-        std::fs::create_dir(&parent).unwrap();
-        std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o777)).unwrap(); // others may rename entries in it
-        let inside = parent.join("tmp");
-        std::fs::create_dir(&inside).unwrap();
-        std::fs::set_permissions(&inside, std::fs::Permissions::from_mode(0o700)).unwrap();
-        let (inside_ok, default_ok) = (base_is_safe(&inside), base_is_safe(&std::env::temp_dir()));
-        std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o700)).unwrap();
-        let _ = std::fs::remove_dir_all(&parent);
-        assert!(!inside_ok, "a base inside a directory others can rename in must be rejected");
-        assert!(default_ok, "the default temp dir must still validate");
-    }
-
-    /// macOS reaches the default temp dir through symlinks (`/var` →
-    /// `/private/var`, and `/tmp` → `/private/tmp` for the fallback base): a
-    /// safe base reached through such links must be accepted — and the links
-    /// themselves validated (they can only be swapped through a safe parent).
-    #[cfg(unix)]
-    #[test]
-    fn base_validation_follows_symlinks_in_the_path() {
-        use std::os::unix::fs::PermissionsExt;
-        let root = std::env::temp_dir().join(format!("cpuzeez-test-link-{}", random_token()));
-        std::fs::create_dir(&root).unwrap();
-        let target = root.join("target");
-        std::fs::create_dir(&target).unwrap();
-        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o700)).unwrap();
-        std::os::unix::fs::symlink("target", root.join("link")).unwrap();
-        let ok = base_is_safe(&root.join("link"));
-        let _ = std::fs::remove_dir_all(&root);
-        assert!(ok, "a symlink to a safe base, in a safe directory, must be accepted");
-    }
-
-    /// A symlink in a directory others can rename in must be rejected even
-    /// though it points at a safe target: swapping the link during the polkit
-    /// prompt redirects the whole path.
-    #[cfg(unix)]
-    #[test]
-    fn base_validation_rejects_swappable_symlinks() {
-        use std::os::unix::fs::PermissionsExt;
-        let root = std::env::temp_dir().join(format!("cpuzeez-test-swaplink-{}", random_token()));
-        std::fs::create_dir(&root).unwrap();
-        std::fs::create_dir(root.join("target")).unwrap();
-        std::os::unix::fs::symlink("target", root.join("link")).unwrap();
-        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o777)).unwrap(); // others may rename `link`
-        let ok = base_is_safe(&root.join("link"));
-        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
-        let _ = std::fs::remove_dir_all(&root);
-        assert!(!ok, "a symlink others can replace must not be trusted");
     }
 
     #[test]

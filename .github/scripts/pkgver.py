@@ -15,13 +15,14 @@ Usage:
 import re
 import sys
 
-PRE_BASE = {"beta": 0, "rc": 50}
+# beta.N -> N, rc.N -> 50+N, snapshot.N -> 100+N (alpha < beta < rc < snapshot < release)
+PRE_BASE = {"beta": 0, "rc": 50, "snapshot": 100}
 
 
 def versions(ver):
-    m = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:-(beta|rc)\.(\d+))?", ver)
+    m = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:-(beta|rc|snapshot)\.(\d+))?", ver)
     if not m:
-        raise ValueError(f"unsupported version {ver!r}: use X.Y.Z, X.Y.Z-beta.N or X.Y.Z-rc.N")
+        raise ValueError(f"unsupported version {ver!r}: use X.Y.Z, X.Y.Z-beta.N, X.Y.Z-rc.N or X.Y.Z-snapshot.N")
     major, minor, patch, kind, n = m.groups()
     if not kind:
         return {"VER": ver, "MSI_VER": ver, "MAC_VER": ver, "DEB_VER": ver, "ARCH_VER": ver, "PRERELEASE": "false"}
@@ -45,11 +46,15 @@ def _test():
     def key(v):  # numeric version tuple, as MSI/macOS compare them
         return tuple(int(p) for p in v.split("."))
 
-    order = ["0.3.0", "1.0.0-beta.1", "1.0.0-beta.2", "1.0.0-beta.9", "1.0.0-rc.1", "1.0.0-rc.2", "1.0.0", "1.0.1"]
+    order = ["0.3.0", "1.0.0-beta.1", "1.0.0-beta.2", "1.0.0-beta.9", "1.0.0-beta.10", "1.0.0-rc.1", "1.0.0-rc.2",
+             "1.0.0-snapshot.1", "1.0.0-snapshot.2", "1.0.0", "1.0.1"]
     msi = [key(versions(v)["MSI_VER"]) for v in order]
     assert msi == sorted(msi) and len(set(msi)) == len(msi), msi
     assert versions("1.0.0-beta.2")["DEB_VER"] == "1.0.0~beta.2"
     assert versions("1.0.0-rc.1")["ARCH_VER"] == "1.0.0rc1"
+    assert versions("1.0.0-snapshot.1")["DEB_VER"] == "1.0.0~snapshot.1"
+    assert versions("1.0.0-snapshot.1")["ARCH_VER"] == "1.0.0snapshot1"
+    assert versions("1.0.0-snapshot.1")["PRERELEASE"] == "true"
     assert versions("1.0.0")["PRERELEASE"] == "false" and versions("1.0.0-rc.3")["PRERELEASE"] == "true"
     for bad in ["1.0", "1.0.0-alpha.1", "1.1.0-beta.1", "0.4.0-beta.1", "1.0.0-beta.50", "v1.0.0"]:
         try:

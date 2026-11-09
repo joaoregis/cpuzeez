@@ -252,13 +252,13 @@ jobs:
       - run: cargo build --release
       - name: Version mapping self-test
         run: python .github/scripts/pkgver.py --test
-      - name: Build MSIs for the chain beta.1 -> rc.1 -> 1.0.0 -> 1.0.1 (same binary)
+      - name: Build MSIs for the chain beta.1 -> rc.1 -> snapshot.1 -> 1.0.0 -> 1.0.1 (same binary)
         shell: bash
         run: |
           bash .github/scripts/fetch_pawnio.sh pawnio
           dotnet tool install --global wix --version 5.0.2
           wix extension add -g WixToolset.UI.wixext/5.0.2
-          for v in 1.0.0-beta.1 1.0.0-rc.1 1.0.0 1.0.1; do
+          for v in 1.0.0-beta.1 1.0.0-rc.1 1.0.0-snapshot.1 1.0.0 1.0.1; do
             msi=$(python .github/scripts/pkgver.py "$v" | sed -n 's/^MSI_VER=//p')
             wix build packaging/windows/cpuzeez.wxs -wx -ext WixToolset.UI.wixext -arch x64 -d Version=$msi -d Bin=target/release/cpuzeez.exe -d IconFile=assets/cpuzeez.ico -d PawnIo="$(pwd -W)/pawnio" -o cz-$v.msi
           done
@@ -268,7 +268,7 @@ jobs:
           function Installed { Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object { $_.DisplayName -in 'CpuZeeZ', 'CPU ZeeZ' } }
           function PawnIo { Test-Path HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO }
           if (PawnIo) { throw 'the runner already has PawnIO: the feature test would prove nothing' }
-          foreach ($v in '1.0.0-beta.1', '1.0.0-rc.1', '1.0.0', '1.0.1') {
+          foreach ($v in '1.0.0-beta.1', '1.0.0-rc.1', '1.0.0-snapshot.1', '1.0.0', '1.0.1') {
             # Hardware access is ticked by default, so a plain install brings PawnIO.
             $p = Start-Process msiexec -ArgumentList "/i cz-$v.msi /qn /l*v i-$v.log" -Wait -PassThru; if ($p.ExitCode) { throw "install ${v}: $($p.ExitCode)" }
             if ($v -eq '1.0.0-beta.1' -and -not (PawnIo)) { throw 'Hardware access is the default but PawnIO is not installed' }

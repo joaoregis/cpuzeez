@@ -7,6 +7,20 @@ generated from its section below.
 
 ## [Unreleased]
 
+### Changed
+
+- **A release ladder with snapshots.** From steadiest to earliest: **release** (production), **snapshot** (a preview with every new feature), **beta** (pieces of the new features while they are built), **alpha** (early, unstable code). Tags `vX.0.0-snapshot.N` build like the others (MSI `X-1.99.(100+N)`, above every beta and release candidate; `.deb` `X.0.0~snapshot.N`; Arch `X.0.0snapshotN`), and *Settings ▸ Updates* has a **Snapshot** channel. The Beta channel also offers snapshots, so beta testers move up to them.
+
+### Security
+
+Three local privilege problems and one information leak, reported and fixed by Vinicius de Avila Moreira ([@vinicius741](https://github.com/vinicius741)) in joaoregis/cpuzeez#4 and #5, reviewed and integrated with the follow-ups below. All need someone already running code on the machine.
+
+- **Updater (Linux, High).** The installer was downloaded to a predictable folder in the shared `/tmp`. Another local user could create it first and swap the verified package while the password prompt was open, so `apt`/`pacman` installed theirs as root. The download now goes to a fresh private folder (unpredictable name, created exclusively, `0700`, owner and every parent folder checked).
+- **"Restart as root" (Linux, High).** The root copy wrote its start-up marker to a predictable `/tmp` path and followed a symlink planted there, so another user could make root overwrite a file of their choice. The marker now lives in a private folder, root refuses to follow links or write outside it, and checks the folder belongs to the user who asked.
+- **PresentMon (Windows, High in a writable install folder).** It was checked once and then run several times by path, and the teardown run was not checked at all; a program able to write the folder could swap it in between and run as administrator. The checked file is now held open so it cannot be changed, and every run uses that file.
+- **`-screenshots` (Medium).** The full unmasked report (serials, MAC and IP addresses) was written to a fixed, world-readable file in `/tmp`. It is now masked and written to the run's own output folder.
+- Follow-ups from the review: the private-folder code of both fixes is one shared module (`cpuzeez_platform::tempdir`), its mode is pinned to `0700` whatever the umask, and folders left behind by earlier updates are swept. "Restart as administrator/root" no longer forwards any of the original command-line arguments to the elevated copy.
+
 ## [1.0.0-beta.10] - 2026-11-08
 
 ### Fixed

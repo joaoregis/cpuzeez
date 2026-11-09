@@ -240,76 +240,13 @@ pub fn signal_handoff(marker: &str) {
     }
 }
 
-/// A fresh private directory for the handoff marker: unpredictable name,
-/// exclusive `create` (fails if taken, so a pre-planted symlink or squatted
-/// name can never be used), mode 0700, verified ours, under a base directory
-/// owned by root or us where nobody else can replace entries (sticky, like
-/// /tmp). Same recipe as the updater's `private_download_dir`: the root copy
-/// will write into whatever this returns.
+/// A fresh private directory for the handoff marker (see
+/// [`crate::tempdir::create`]): the root copy will write into whatever this
+/// returns, so it must be a directory no other local user can reach.
 #[cfg(target_os = "linux")]
 fn handoff_marker() -> Option<PathBuf> {
-    use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
-    // SAFETY: geteuid takes no arguments, has no preconditions and cannot fail.
-    let euid = unsafe { libc::geteuid() };
-    let mode_of = |md: &std::fs::Metadata| md.permissions().mode();
-    let entry_ok = |md: &std::fs::Metadata| {
-        // Not a symlink, root- or self-owned, and writable by others only
-        // with the sticky bit (in a sticky dir only the entry's owner, the
-        // dir's owner or root can rename/unlink, so ours can't be swapped).
-        md.is_dir() && (md.uid() == 0 || md.uid() == euid) && (mode_of(md) & 0o022 == 0 || mode_of(md) & 0o1000 != 0)
-    };
-    let base_safe = |p: &std::path::Path| {
-        std::fs::symlink_metadata(p).is_ok_and(|md| entry_ok(&md))
-            // The base itself passing is not enough: a base inside a directory
-            // someone else can rename in (e.g. TMPDIR=/srv/team/tmp with a
-            // team-writable /srv/team) can be swapped wholesale during the
-            // polkit prompt, and a listable 0755 base makes the random
-            // directory name observable. Every ancestor must be un-swap too.
-            && p.ancestors().skip(1).all(|a| std::fs::symlink_metadata(a).is_ok_and(|md| entry_ok(&md)))
-    };
-    let mut bases = vec![std::env::temp_dir(), PathBuf::from("/tmp")];
-    bases.retain(|b| base_safe(b));
-    for base in &bases {
-        for _ in 0..8 {
-            let dir = base.join(format!("cpuzeez-handoff-{}", random_token()));
-            if std::fs::DirBuilder::new().mode(0o700).create(&dir).is_ok() {
-                // Pin the mode explicitly: with a restrictive umask (e.g.
-                // 0o277) the create above yields 0500, which this side's
-                // check would accept but the root side (exactly 0700) would
-                // refuse — set it so both sides always agree.
-                let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
-                let ours =
-                    std::fs::symlink_metadata(&dir).is_ok_and(|md| md.uid() == euid && mode_of(&md) & 0o077 == 0);
-                if ours {
-                    return Some(dir.join("up"));
-                }
-                let _ = std::fs::remove_dir_all(&dir);
-            }
-        }
-    }
-    None
-}
-
-/// Unpredictable hex token: OS entropy (`/dev/urandom`) mixed with the time,
-/// the pid, an address (ASLR) and `RandomState`'s OS-seeded keys — the same
-/// recipe as the updater's `random_token`.
-#[cfg(target_os = "linux")]
-fn random_token() -> String {
-    use std::hash::{BuildHasher, Hasher};
-    let mut h = std::collections::hash_map::RandomState::new().build_hasher();
-    if let Ok(mut f) = std::fs::File::open("/dev/urandom") {
-        use std::io::Read;
-        let mut buf = [0u8; 16];
-        if f.read_exact(&mut buf).is_ok() {
-            h.write(&buf);
-        }
-    }
-    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
-    h.write(&t.to_ne_bytes());
-    h.write(&std::process::id().to_ne_bytes());
-    let probe = 0u8;
-    h.write(&(std::ptr::addr_of!(probe) as usize).to_ne_bytes());
-    format!("{:016x}", h.finish())
+    crate::tempdir::sweep("cpuzeez-handoff-", std::time::Duration::from_secs(86_400));
+    crate::tempdir::create("cpuzeez-handoff").ok().map(|d| d.join("up"))
 }
 
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]

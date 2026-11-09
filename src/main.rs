@@ -131,7 +131,7 @@ enum Out {
 }
 
 const USAGE: &str = "usage: cpuzeez [-txt=FILE] [-html=FILE] [-json=FILE] [-jsontxt=FILE] [-console] \
-[-bench] [-membench] [-core=ID] [-coremask=HEX] [-sensors] [-log=FILE[,SECONDS]] [-diff=OLD.json,NEW.json|now] [-checkupdate[=stable|beta|alpha]] [-screenshots=DIR]\nWith no output option the GUI opens.";
+[-bench] [-membench] [-core=ID] [-coremask=HEX] [-sensors] [-log=FILE[,SECONDS]] [-diff=OLD.json,NEW.json|now] [-checkupdate[=stable|snapshot|beta|alpha]] [-screenshots=DIR]\nWith no output option the GUI opens.";
 
 fn main() {
     applog::install_panic_hook();
