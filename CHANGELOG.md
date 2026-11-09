@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to CpuZeeZ are documented here. The format follows
+All notable changes to CPU ZeeZ are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/). Each release's notes on GitHub are
 generated from its section below.
@@ -390,7 +390,11 @@ features.
 - GUI with CPU-Z's tabs.
 - Installers for Windows (MSI), macOS (DMG/PKG), Debian/Ubuntu (DEB) and Arch.
 
-[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.7...HEAD
+[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-snapshot.1...HEAD
+[1.0.0-snapshot.1]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.10...v1.0.0-snapshot.1
+[1.0.0-beta.10]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.9...v1.0.0-beta.10
+[1.0.0-beta.9]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.8...v1.0.0-beta.9
+[1.0.0-beta.8]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.7...v1.0.0-beta.8
 [1.0.0-beta.7]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.6...v1.0.0-beta.7
 [1.0.0-beta.6]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.5...v1.0.0-beta.6
 [1.0.0-beta.5]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.4...v1.0.0-beta.5
