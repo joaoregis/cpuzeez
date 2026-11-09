@@ -133,12 +133,36 @@ enum Out {
 const USAGE: &str = "usage: cpuzeez [-txt=FILE] [-html=FILE] [-json=FILE] [-jsontxt=FILE] [-console] \
 [-bench] [-membench] [-core=ID] [-coremask=HEX] [-sensors] [-log=FILE[,SECONDS]] [-diff=OLD.json,NEW.json|now] [-checkupdate[=stable|snapshot|beta|alpha]] [-screenshots=DIR]\nWith no output option the GUI opens.";
 
+/// One copy per user session and data folder (Windows): a second launch
+/// brings the first to the front instead (from the tray too). `None`: not
+/// claimed (screenshots); `Some(None)`: another copy answered, quit;
+/// `Some(Some(_))`: this copy runs.
+#[cfg(feature = "gui")]
+fn claim_instance() -> Option<Option<cpuzeez_platform::instance::Instance>> {
+    use cpuzeez_platform::instance::{Claim, claim, show_running};
+    // Per data folder, so a test profile (the soak's) never meets the user's copy.
+    let dir = settings::dir().map(|d| d.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let key = format!(
+        "{:016x}",
+        dir.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x100_0000_01b3))
+    );
+    match claim(&key) {
+        Claim::First(i) => Some(Some(i)),
+        Claim::Running if show_running(&key, std::time::Duration::from_secs(3)) => Some(None),
+        Claim::Running => {
+            applog::warn("another copy holds the instance but did not answer; starting anyway");
+            None
+        }
+    }
+}
+
 fn main() {
     applog::install_panic_hook();
     let mut outs = Vec::new();
     let (mut console, mut bench, mut core, mut coremask) = (false, false, None, None);
     let mut shots: Option<std::path::PathBuf> = None;
     let mut handoff = None;
+    let (mut apply_msi, mut wait_pid, mut relaunch, mut replaces) = (None, None, None, None);
     for a in std::env::args().skip(1) {
         let (k, v) = a.split_once('=').map_or((a.as_str(), ""), |(k, v)| (k, v));
         match k.to_ascii_lowercase().trim_start_matches('-') {
@@ -163,9 +187,23 @@ fn main() {
             "screenshots" => shots = Some(if v.is_empty() { "screenshots" } else { v }.into()),
             // Set by "Restart as administrator" on Linux; see platform::elevation.
             "elevated-handoff" => handoff = Some(v.to_string()),
+            // The update helper (update::apply), started by the app from its download folder.
+            "apply-update" => apply_msi = Some(std::path::PathBuf::from(v)),
+            "wait-pid" => wait_pid = v.parse::<u32>().ok(),
+            "relaunch" => relaunch = Some(std::path::PathBuf::from(v)),
+            // Set by the update helper after a failed install: the app says why.
+            "update-failed" => {
+                let _ = update::FAILED.set(v.parse().unwrap_or(-1));
+            }
+            // Set by "Restart as administrator": wait for the copy being replaced.
+            "replaces" => replaces = v.parse::<u32>().ok(),
             "h" | "help" | "?" => return println!("{USAGE}"),
             _ => return eprintln!("unknown option {a}\n{USAGE}"),
         }
+    }
+
+    if let Some(msi) = apply_msi {
+        std::process::exit(update::apply(&msi, wait_pid, relaunch.as_deref()));
     }
 
     let ctx = Ctx::new(config::Config::load());
@@ -189,7 +227,14 @@ fn main() {
             if let Some(m) = &handoff {
                 cpuzeez_platform::elevation::signal_handoff(m);
             }
-            return gui::run(ctx, shots);
+            if let Some(pid) = replaces {
+                cpuzeez_platform::instance::wait_exit(pid, std::time::Duration::from_secs(15));
+            }
+            let instance = if shots.is_some() { None } else { claim_instance() };
+            if matches!(instance, Some(None)) {
+                return; // the running copy came to the front
+            }
+            return gui::run(ctx, shots, instance.flatten());
         }
         #[cfg(not(feature = "gui"))]
         {

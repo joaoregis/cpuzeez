@@ -5,6 +5,26 @@ use crate::gui::*;
 
 impl App {
     pub(crate) fn update_banner(&mut self, ui: &mut egui::Ui) {
+        if self.installer.as_ref().is_some_and(|i| matches!(i.stage(), Stage::Quit)) {
+            // The update helper waits for us: quit for real (not to the tray),
+            // through on_exit, which stops PresentMon and the ETW session; a
+            // bare process exit left them running and the installer blocked.
+            self.installer = None;
+            self.mon.quit(ui.ctx());
+            return;
+        }
+        if let Some(&code) = crate::update::FAILED.get()
+            && !self.update_failed_seen
+        {
+            egui::Panel::top("update-failed").show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    widgets::pill(ui, &failed_text(code), widgets::Tone::Danger);
+                    if ui.small_button(icon::X).on_hover_text(tr("Dismiss")).clicked() {
+                        self.update_failed_seen = true;
+                    }
+                });
+            });
+        }
         if self.update_dismissed {
             return;
         }
@@ -17,10 +37,6 @@ impl App {
 pub(crate) fn update_bar(ui: &mut egui::Ui, rel: &Release, installer: &mut Option<Installer>, dismissed: &mut bool) {
     let p = theme::palette(ui);
     let stage = installer.as_ref().map(Installer::stage);
-    if matches!(stage, Some(Stage::Quit)) {
-        // msiexec is running: leave so it can replace our files.
-        std::process::exit(0);
-    }
     if matches!(stage, Some(Stage::Downloading { .. } | Stage::Verifying | Stage::Installing)) {
         ui.ctx().request_repaint_after(Duration::from_millis(150));
     }
@@ -76,7 +92,10 @@ pub(crate) fn update_bar(ui: &mut egui::Ui, rel: &Release, installer: &mut Optio
                     ui.ctx().open_url(egui::OpenUrl::new_tab(&a.url));
                 }
             }
-            Some(Stage::Quit) => {}
+            Some(Stage::Quit) => {
+                ui.spinner();
+                ui.label(tr("Closing to install…"));
+            }
         }
         if ui.button(tr("What's new")).clicked() {
             ui.ctx().open_url(egui::OpenUrl::new_tab(&rel.page));
@@ -86,4 +105,19 @@ pub(crate) fn update_bar(ui: &mut egui::Ui, rel: &Release, installer: &mut Optio
             *dismissed = true;
         }
     });
+}
+
+/// Why the update helper reopened the old version (msiexec's exit code).
+fn failed_text(code: i32) -> String {
+    match code {
+        1602 | 1223 => trf("The update was cancelled; CPU ZeeZ {} is still installed.", &[&crate::VERSION]),
+        1618 => trf(
+            "Another installation was running, so the update did not start; CPU ZeeZ {} is still installed.",
+            &[&crate::VERSION],
+        ),
+        _ => trf(
+            "The update did not finish (installer code {}); CPU ZeeZ {} is still installed.",
+            &[&code, &crate::VERSION],
+        ),
+    }
 }

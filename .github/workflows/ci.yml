@@ -295,6 +295,38 @@ jobs:
           $p = Start-Process msiexec -ArgumentList "/x $($e[0].PSChildName) /qn REBOOT=ReallySuppress" -Wait -PassThru; if ($p.ExitCode -notin 0, 3010) { throw "uninstall: $($p.ExitCode)" }
           if (Installed) { throw 'uninstall left an entry' } else { 'uninstalled cleanly' }
           if (-not (PawnIo)) { throw 'uninstalling CpuZeeZ removed the shared PawnIO driver' }
+      - name: One running copy; the update helper installs and reopens the app
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          $exe = 'C:\Program Files\CpuZeeZ\cpuzeez.exe'
+          function Copies { @(Get-Process cpuzeez -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe }) }
+          $p = Start-Process msiexec -ArgumentList '/i cz-1.0.0.msi /qn REBOOT=ReallySuppress' -Wait -PassThru; if ($p.ExitCode -notin 0, 3010) { throw "install: $($p.ExitCode)" }
+          $app = Start-Process $exe -PassThru
+          Start-Sleep 10
+          # A second launch brings the first to the front and quits.
+          $second = Start-Process $exe -PassThru
+          if (-not $second.WaitForExit(20000)) { throw 'a second launch kept running next to the first' }
+          if ((Copies).Count -ne 1) { throw "expected one copy, found $((Copies).Count)" }
+          # The helper, as the app starts it: a copy of the program in the download folder.
+          $dir = New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\cz-update"
+          Copy-Item $exe "$dir\cpuzeez-update-helper.exe"
+          $msi = (Resolve-Path cz-1.0.1.msi).Path
+          $started = Get-Date
+          $h = Start-Process "$dir\cpuzeez-update-helper.exe" -PassThru -ArgumentList "--apply-update=$msi", "--wait-pid=$($app.Id)", "--relaunch=$exe"
+          Start-Sleep 3
+          if ($h.HasExited) { throw "the helper did not wait for the app (exit $($h.ExitCode))" }
+          Stop-Process -Id $app.Id   # in the app, the update bar quits it through on_exit
+          if (-not $h.WaitForExit(600000)) { throw 'the helper did not finish' }
+          if ($h.ExitCode -ne 0) { throw "msiexec exited with $($h.ExitCode)" }
+          $v = (Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object { $_.DisplayName -in 'CpuZeeZ', 'CPU ZeeZ' }).DisplayVersion
+          if ($v -ne '1.0.1') { throw "installed version is $v" }
+          Start-Sleep 10
+          $after = Copies
+          if ($after.Count -ne 1 -or $after[0].StartTime -lt $started) { throw "the app was not reopened once after the install ($($after.Count) copies)" }
+          'reopened: pid ' + $after[0].Id
+          Stop-Process -Id $after[0].Id
+          $p = Start-Process msiexec -ArgumentList '/x cz-1.0.1.msi /qn REBOOT=ReallySuppress' -Wait -PassThru; if ($p.ExitCode -notin 0, 3010) { throw "uninstall: $($p.ExitCode)" }
 
   msi-releases:
     name: MSI upgrade from every published release, optional driver, clean removal
