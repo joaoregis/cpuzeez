@@ -16,6 +16,7 @@ Items rated BAIXO were fixed during the 1.0.0 hardening instead of being listed 
 | 7 | [Screenshots of the new pages on Linux and macOS](#7-screenshots-of-the-new-pages-on-linux-and-macos) | S3-07 | ALTO | 7 |
 | 8 | [`unsafe` only in `platform`](#8-unsafe-only-in-platform) | S0-E06 | MUITO ALTO | 8 |
 | 9 | [Overlay CPU down to the 2 % goal](#9-overlay-cpu-down-to-the-2--goal) | S3-01 (P6) | ALTO | 9 |
+| 10 | [Small fixes found while taking the 1.0.0 screenshots](#10-small-fixes-found-while-taking-the-100-screenshots) | — | BAIXO | 10 |
 
 Also waiting for a free machine, not for work: the long GUI soak and the overlay's CPU and memory against the budget ([performance.md](../performance.md)), and the Windows screenshots of the new pages. Both open a window, so they are scheduled with the owner.
 
@@ -114,6 +115,18 @@ Also waiting for a free machine, not for work: the long GUI soak and the overlay
 **Done when.** `soak.py --gui --overlay-only … 30 --max-cpu 2 --max-mem-mb 150` passes on Windows, with memory still flat.
 
 **Risks.** The interface and the overlay share one event loop; changes there can break repaint (a frozen overlay) or leak, as the 1.0 attempt showed.
+
+---
+
+## 10. Small fixes found while taking the 1.0.0 screenshots
+
+Found on 2026-11-09 with `cpuzeez -screenshots` on Windows 11 and Ubuntu 24.04 (WSLg); none blocks 1.0.0.
+
+- **ZeeZ Live ▸ Live is wider than the window.** At the screenshot size (about 1120 px), the FPS / 1 % low cards in the *Game* card are cut at the right edge. *Done when:* the cards wrap or shrink, and the scale test covers the Live tab.
+- **Wrong frame source text on Linux.** ZeeZ Live (*Bottleneck* tab, and the Live tab's note) says "Frames are read from the graphics kernel's events", which is the Windows path (ETW via PresentMon); on Linux frames come from MangoHud's logs, as the line above it says. *Done when:* the note is per OS (pt-BR and es included).
+- **Three compiler warnings in the Linux release build** (`cargo build --release` on Ubuntu 24.04). The cross-checked `clippy -D warnings` in CI does not show them, so they are probably `cfg`-dependent. *Done when:* the Linux build has no warnings and a CI job builds natively on Linux with `-D warnings`.
+
+Also seen: the screenshot run measures whatever app is in front when no game runs (another copy of CPU ZeeZ, at 2 FPS), so the Live tab is not in the README. A demo frame source for `-screenshots`, like the one the bottleneck shot uses, would fix that.
 
 ---
 

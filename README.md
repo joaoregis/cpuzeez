@@ -95,6 +95,10 @@ Captured with `cpuzeez -screenshots=DIR`, which renders every page and saves a P
 
 ### Windows 11
 
+| System (Task Manager) | What limits my FPS? | Benchmarks |
+|---|---|---|
+| ![System: performance](docs/screenshots/windows/system-performance.png) | ![The bottleneck detector](docs/screenshots/windows/bottleneck.png) | ![Benchmarks](docs/screenshots/windows/bench.png) |
+
 | Overview | Processor | Memory |
 |---|---|---|
 | ![Overview](docs/screenshots/windows/overview.png) | ![Processor](docs/screenshots/windows/processor.png) | ![Memory and SPD](docs/screenshots/windows/memory.png) |
@@ -114,6 +118,8 @@ Ubuntu 24.04 (WSLg, Wayland) on the same machine, with NVIDIA through NVML:
 | Overview | Sensors | Devices |
 |---|---|---|
 | ![Linux Overview](docs/screenshots/linux/overview.png) | ![Linux Sensors](docs/screenshots/linux/sensors.png) | ![Linux Devices](docs/screenshots/linux/devices.png) |
+| **System (Task Manager)** | **What limits my FPS?** | **Processor** |
+| ![Linux System: performance](docs/screenshots/linux/system-performance.png) | ![Linux bottleneck detector](docs/screenshots/linux/bottleneck.png) | ![Linux Processor](docs/screenshots/linux/processor.png) |
 
 ### macOS
 
