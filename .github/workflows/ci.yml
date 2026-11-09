@@ -313,7 +313,7 @@ jobs:
           Copy-Item $exe "$dir\cpuzeez-update-helper.exe"
           $msi = (Resolve-Path cz-1.0.1.msi).Path
           $started = Get-Date
-          $h = Start-Process "$dir\cpuzeez-update-helper.exe" -PassThru -ArgumentList "--apply-update=$msi", "--wait-pid=$($app.Id)", "--relaunch=$exe"
+          $h = Start-Process "$dir\cpuzeez-update-helper.exe" -PassThru -ArgumentList "`"--apply-update=$msi`"", "--wait-pid=$($app.Id)", "`"--relaunch=$exe`""   # quoted: the paths have spaces
           Start-Sleep 3
           if ($h.HasExited) { throw "the helper did not wait for the app (exit $($h.ExitCode))" }
           Stop-Process -Id $app.Id   # in the app, the update bar quits it through on_exit
