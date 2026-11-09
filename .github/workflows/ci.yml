@@ -263,6 +263,7 @@ jobs:
             wix build packaging/windows/cpuzeez.wxs -wx -ext WixToolset.UI.wixext -arch x64 -d Version=$msi -d Bin=target/release/cpuzeez.exe -d IconFile=assets/cpuzeez.ico -d PawnIo="$(pwd -W)/pawnio" -o cz-$v.msi
           done
       - name: Upgrade in place along the chain, refuse downgrade, uninstall cleanly
+        timeout-minutes: 25
         shell: pwsh
         run: |
           function Installed { Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object { $_.DisplayName -in 'CpuZeeZ', 'CPU ZeeZ' } }
@@ -270,7 +271,7 @@ jobs:
           if (PawnIo) { throw 'the runner already has PawnIO: the feature test would prove nothing' }
           foreach ($v in '1.0.0-beta.1', '1.0.0-rc.1', '1.0.0-snapshot.1', '1.0.0', '1.0.1') {
             # Hardware access is ticked by default, so a plain install brings PawnIO.
-            $p = Start-Process msiexec -ArgumentList "/i cz-$v.msi /qn /l*v i-$v.log" -Wait -PassThru; if ($p.ExitCode) { throw "install ${v}: $($p.ExitCode)" }
+            $p = Start-Process msiexec -ArgumentList "/i cz-$v.msi /qn REBOOT=ReallySuppress /l*v i-$v.log" -Wait -PassThru; if ($p.ExitCode -notin 0, 3010) { throw "install ${v}: $($p.ExitCode)" }
             if ($v -eq '1.0.0-beta.1' -and -not (PawnIo)) { throw 'Hardware access is the default but PawnIO is not installed' }
             $e = @(Installed); "$v -> $($e.Count) entry, version $($e.DisplayVersion)"
             if ($e.Count -ne 1) { throw "after $v there are $($e.Count) entries" }
@@ -280,9 +281,9 @@ jobs:
             if (-not (Test-Path "C:\Program Files\CpuZeeZ\$f")) { throw "missing $f" }
           }
           & "C:\Program Files\CpuZeeZ\cpuzeez.exe" -core=0
-          $p = Start-Process msiexec -ArgumentList '/i cz-1.0.0.msi /qn' -Wait -PassThru
+          $p = Start-Process msiexec -ArgumentList '/i cz-1.0.0.msi /qn REBOOT=ReallySuppress' -Wait -PassThru
           if ($p.ExitCode -eq 0) { throw 'downgrade was not blocked' } else { "downgrade blocked ($($p.ExitCode))" }
-          $p = Start-Process msiexec -ArgumentList "/x $($e[0].PSChildName) /qn" -Wait -PassThru; if ($p.ExitCode) { throw "uninstall: $($p.ExitCode)" }
+          $p = Start-Process msiexec -ArgumentList "/x $($e[0].PSChildName) /qn REBOOT=ReallySuppress" -Wait -PassThru; if ($p.ExitCode -notin 0, 3010) { throw "uninstall: $($p.ExitCode)" }
           if (Installed) { throw 'uninstall left an entry' } else { 'uninstalled cleanly' }
           if (-not (PawnIo)) { throw 'uninstalling CpuZeeZ removed the shared PawnIO driver' }
 
@@ -319,11 +320,14 @@ jobs:
           done
           ls published
       - name: Upgrade through every published release to this commit, then remove
+        timeout-minutes: 30
         shell: pwsh
         run: |
           function Installed { Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object { $_.DisplayName -in 'CpuZeeZ', 'CPU ZeeZ' } }
           function PawnIo { Test-Path HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO }
-          function Msi($args_) { $p = Start-Process msiexec -ArgumentList $args_ -Wait -PassThru; $p.ExitCode }
+          # Never let an install reboot the runner (an /qn install may restart Windows when a
+          # file is in use, and the runner drops off). 3010 = done, restart pending: success.
+          function Msi($args_) { $p = Start-Process msiexec -ArgumentList "$args_ REBOOT=ReallySuppress" -Wait -PassThru; if ($p.ExitCode -eq 3010) { 0 } else { $p.ExitCode } }
           $dir = 'C:\Program Files\CpuZeeZ'
           if (PawnIo) { throw 'the runner already has PawnIO: the feature test would prove nothing' }
 
