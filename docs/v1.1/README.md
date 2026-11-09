@@ -19,6 +19,8 @@ Items rated BAIXO were fixed during the 1.0.0 hardening instead of being listed 
 | 10 | [Small fixes found while taking the 1.0.0 screenshots](#10-small-fixes-found-while-taking-the-100-screenshots) | — | BAIXO | 10 |
 | 11 | [Services: a change the service's own permissions refuse](#11-services-a-change-the-services-own-permissions-refuse) | — | BAIXO–MEDIO | 11 |
 | 12 | [Side panels that fit, and can be resized](#12-side-panels-that-fit-and-can-be-resized) | S3-03 | MEDIO | 12 |
+| 13 | [egui 0.37, when the icon font supports it](#13-egui-037-when-the-icon-font-supports-it) | — | MEDIO | 13 |
+| 14 | [Find the tests that hang or fail now and then](#14-find-the-tests-that-hang-or-fail-now-and-then) | S0-T | BAIXO–MEDIO | 14 |
 
 Also waiting for a free machine, not for work: the long GUI soak and the overlay's CPU and memory against the budget ([performance.md](../performance.md)), and the Windows screenshots of the new pages. Both open a window, so they are scheduled with the owner.
 
@@ -180,6 +182,31 @@ The *Processes* tab's *Details panel* does better (`(available × 0.36).clamp(28
 **Done when.** The Services inspector and the Processes details panel show no clipped text at 100–200 % scale in en, pt-BR and es (the scale test covers both, with the longest service values); both can be resized by mouse and keyboard and keep their width across restarts.
 
 **Risks.** Low. Shared layout code, so the Processes panel must be checked too; the remembered width must be clamped when the window gets smaller.
+
+---
+
+## 13. egui 0.37, when the icon font supports it
+
+**Why it waits.** Dependabot proposed `eframe` 0.36 → 0.37 and `egui_kittest` 0.36 → 0.37 as two pull requests (joaoregis/cpuzeez#10, #12). Each fails alone: the three crates share egui's API, which changed in 0.37. They can't move together yet either: `egui-phosphor` 0.14.0 (the icon font) requires `egui ^0.36` and has no release for 0.37. Both pull requests were closed on 2026-11-09, and Dependabot now groups the egui crates into one pull request.
+
+**What finishing takes.** When `egui-phosphor` supports 0.37 (or by vendoring its font and the icon constants we use): bump eframe, egui, egui_kittest and egui-phosphor together, fix the API changes, re-run the visual regression and scale tests, refresh the screenshots.
+
+**Done when.** One pull request moves them all, CI green, screenshots compared.
+
+---
+
+## 14. Find the tests that hang or fail now and then
+
+Seen on 2026-11-09, both once and not reproduced:
+
+- **A hang in CI** (`debian:stable`, joaoregis/cpuzeez#15, a docs-only change): `cargo test --workspace` ran 46 minutes until the job was killed; the job usually takes 6–8 minutes, and a rerun passed. The killed job left no log of which test was running.
+- **One failure in the `platform` crate's tests** during a local gate run (56 passed, 1 failed); 16 runs after it passed. The failing test's name was not kept.
+
+(A third, `gui::cache::tests::refreshes_in_the_background`, waited a fixed 100 ms for a background refresh; fixed for 1.0.1 by waiting on the result with a deadline.)
+
+**What finishing takes.** Make the next occurrence name itself: run the CI tests with `cargo nextest` (per-test `slow-timeout` that reports and kills a test stuck past, say, 120 s, and retries that flag flaky tests), give the test steps a `timeout-minutes` well below the job's, and keep the gate's test log on failure. Then fix what it names: tests that sleep for a fixed time instead of waiting on a condition, and tests that share temp folders or global state (the `tempdir` sweep tests are a suspect).
+
+**Done when.** A week of CI with no unexplained hang or failure, or each one named and fixed.
 
 ---
 
