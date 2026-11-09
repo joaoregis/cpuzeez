@@ -9,6 +9,9 @@ updates:
       interval: weekly
     commit-message:
       prefix: "ci"
+    groups:
+      actions:
+        patterns: ["*"]
   - package-ecosystem: cargo
     directory: "/"
     schedule:
@@ -16,3 +19,9 @@ updates:
     commit-message:
       prefix: "deps"
     open-pull-requests-limit: 5
+    groups:
+      # egui, eframe, egui_kittest and the icon font move together: one of
+      # them alone never builds (a new egui minor changes the API they share).
+      egui:
+        patterns: ["egui", "egui*", "eframe", "epaint*", "emath", "ecolor"]
+

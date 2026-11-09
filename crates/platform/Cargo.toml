@@ -12,7 +12,7 @@ publish = false
 cpuzeez-core = { path = "../core" }
 
 [target."cfg(unix)".dependencies]
-libc = "0.2.190"
+libc = "0.2.191"
 
 # Official Microsoft bindings for new Win32 code (docs/adr/0006); already in
 # the lock file through winit.
