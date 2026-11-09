@@ -17,6 +17,8 @@ Items rated BAIXO were fixed during the 1.0.0 hardening instead of being listed 
 | 8 | [`unsafe` only in `platform`](#8-unsafe-only-in-platform) | S0-E06 | MUITO ALTO | 8 |
 | 9 | [Overlay CPU down to the 2 % goal](#9-overlay-cpu-down-to-the-2--goal) | S3-01 (P6) | ALTO | 9 |
 | 10 | [Small fixes found while taking the 1.0.0 screenshots](#10-small-fixes-found-while-taking-the-100-screenshots) | — | BAIXO | 10 |
+| 11 | [Services: a change the service's own permissions refuse](#11-services-a-change-the-services-own-permissions-refuse) | — | BAIXO–MEDIO | 11 |
+| 12 | [Side panels that fit, and can be resized](#12-side-panels-that-fit-and-can-be-resized) | S3-03 | MEDIO | 12 |
 
 Also waiting for a free machine, not for work: the long GUI soak and the overlay's CPU and memory against the budget ([performance.md](../performance.md)), and the Windows screenshots of the new pages. Both open a window, so they are scheduled with the owner.
 
@@ -127,6 +129,57 @@ Found on 2026-11-09 with `cpuzeez -screenshots` on Windows 11 and Ubuntu 24.04 (
 - **Three compiler warnings in the Linux release build** (`cargo build --release` on Ubuntu 24.04). The cross-checked `clippy -D warnings` in CI does not show them, so they are probably `cfg`-dependent. *Done when:* the Linux build has no warnings and a CI job builds natively on Linux with `-D warnings`.
 
 Also seen: the screenshot run measures whatever app is in front when no game runs (another copy of CPU ZeeZ, at 2 FPS), so the Live tab is not in the README. A demo frame source for `-screenshots`, like the one the bottleneck shot uses, would fix that.
+
+---
+
+## 11. Services: a change the service's own permissions refuse
+
+**Reported** on 2026-11-09 (1.0.0, Windows 11, pt-BR): *System ▸ Services*, `CodexSandboxService.OpenAI.Codex` (display name "ChatGPT"), startup type Automatic → Disabled, *Apply*. Result: `Error: OpenServiceW(CodexSandboxService.OpenAI.Codex) failed (error 5)`.
+
+**Cause: not a CPU ZeeZ bug, the service refuses it.** Error 5 is `ERROR_ACCESS_DENIED`. The service's security descriptor (`sc sdshow CodexSandboxService.OpenAI.Codex`):
+
+```
+D:(A;;CCLCSWRPWPDTLOCRRC;;;AU)
+  (A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;S-1-5-80-1949724575-…)
+```
+
+Authenticated users may query, start and stop it; only the service's own SID has `DC` (`SERVICE_CHANGE_CONFIG`), `WD` and `WO`. There is no entry for Administrators or SYSTEM, so the change is refused even from the elevated copy, and Windows' own *Services* tool fails the same way. The packaged app protects its service on purpose. CPU ZeeZ must not take ownership or rewrite the DACL to get around it.
+
+**What CPU ZeeZ does wrong around it** (seen in the same screenshot):
+
+1. **Undo for a change that never happened.** *Apply* pushes the undo entry ("Undo: CodexSandboxService.OpenAI.Codex -> Automatic") before the action runs, and it stays when the action fails. The same pattern is used for start, stop, restart and the recovery settings (`src/gui/system_services.rs`, every `undo_stack.push` before `dispatch_action`). *Fix:* push the undo entry only when the action reports success.
+2. **The editor keeps the refused value.** The startup combo still shows *Disabled* while the list shows *Automatic*. *Fix:* on failure, reset `edit_startup` to the service's real value and re-read it.
+3. **A raw error.** `OpenServiceW(…) failed (error 5)` says nothing a user can act on. *Fix:* map error 5 to "Windows refused: this service's permissions don't allow changing it, even for administrators" (translated), keeping the code for support; other common codes (1060 not found, 1061 not accepting controls, 1062 not started) likewise.
+4. **Say it before the user tries.** The configuration read already opens the service; checking whether the current token (or an administrator) can get `SERVICE_CHANGE_CONFIG` / `SERVICE_START|STOP` would let the inspector disable *Apply* and the buttons with a reason, as it already does for protected services.
+5. **The inspector is wider than its panel**: see [item 12](#12-side-panels-that-fit-and-can-be-resized).
+6. **"Stopped" is not translated** in the list's Status column (pt-BR shows "Stopped" next to "Em uso"); the inspector's *Status* row too.
+
+**Done when.** A failed action leaves no undo entry and resets the editor; error 5 reads as a sentence in all three languages; a service whose DACL refuses the change has *Apply* disabled with that reason; the inspector fits at 100–200 % scale; the status column is translated. A test with a fake service backend that refuses `SetStartup` covers 1–3.
+
+---
+
+## 12. Side panels that fit, and can be resized
+
+**Reported** on 2026-11-09 (1.0.0, Windows 11, pt-BR, 1920 px wide): the Services inspector (*System ▸ Services*, a service selected) is cut on the right: the *Start with parameters* button ("Iniciar com parâmetro…"), and every value in the details list ("Irrest…" for *Irrestrito*, "Nenh…", "Stopp…", "LocalSyst…"). The user would like to drag the boundary between the table and the panel, or at least never see it cut.
+
+**Why it is cut** (`src/gui/system_services.rs`):
+
+- The table takes `available width − 370 px` and the inspector gets the rest, with its frame pinned at `set_width(345.0)`. The width is fixed whatever the window, the scale or the language.
+- Several rows inside are wider than 345 px in pt-BR and es: the start-parameters row is a 200 px text box **plus** a button whose label is longer than in English. egui doesn't shrink them; it grows the content past the frame.
+- That one wide row widens the whole scroll area's content, so every right-aligned value in the details list (`kvs`: *Service SID*, *Triggers*, *Status*, *Log on as*…) is aligned to the widened edge, which is off the panel and clipped by the window. That's why values cut even on rows that would fit.
+- The panel is not resizable and does not scroll sideways, so there is no way to see the rest.
+
+The *Processes* tab's *Details panel* does better (`(available × 0.36).clamp(280, 440)`), but it is not resizable either and has the same risk with long values.
+
+**What finishing takes.**
+
+1. **Resizable split**, shared by both panels: a drag handle between table and panel (egui's resizable side panel, or a separator the user drags), min 280 px / max 60 % of the page, the width remembered per panel in settings, double-click to reset. Keyboard: the handle is focusable and arrow keys move it (accessibility, S3-03).
+2. **Content that fits any width**: rows that can't fit wrap (`horizontal_wrapped`), the parameters box takes the remaining width instead of a fixed 200 px, buttons drop to the next line; values in the details list are truncated with a tooltip with the full text (or wrap), and the content width is set to the panel width (`set_max_width`) so one row cannot push the others out.
+3. **Narrow windows**: below a width where table + panel don't both fit, the panel opens over the table (as a drawer) instead of squeezing it.
+
+**Done when.** The Services inspector and the Processes details panel show no clipped text at 100–200 % scale in en, pt-BR and es (the scale test covers both, with the longest service values); both can be resized by mouse and keyboard and keep their width across restarts.
+
+**Risks.** Low. Shared layout code, so the Processes panel must be checked too; the remembered width must be clamped when the window gets smaller.
 
 ---
 
