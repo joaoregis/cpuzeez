@@ -7,6 +7,8 @@ generated from its section below.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-09
+
 ### Changed
 
 - Dependencies: `tray-icon` 0.24 → 0.26 (the Windows and macOS tray icon; five indirect dependencies are gone), `libc` 0.2.191.
@@ -613,7 +615,8 @@ features.
 - GUI with CPU-Z's tabs.
 - Installers for Windows (MSI), macOS (DMG/PKG), Debian/Ubuntu (DEB) and Arch.
 
-[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/joaoregis/cpuzeez/compare/v0.3.0...v1.0.0
 [1.0.0-snapshot.2]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-snapshot.1...v1.0.0-snapshot.2
 [1.0.0-snapshot.1]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.10...v1.0.0-snapshot.1
