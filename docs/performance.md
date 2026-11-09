@@ -45,13 +45,23 @@ The overlay in its default styles leases `cpu`, `gpu`, `memory` and `frames`: ab
 
 The CPU figure is the main window touring every page, which is heavier than the 2 % budget's case (sampler plus overlay next to a game), so it is not a measurement of that budget.
 
+**The overlay alone, 30 minutes** (2026-11-09, Windows 11, `soak.py --gui --overlay-only … 30`): the synthetic game, the overlay at its default rate, the main window minimised, no mini monitor, no app history.
+
+| | Result | Budget |
+|---|---|---|
+| Private memory after warm-up | 118.0 → 119.5 MB, peak 122.2 MB | ≤ 150 MB: **met** |
+| Handles / threads | 490 → 493 / 24 → 24 | no leak |
+| CPU | mean **3.51 %**, p95 4.58 % of one core (includes the synthetic game's thread) | ≤ 2 %: **not met** |
+
+Where it goes (per-thread CPU over 30 s): the interface thread about 1–1.9 %, two worker threads about 1 % each. With the overlay up, eframe keeps running the main window's interface while it is minimised (the overlay is its child viewport); not building the hidden page was tried and saved little (≈ 3 % instead of 3.5 %), so it was left out. Reaching 2 % is open work before the final release.
+
 ## Not measured yet
 
-- **The overlay alone at 4 Hz** (main window hidden or minimised, drawing included) against the 2% budget. It needs a window, so it is a run of the soak by hand:
+- **Repeating the overlay run** after work on the 2 % budget:
 
   ```bash
   cargo build --release --features soak --target-dir target/soak
-  python .github/scripts/soak.py --gui target/soak/release/cpuzeez.exe 30 --report soak.md --max-cpu 2 --max-mem-mb 150
+  python .github/scripts/soak.py --gui --overlay-only target/soak/release/cpuzeez.exe 30 --report soak.md --max-cpu 2 --max-mem-mb 150
   ```
 
   The report lists CPU, memory, handles and threads, and fails above the budgets.

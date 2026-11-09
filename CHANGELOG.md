@@ -7,6 +7,10 @@ generated from its section below.
 
 ## [Unreleased]
 
+## [1.0.0-snapshot.2] - 2026-11-09
+
+The second snapshot of 1.0: the fixes from a security review of the whole tree, and the results of the long overnight runs ([docs/performance.md](docs/performance.md)).
+
 ### Security
 
 From a review of the whole tree after snapshot.1 ([docs/security/review-2026-11-09.md](docs/security/review-2026-11-09.md)):
@@ -16,6 +20,10 @@ From a review of the whole tree after snapshot.1 ([docs/security/review-2026-11-
 - Exports and copied rows no longer carry spreadsheet formulas: text from other programs that Excel would run as a formula is prefixed with `'`.
 - Process and performance exports go to `exports/` in the data folder, with the full path shown, instead of the current folder.
 - Linux: a message sent to another session can no longer be read by `notify-send` as an option.
+
+### Changed
+
+- Testing: an 8-hour run of the interface (every page and tab, captures, analysis, overlay) showed no memory, handle or thread growth, and a randomized campaign over every parser and the detector passed 1 564 seeds. The soak has an overlay-only mode (`--overlay-only`) for the CPU budget next to a game; its first result, 3.5 % of one core against a 2 % goal, is open work for the final release.
 
 ## [1.0.0-snapshot.1] - 2026-11-09
 
@@ -400,7 +408,8 @@ features.
 - GUI with CPU-Z's tabs.
 - Installers for Windows (MSI), macOS (DMG/PKG), Debian/Ubuntu (DEB) and Arch.
 
-[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-snapshot.1...HEAD
+[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-snapshot.2...HEAD
+[1.0.0-snapshot.2]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-snapshot.1...v1.0.0-snapshot.2
 [1.0.0-snapshot.1]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.10...v1.0.0-snapshot.1
 [1.0.0-beta.10]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.9...v1.0.0-beta.10
 [1.0.0-beta.9]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-beta.8...v1.0.0-beta.9

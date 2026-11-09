@@ -17,6 +17,9 @@ Two modes.
       cargo build --release --features soak
       python soak.py --gui target/release/cpuzeez.exe 480 --report soak.md
 
+  `--overlay-only` (with `--gui`): the synthetic game and the overlay only,
+  main window minimised, no tour: the case the 2 % CPU budget is for.
+
   `--selftest` checks the analysis itself on synthetic series (CI runs it).
 """
 import argparse
@@ -212,7 +215,7 @@ def make_sampler():
 # ---------------------------------------------------------------- the profile and the run
 
 
-def profile(root):
+def profile(root, overlay_only=False):
     """A throw-away profile: where the app keeps its data, and what it opens with."""
     if sys.platform == "win32":
         env, data = {"APPDATA": root}, os.path.join(root, "CpuZeeZ")
@@ -229,8 +232,10 @@ def profile(root):
         "minis": [{"open": True}],
         "mini": True,
     }
+    if overlay_only:  # the overlay next to a game: no mini monitor, no history
+        settings.update(minis=[], mini=False, app_history_enabled=False)
     open(os.path.join(data, "settings.json"), "w").write(json.dumps(settings))
-    env["CPUZEEZ_SOAK"] = "1"
+    env["CPUZEEZ_SOAK"] = "overlay" if overlay_only else "1"
     return env, data
 
 
@@ -245,12 +250,12 @@ def report(path, mode, minutes, problems, sm, extra):
         open(os.path.splitext(path)[0] + ".json", "w").write(json.dumps({"problems": problems, **sm, **extra}, indent=2))
 
 
-def run_gui(exe, minutes, interval, out, max_cpu, max_mem):
+def run_gui(exe, minutes, interval, out, max_cpu, max_mem, overlay_only=False):
     exe = os.path.abspath(exe)
     if not os.path.isfile(exe):
         sys.exit(f"no such executable: {exe}")
     root = tempfile.mkdtemp(prefix="cz-soak-")
-    env, data = profile(root)
+    env, data = profile(root, overlay_only)
     log = open(os.path.join(root, "stderr.log"), "w")
     p = subprocess.Popen([exe], env={**os.environ, **env}, stderr=log, stdout=log)
     sample, samples = make_sampler(), []
@@ -294,11 +299,13 @@ def run_gui(exe, minutes, interval, out, max_cpu, max_mem):
         import sqlite3
 
         rows = sqlite3.connect(db).execute("select count(*) from app_day").fetchone()[0]
-    if minutes >= 12 and sessions < 1:
+    if overlay_only:
+        pass  # no tour: nothing is recorded on purpose
+    elif minutes >= 12 and sessions < 1:
         problems.append("no capture was recorded: the tour didn't run")
-    if minutes >= 5 and rows < 1:
+    if not overlay_only and minutes >= 5 and rows < 1:
         problems.append("app history recorded nothing")
-    report(out, "gui", minutes, problems, sm, {"captures_recorded": sessions, "history_rows": rows})
+    report(out, "overlay" if overlay_only else "gui", minutes, problems, sm, {"captures_recorded": sessions, "history_rows": rows})
     if problems and os.path.exists(os.path.join(root, "stderr.log")):
         print("--- last log lines ---")
         print("".join(open(os.path.join(root, "stderr.log")).readlines()[-15:]))
@@ -334,6 +341,7 @@ if __name__ == "__main__":
     ap.add_argument("minutes", nargs="?", type=int)
     ap.add_argument("--gui", action="store_true")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--overlay-only", action="store_true", help="with --gui: no tour, main window minimised")
     ap.add_argument("--interval", type=int, default=60, help="seconds between samples")
     ap.add_argument("--report", help="write a Markdown (and .json) report here")
     ap.add_argument("--max-cpu", type=float, help="fail above this mean CPU, %% of one core")
@@ -344,4 +352,4 @@ if __name__ == "__main__":
         sys.exit(0)
     if not a.exe or not a.minutes:
         ap.error("usage: soak.py [--gui] EXE MINUTES")
-    sys.exit(run_gui(a.exe, a.minutes, a.interval, a.report, a.max_cpu, a.max_mem_mb) if a.gui else run_sampler(a.exe, a.minutes))
+    sys.exit(run_gui(a.exe, a.minutes, a.interval, a.report, a.max_cpu, a.max_mem_mb, a.overlay_only) if a.gui else run_sampler(a.exe, a.minutes))

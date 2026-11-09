@@ -28,7 +28,14 @@ impl App {
         if !crate::soak::enabled() {
             return;
         }
+        let first = self.soak.is_none();
         let tour = self.soak.get_or_insert_with(Tour::default);
+        if crate::soak::overlay_only() {
+            if first {
+                ectx.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::Minimized(true));
+            }
+            return;
+        }
         let every = |t: &Instant, secs: u64| t.elapsed() >= Duration::from_secs(secs);
         // The synthetic game is the target; keep the overlay and the detector on.
         if tour.page.elapsed() >= Duration::from_secs(15) {

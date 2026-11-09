@@ -20,6 +20,8 @@ python .github/scripts/soak.py --gui target/soak/release/cpuzeez.exe 480 --repor
 
 The `soak` feature is in no release. It also needs `CPUZEEZ_SOAK=1`, which the script sets; a soak build started by mistake behaves like the normal app. The script uses a throw-away settings folder and never touches the real profile.
 
+**Overlay only.** `--overlay-only` (with `--gui`) sets `CPUZEEZ_SOAK=overlay`: the same synthetic game and the overlay, the main window minimised, no tour, no mini monitor, no app history, no captures. That is the case the 2 % CPU budget is for ([performance](../performance.md)); the 8-hour run with the tour measures something heavier.
+
 **What runs.**
 - A synthetic game (`soak-game.exe`, pid 4242) feeds the frame hub every 100 ms, in five scenes of 40 s: GPU-bound, CPU-bound, V-Sync at 60 Hz, a 120 FPS cap, and a loading stretch with uneven frames. One frame in 20 s is a 60 ms hitch.
 - The overlay is shown and hidden every 30 minutes; app history records.

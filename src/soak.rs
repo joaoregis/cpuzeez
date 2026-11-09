@@ -5,7 +5,9 @@
 //! checks that memory, handles and threads plateau (docs/testing/soak.md).
 //!
 //! It only runs when `CPUZEEZ_SOAK=1` is set too, so a soak build started by
-//! mistake behaves like the normal app.
+//! mistake behaves like the normal app. `CPUZEEZ_SOAK=overlay` runs the same
+//! synthetic game with no tour and the main window minimised: the overlay next
+//! to a game, the case the 2 % CPU budget is for (docs/performance.md).
 
 use cpuzeez_core::frames::Frame;
 use std::time::{Duration, Instant};
@@ -15,7 +17,12 @@ pub const PID: u32 = 4242;
 pub const NAME: &str = "soak-game.exe";
 
 pub fn enabled() -> bool {
-    std::env::var_os("CPUZEEZ_SOAK").is_some_and(|v| v == "1")
+    std::env::var_os("CPUZEEZ_SOAK").is_some_and(|v| v == "1" || v == "overlay")
+}
+
+/// The overlay-only run: no page tour, main window minimised.
+pub fn overlay_only() -> bool {
+    std::env::var_os("CPUZEEZ_SOAK").is_some_and(|v| v == "overlay")
 }
 
 /// A frame of the synthetic game at `t` seconds. The scene changes every 40 s

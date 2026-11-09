@@ -188,7 +188,7 @@ Problems that appeared in the betas and were fixed before 1.0, for testers who s
 - ⚠ Releases are not code-signed: Windows SmartScreen and macOS Gatekeeper warn on first run ([ADR 0009](../adr/0009-releases-stay-unsigned-for-now.md)). Every release has `SHA256SUMS.txt`.
 - ⚠ Games in true exclusive fullscreen hide the overlay (capture still works).
 - ⚠ Wayland shortcuts, KMS refresh and Linux/macOS desktop behaviour were checked by CI and testers, not on every desktop; see [FEATURES.md](../../FEATURES.md).
-- ⚠ The performance budget (2 % of a core, 150 MB, ≤ 1 % FPS cost) is measured for the sampler; replace with the final numbers from [docs/performance.md](../performance.md).
+- ⚠ The performance budget (2 % of a core, 150 MB, ≤ 1 % FPS cost): memory is met (~120 MB with the overlay); CPU with the overlay measured 3.5 % of one core on 2026-11-09, over budget; replace with the final numbers from [docs/performance.md](../performance.md).
 
 ### Thanks
 
