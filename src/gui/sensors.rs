@@ -4,19 +4,22 @@
 //! telemetry sampler: the stress monitor, the tray icon and the mini monitor.
 
 use super::i18n::tr;
+use super::table::{Cell, Column, Table};
 use super::theme::{self, icon};
+use super::units;
 use super::widgets::{self, Tone};
 use super::{plot, stress, tray};
 use crate::Ctx;
 use crate::settings::Settings;
 use crate::telemetry::{Series, Telemetry, Unit};
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Some sensors aren't responding: {}", "Alguns sensores não estão respondendo: {}"),
     ("Sensors", "Sensores"),
     ("Stress test", "Teste de estresse"),
     ("Mini monitor", "Minimonitor"),
@@ -28,6 +31,22 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Max", "Máx."),
     ("Avg", "Méd."),
     ("Search…", "Pesquisar…"),
+    ("Plot", "Plotar"),
+    ("{} above {} for {} s (now {})", "{} acima de {} por {} s (agora {})"),
+    ("{} below {} for {} s (now {})", "{} abaixo de {} por {} s (agora {})"),
+    ("Stop plotting", "Parar de plotar"),
+    ("Unit", "Unidade"),
+    ("All", "Todos"),
+    ("Temperatures", "Temperaturas"),
+    ("Clocks", "Clocks"),
+    ("Power", "Potência"),
+    ("Voltages", "Tensões"),
+    ("Fans", "Ventoinhas"),
+    ("Loads", "Cargas"),
+    ("Disks", "Discos"),
+    ("Network", "Rede"),
+    ("Export view", "Exportar visão"),
+    ("Saved {}", "Salvo {}"),
     ("Reset min/max", "Zerar mín./máx."),
     ("Start CSV log", "Iniciar log CSV"),
     ("Stop CSV log", "Parar log CSV"),
@@ -37,12 +56,13 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Waiting for sensor data…", "Aguardando dados dos sensores…"),
     ("No settings folder", "Sem pasta de configurações"),
     ("Tray unavailable", "Bandeja indisponível"),
-    ("Show CpuZeeZ", "Mostrar CpuZeeZ"),
+    ("Show CPU ZeeZ", "Mostrar CPU ZeeZ"),
     ("Close", "Fechar"),
     ("Check rows to plot them.", "Marque linhas para exibir no gráfico."),
     ("History", "Histórico"),
 ];
 pub const ES: &[(&str, &str)] = &[
+    ("Some sensors aren't responding: {}", "Algunos sensores no responden: {}"),
     ("Sensors", "Sensores"),
     ("Stress test", "Prueba de estrés"),
     ("Mini monitor", "Minimonitor"),
@@ -54,6 +74,22 @@ pub const ES: &[(&str, &str)] = &[
     ("Max", "Máx."),
     ("Avg", "Prom."),
     ("Search…", "Buscar…"),
+    ("Plot", "Graficar"),
+    ("{} above {} for {} s (now {})", "{} por encima de {} durante {} s (ahora {})"),
+    ("{} below {} for {} s (now {})", "{} por debajo de {} durante {} s (ahora {})"),
+    ("Stop plotting", "Dejar de graficar"),
+    ("Unit", "Unidad"),
+    ("All", "Todos"),
+    ("Temperatures", "Temperaturas"),
+    ("Clocks", "Relojes"),
+    ("Power", "Potencia"),
+    ("Voltages", "Voltajes"),
+    ("Fans", "Ventiladores"),
+    ("Loads", "Cargas"),
+    ("Disks", "Discos"),
+    ("Network", "Red"),
+    ("Export view", "Exportar vista"),
+    ("Saved {}", "Guardado {}"),
     ("Reset min/max", "Reiniciar mín./máx."),
     ("Start CSV log", "Iniciar registro CSV"),
     ("Stop CSV log", "Detener registro CSV"),
@@ -63,7 +99,7 @@ pub const ES: &[(&str, &str)] = &[
     ("Waiting for sensor data…", "Esperando datos de los sensores…"),
     ("No settings folder", "Sin carpeta de configuración"),
     ("Tray unavailable", "Bandeja no disponible"),
-    ("Show CpuZeeZ", "Mostrar CpuZeeZ"),
+    ("Show CPU ZeeZ", "Mostrar CPU ZeeZ"),
     ("Close", "Cerrar"),
     ("Check rows to plot them.", "Marque filas para graficarlas."),
     ("History", "Historial"),
@@ -76,19 +112,20 @@ const WARN_BAND: f64 = 10.0;
 pub const GPU_LIMIT: f64 = 90.0;
 const STORAGE_LIMIT: f64 = 70.0;
 const PERIODS_MS: [u64; 4] = [500, 1000, 2000, 5000];
-const COL_W: f32 = 72.0;
 const CHART_MIN_H: f32 = 120.0;
 const MIN_SPAN: f64 = 60.0;
 const CHART_MAX_H: f32 = 220.0;
 const WINDOW_SIZE: [f32; 2] = [900.0, 760.0];
-const MINI_SIZE: [f32; 2] = [230.0, 96.0];
 
 #[derive(Default)]
 struct View {
-    filter: String,
+    /// Filter, sort, hidden columns and collapsed groups of the table.
+    table: super::table::State,
     plotted: BTreeSet<String>,
     /// The summary temperatures are plotted once data first arrives.
     defaulted: bool,
+    /// Unit and Id start hidden (they're there for filters like `unit:°C`).
+    defaulted_cols: bool,
     status: String,
 }
 
@@ -99,6 +136,7 @@ pub struct Monitor {
     pub show_sensors: bool,
     pub show_stress: bool,
     pub show_mini: bool,
+    alerts: Vec<String>,
     /// Sidebar layout: Sensors/Stress are pages, so `frame` only raises the
     /// `show_*` flags (tray menu) and the app navigates instead of opening windows.
     pub pages: bool,
@@ -107,36 +145,97 @@ pub struct Monitor {
     view: View,
     quitting: bool,
     started: bool,
-    /// `-screenshots`: when the current capture step began.
-    shot_since: Option<Instant>,
+    /// The main window is hidden in the tray.
+    pub hidden: bool,
+    /// Sampling paused from the tray menu.
+    pub paused: bool,
+    /// (icons, click) the tray was built with, to rebuild when they change.
+    tray_shape: (usize, tray::Click),
+    pub(super) mini_rt: super::mini::Runtime,
+    /// A mini monitor asked for its editor (Settings opens on it).
+    pub edit_mini: Option<usize>,
 }
 
 impl Monitor {
     pub fn new(ctx: Arc<Ctx>) -> Monitor {
+        let mut settings = Settings::load();
+        if settings.minis.is_empty() {
+            // 0.3.0 / early 1.0 files: one mini monitor, open if it was.
+            let open = settings.mini;
+            settings.minis.push(cpuzeez_core::layout::mini::Mini { open, ..Default::default() });
+        }
         Monitor {
             ctx,
             tel: None,
-            settings: Settings::load(),
+            show_mini: settings.minis.iter().any(|m| m.open),
+            alerts: Vec::new(),
+            settings,
             show_sensors: false,
             show_stress: false,
             pages: false,
-            show_mini: false,
             stress: stress::Stress::default(),
             tray: tray::Tray::default(),
             view: View::default(),
             quitting: false,
             started: false,
-            shot_since: None,
+            hidden: false,
+            paused: false,
+            tray_shape: (0, tray::Click::App),
+            mini_rt: Default::default(),
+            edit_mini: None,
         }
     }
 
-    /// The shared sampler, started on first use.
-    pub fn tel(&mut self) -> Telemetry {
+    /// Sampling period and graph history from the settings.
+    fn sampling(&self) -> (Duration, Duration) {
         let s = &self.settings;
-        let (period, keep) =
-            (Duration::from_millis(s.sample_ms.max(100)), Duration::from_secs(s.graph_seconds.max(60)));
+        // Paused: one read an hour keeps the engine alive without working.
+        let period = if self.paused { Duration::from_secs(3600) } else { Duration::from_millis(s.sample_ms.max(100)) };
+        (period, Duration::from_secs(s.graph_seconds.max(60)))
+    }
+
+    /// The shared sampler, started on first use.
+    /// Local alerts firing right now (S1-G01), already worded.
+    pub fn alerts(&self) -> &[String] {
+        &self.alerts
+    }
+
+    /// Opens on these rows (the Overview's tiles link here).
+    pub fn focus(&mut self, filter: String) {
+        self.view.table.filter = filter;
+    }
+
+    pub fn ctx(&self) -> &Arc<Ctx> {
+        &self.ctx
+    }
+
+    pub fn tel(&mut self) -> Telemetry {
+        let (period, keep) = self.sampling();
         let ctx = self.ctx.clone();
         self.tel.get_or_insert_with(|| (Telemetry::start(ctx, period, keep), Instant::now())).0.clone()
+    }
+
+    /// Apply changed sampling settings to a sampler that is already running.
+    pub fn apply_sampling(&self) {
+        if let Some((tel, _)) = &self.tel {
+            let (period, keep) = self.sampling();
+            tel.set_period(period);
+            tel.set_keep(keep);
+        }
+    }
+
+    /// Show or hide every mini monitor and remember it.
+    pub fn set_mini(&mut self, on: bool) {
+        self.show_mini = on;
+        self.set_setting(|s| {
+            s.mini = on;
+            if s.minis.is_empty() {
+                s.minis.push(Default::default());
+            }
+            for m in &mut s.minis {
+                m.open = on;
+            }
+        });
     }
 
     /// CPU Tjmax, else the configured warning temperature.
@@ -163,7 +262,12 @@ impl Monitor {
     }
 
     pub(super) fn set_tray(&mut self, on: bool, ectx: &egui::Context) {
-        self.tray.set_enabled(on, ectx);
+        let shape = (self.settings.tray_items.len().max(1), self.settings.tray_click);
+        if on && self.tray.active() && shape != self.tray_shape {
+            self.tray.set_enabled(false, 0, shape.1, ectx);
+        }
+        self.tray_shape = shape;
+        self.tray.set_enabled(on, shape.0, shape.1, ectx);
         if on && !self.tray.active() {
             self.show_mini = true; // no tray host: fall back to the mini window
         }
@@ -172,29 +276,21 @@ impl Monitor {
         }
     }
 
-    /// Tools-menu entries.
-    pub fn menu(&mut self, ui: &mut egui::Ui) {
-        if ui.button(tr("Sensors")).clicked() {
-            self.show_sensors = true;
+    /// A CSV log is being written (● REC).
+    pub fn recording(&self) -> bool {
+        self.tel.as_ref().is_some_and(|(t, _)| t.csv_path().is_some())
+    }
+
+    pub fn stop_recording(&self) {
+        if let Some((t, _)) = &self.tel {
+            t.stop_csv();
         }
-        if ui.button(tr("Stress test")).clicked() {
-            self.show_stress = true;
-        }
-        if ui.checkbox(&mut self.show_mini, tr("Mini monitor")).changed() && self.show_mini {
-            self.tel();
-        }
-        let mut on = self.settings.tray;
-        if ui.checkbox(&mut on, tr("Tray icon")).changed() {
-            self.set_setting(|s| s.tray = on);
-            self.set_tray(on, ui.ctx());
-        }
-        if let Some(e) = &self.tray.error {
-            ui.label(RichText::new(format!("{}: {e}", tr("Tray unavailable"))).small().weak());
-        }
-        let mut ctt = self.settings.close_to_tray;
-        if ui.add_enabled(self.settings.tray, egui::Checkbox::new(&mut ctt, tr("Close to tray"))).changed() {
-            self.set_setting(|s| s.close_to_tray = ctt);
-        }
+    }
+
+    /// Close the app for real (not to the tray).
+    pub fn quit(&mut self, ectx: &egui::Context) {
+        self.quitting = true;
+        ectx.send_viewport_cmd(egui::ViewportCommand::Close);
     }
 
     /// Call every frame from the app: windows, tray events, auto-stop, close-to-tray.
@@ -205,18 +301,39 @@ impl Monitor {
                 self.set_tray(true, ectx);
             }
         }
+        if self.tray.active() && (self.settings.tray_items.len().max(1), self.settings.tray_click) != self.tray_shape {
+            self.set_tray(true, ectx);
+        }
         for a in self.tray.poll() {
             match a {
-                tray::Action::Show | tray::Action::Sensors => {
+                tray::Action::Toggle if !self.hidden => {
+                    ectx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+                    self.hidden = true;
+                }
+                tray::Action::Toggle | tray::Action::Sensors => {
                     self.show_sensors |= a == tray::Action::Sensors;
+                    self.hidden = false;
                     ectx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
                     ectx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
                     ectx.send_viewport_cmd(egui::ViewportCommand::Focus);
                 }
-                tray::Action::Quit => {
-                    self.quitting = true;
-                    ectx.send_viewport_cmd(egui::ViewportCommand::Close);
+                tray::Action::Mini => {
+                    let on = !self.show_mini;
+                    self.set_mini(on);
                 }
+                tray::Action::Lock => {
+                    let on = !self.settings.minis.iter().any(|m| m.open && m.locked);
+                    self.set_setting(move |s| s.minis.iter_mut().filter(|m| m.open).for_each(|m| m.locked = on));
+                }
+                tray::Action::Pause => {
+                    self.paused = !self.paused;
+                    self.apply_sampling();
+                }
+                tray::Action::Speed(ms) => {
+                    self.set_setting(|s| s.sample_ms = ms);
+                    self.apply_sampling();
+                }
+                tray::Action::Quit => self.quit(ectx),
             }
         }
         if self.tray.active()
@@ -226,17 +343,49 @@ impl Monitor {
         {
             ectx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             ectx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+            self.hidden = true;
         }
         if let Some((tel, _)) = &self.tel {
-            let series = tel.series();
+            // Leases for what runs without its page open; current values only.
+            let shown = ["cpu/", "gpu", "chipset/"];
+            if self.stress.running() {
+                tel.want("stress", &shown);
+            }
+            if self.tray.active() {
+                let ws: Vec<cpuzeez_core::layout::Widget> =
+                    self.settings.tray_items.iter().map(|i| i.widget.clone()).collect();
+                let mut lease = super::layout_view::prefixes(&ws);
+                lease.extend(shown.iter().map(|s| s.to_string()));
+                tel.want("tray", &lease.iter().map(String::as_str).collect::<Vec<_>>());
+            }
+            if self.settings.alerts_on {
+                let ws: Vec<cpuzeez_core::layout::Widget> = self
+                    .settings
+                    .alerts
+                    .iter()
+                    .filter(|r| r.enabled)
+                    .map(|r| cpuzeez_core::layout::Widget::metric(cpuzeez_core::layout::Kind::Value, &r.metric, ""))
+                    .collect();
+                let lease = super::layout_view::prefixes(&ws);
+                tel.want("alerts", &lease.iter().map(String::as_str).collect::<Vec<_>>());
+            }
+            let series = tel.series_with(|_| false);
             let (limit, tjmax) = (self.stress_limit(), self.tjmax());
             self.stress.tick(&series, limit);
-            let tip = summary(&series)
-                .iter()
-                .filter_map(|(n, t)| t.map(|t| format!("{n} {}", fmt0(t))))
-                .collect::<Vec<_>>()
-                .join(" · ");
-            self.tray.update(cpu_temp(&series).map(|s| s.current), tjmax, &tip);
+            self.alerts =
+                if self.settings.alerts_on { firing_alerts(&self.settings.alerts, &series, tel) } else { Vec::new() };
+            if self.tray.active() {
+                let shown = tray_pictures(&self.settings.tray_items, &series, tel, tjmax, ectx);
+                let extra: Vec<String> = self.alerts.iter().map(|a| format!("{} {a}", icon::WARNING)).collect();
+                let state = tray::MenuState {
+                    visible: !self.hidden,
+                    mini: self.show_mini,
+                    paused: self.paused,
+                    speed_ms: self.settings.sample_ms,
+                    lock: self.show_mini.then(|| self.settings.minis.iter().any(|m| m.open && m.locked)),
+                };
+                self.tray.update(&shown, &extra, &state);
+            }
             if self.stress.running() || self.tray.active() || self.show_mini {
                 ectx.request_repaint_after(Duration::from_secs(1));
             }
@@ -258,108 +407,91 @@ impl Monitor {
             egui::Window::new(tr("Stress test")).open(&mut open).default_size(default).default_pos([8.0, 32.0]).show(
                 ectx,
                 |ui| {
-                    egui::ScrollArea::vertical().show(ui, |ui| stress::page(ui, self, true));
+                    egui::ScrollArea::vertical().show(ui, |ui| stress::page(ui, self, true, &[]));
                 },
             );
             self.show_stress = open;
         }
         if self.show_mini {
-            self.mini(ectx);
+            super::mini::show_all(self, ectx);
         }
-    }
-
-    /// Always-on-top borderless window with the key readings (all OSes).
-    fn mini(&mut self, ectx: &egui::Context) {
-        let series = self.tel().series();
-        let tjmax = self.tjmax();
-        let builder = egui::ViewportBuilder::default()
-            .with_title(format!("{} · {}", crate::DISPLAY_NAME, tr("Mini monitor")))
-            .with_inner_size(MINI_SIZE)
-            .with_always_on_top()
-            .with_decorations(false)
-            .with_resizable(false);
-        let keep = ectx.show_viewport_immediate(egui::ViewportId::from_hash_of("mini-monitor"), builder, |ui, _| {
-            let mut keep = !ui.ctx().input(|i| i.viewport().close_requested());
-            egui::CentralPanel::default().show(ui, |ui| {
-                let bg = ui.interact(ui.max_rect(), ui.id().with("drag"), egui::Sense::click_and_drag());
-                if bg.drag_started() {
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
-                }
-                bg.context_menu(|ui| {
-                    if ui.button(tr("Show CpuZeeZ")).clicked() {
-                        ectx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
-                        ectx.send_viewport_cmd(egui::ViewportCommand::Focus);
-                    }
-                    if ui.button(tr("Close")).clicked() {
-                        keep = false;
-                    }
-                });
-                summary_row(ui, &series, tjmax);
-                let clocks = core_clocks(&series);
-                let mut line = Vec::new();
-                if !clocks.is_empty() {
-                    let avg = clocks.iter().map(|s| s.current).sum::<f64>() / clocks.len() as f64;
-                    line.push(fmt(avg, Unit::Mhz));
-                }
-                if let Some(p) = package_power(&series) {
-                    line.push(fmt(p.current, Unit::Watt));
-                }
-                ui.label(RichText::new(line.join(" · ")).monospace());
-            });
-            keep
-        });
-        self.show_mini = keep;
-    }
-
-    /// `-screenshots`: step 0 = Sensors window with ≥5 s of samples, step 1 =
-    /// stress monitor after ~8 s of load. True once ready to capture.
-    pub fn autoshot(&mut self, step: u8, ectx: &egui::Context) -> bool {
-        let since = *self.shot_since.get_or_insert_with(|| {
-            ectx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(760.0, 720.0)));
-            Instant::now()
-        });
-        // Open the window once the resize has landed so it gets the full size.
-        if since.elapsed() < Duration::from_millis(600) {
-            return false;
-        }
-        let tel_age = self.tel.as_ref().map_or(Duration::ZERO, |t| t.1.elapsed());
-        if step == 0 {
-            self.tel();
-            self.show_sensors = true;
-            return tel_age >= Duration::from_secs(5) && since.elapsed() > Duration::from_secs(1);
-        }
-        self.show_sensors = false;
-        self.show_stress = true;
-        if !self.stress.running() {
-            self.start_stress(crate::os::logical_cpus());
-        }
-        self.stress.elapsed_secs() >= 8.0
-    }
-
-    pub fn autoshot_next(&mut self) {
-        self.shot_since = None;
     }
 }
 
 // ---- series helpers (shared with the stress monitor and tray) ----
 
+/// A telemetry value in the units chosen in Settings.
+/// Each tray icon's picture and tooltip line from the current values.
+fn tray_pictures(
+    items: &[tray::Item],
+    series: &[Series],
+    tel: &Telemetry,
+    tjmax: f64,
+    ectx: &egui::Context,
+) -> Vec<tray::Shown> {
+    use super::trayicon::{self, Picture, Style};
+    use cpuzeez_core::layout::{Tone, temp_thresholds};
+    let n = trayicon::size();
+    items
+        .iter()
+        .map(|it| {
+            let w = &it.widget;
+            let s = w.metric.as_deref().and_then(|m| super::layout_view::resolve(m, series));
+            let label = w.label.clone().unwrap_or_else(|| s.map_or(String::new(), |s| s.label.clone()));
+            let Some(s) = s else {
+                let p = Picture { style: it.style, text: None, fill: 0.0, tone: None, history: &[] };
+                return tray::Shown {
+                    rgba: trayicon::draw(Some(ectx), &p, n),
+                    line: format!("{label} –"),
+                    short: "–".into(),
+                };
+            };
+            // Thresholds: the widget's own, else sensible ones for the unit.
+            let limit = if w.metric.as_deref() == Some("@cpu_temp") { tjmax } else { GPU_LIMIT };
+            let w = if w.thresholds.is_empty() {
+                match s.unit {
+                    Unit::Celsius => w.clone().with_thresholds(&temp_thresholds(limit)),
+                    Unit::Percent => w.clone().with_thresholds(&[(90.0, Tone::Warning)]),
+                    _ => w.clone(),
+                }
+            } else {
+                w.clone()
+            };
+            let text = super::layout_view::value_text(&w, s);
+            let number = text.split_whitespace().next().unwrap_or("").to_string();
+            let fill = if s.unit == Unit::Celsius { (s.current / limit) as f32 } else { w.fill(s.current) };
+            let hist: Vec<f64> = if it.style == Style::Graph {
+                tel.series_with(|id| id == s.id)
+                    .first()
+                    .map(|x| x.points.iter().map(|p| p.1).collect())
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            let p = Picture {
+                style: it.style,
+                text: Some(number.clone()),
+                fill,
+                tone: Some(w.tone(s.current)),
+                history: &hist,
+            };
+            let degree = if s.unit == Unit::Celsius { "°" } else { "" };
+            tray::Shown {
+                rgba: trayicon::draw(Some(ectx), &p, n),
+                line: format!("{label} {text}"),
+                short: format!("{label} {number}{degree}"),
+            }
+        })
+        .collect()
+}
+
 pub fn fmt(v: f64, u: Unit) -> String {
-    match u {
-        Unit::Celsius => format!("{v:.1} °C"),
-        Unit::Volt => format!("{v:.3} V"),
-        Unit::Watt => format!("{v:.1} W"),
-        Unit::Ampere => format!("{v:.2} A"),
-        Unit::Mhz => format!("{v:.0} MHz"),
-        Unit::Rpm => format!("{v:.0} RPM"),
-        Unit::Percent => format!("{v:.1} %"),
-        Unit::Megabytes if v >= 10240.0 => format!("{:.1} GB", v / 1024.0),
-        Unit::Megabytes => format!("{v:.0} MB"),
-    }
+    super::units::get().format(v, u)
 }
 
 /// Whole-degree temperature for compact summaries.
 fn fmt0(t: f64) -> String {
-    format!("{t:.0} °C")
+    super::units::temp(t, 0)
 }
 
 /// "GPU" matches "GPU · NVIDIA …".
@@ -435,18 +567,6 @@ pub fn temp_tone(v: f64, limit: f64) -> Tone {
     }
 }
 
-/// Text color for a tone (None = default text color).
-pub fn tone_color(ui: &egui::Ui, t: Tone) -> Option<Color32> {
-    let p = theme::palette(ui);
-    match t {
-        Tone::Danger => Some(p.danger),
-        Tone::Warning => Some(p.warning),
-        Tone::Success => Some(p.success),
-        Tone::Accent => Some(p.accent),
-        Tone::Neutral => None,
-    }
-}
-
 /// "CPU 71 °C · GPU 58 °C · Chipset 46 °C" as pills (only the ones present).
 pub fn summary_row(ui: &mut egui::Ui, series: &[Series], tjmax: f64) {
     let limits = [tjmax, GPU_LIMIT, f64::MAX];
@@ -481,10 +601,21 @@ fn group_icon(g: &str) -> &'static str {
 /// Sensors page: summary, toolbar, grouped table, charts of checked rows.
 pub fn page(ui: &mut egui::Ui, mon: &mut Monitor) {
     let tel = mon.tel();
-    let series = tel.series();
+    tel.want("sensors", &[""]);
+    let series = tel.series_with(|id| mon.view.plotted.contains(id));
     let tjmax = mon.tjmax();
     ui.ctx().request_repaint_after(Duration::from_millis(mon.settings.sample_ms.clamp(250, 1000)));
     widgets::page_header(ui, tr("Sensors"), "", |ui| toolbar_actions(ui, mon, &tel));
+    // A source that panicked or hangs is isolated by the engine; say which one.
+    let failed: Vec<String> = tel.failures().into_iter().map(|(name, why)| format!("{name} ({why})")).collect();
+    if !failed.is_empty() {
+        widgets::pill(
+            ui,
+            &super::i18n::trf("Some sensors aren't responding: {}", &[&failed.join(", ")]),
+            widgets::Tone::Warning,
+        );
+        ui.add_space(theme::GAP / 2.0);
+    }
     summary_row(ui, &series, tjmax);
     toolbar(ui, mon, &tel);
     if series.is_empty() {
@@ -498,83 +629,183 @@ pub fn page(ui: &mut egui::Ui, mon: &mut Monitor) {
         v.plotted.extend(first.iter().flatten().map(|s| s.id.clone()));
     }
 
-    let needle = v.filter.to_lowercase();
-    let mut groups: Vec<&str> = Vec::new();
-    for s in &series {
-        if !groups.contains(&s.group.as_str()) {
-            groups.push(&s.group);
+    presets(ui, &mut v.table);
+    let table_h = if v.plotted.is_empty() { ui.available_height() } else { ui.available_height() * 0.5 };
+    let p = theme::palette(ui);
+    let hot = move |s: &Series, x: f64| {
+        let lim = (s.unit == Unit::Celsius).then(|| limit_for(&s.group, tjmax)).flatten()?;
+        match temp_tone(x, lim) {
+            Tone::Danger => Some(p.danger),
+            Tone::Warning => Some(p.warning),
+            _ => None,
+        }
+    };
+    let plotted = v.plotted.clone();
+    let num = |f: fn(&Series) -> f64| move |s: &Series| Cell::num(f(s), fmt(f(s), s.unit));
+    let table = Table::new("sensors", |s: &Series| hash(&s.id))
+        .col(Column::new("plot", "●", 26.0, move |s: &Series| {
+            Cell::Text(if plotted.contains(&s.id) { "●" } else { "" }.into())
+        }))
+        .col(Column::new("sensor", tr("Sensor"), 260.0, |s: &Series| Cell::Text(s.label.clone())))
+        .col(Column::new("cur", tr("Current"), 110.0, num(|s| s.current)).right().colored(move |s| hot(s, s.current)))
+        .col(Column::new("min", tr("Min"), 110.0, num(|s| s.min)).right())
+        .col(Column::new("max", tr("Max"), 110.0, num(|s| s.max)).right().colored(move |s| hot(s, s.max)))
+        .col(Column::new("avg", tr("Avg"), 110.0, num(|s| s.avg)).right())
+        .col(Column::new("unit", tr("Unit"), 60.0, |s: &Series| Cell::Text(units::get().suffix(s.unit).into())))
+        .col(Column::new("id", "Id", 220.0, |s: &Series| Cell::Text(s.id.clone())))
+        .grouped(|s: &Series| format!("{}  {}", group_icon(&s.group), s.group));
+    for hidden in ["unit", "id"] {
+        if !v.defaulted_cols {
+            v.table.hidden.insert(hidden.into());
         }
     }
-    let table_h = if v.plotted.is_empty() { ui.available_height() } else { ui.available_height() * 0.5 };
-    let secondary = theme::palette(ui).text_secondary;
+    v.defaulted_cols = true;
+    let mut plot: Option<(Vec<String>, bool)> = None;
+    let mut pin: Vec<crate::settings::Pin> = Vec::new();
     widgets::card(ui, "", "", |ui| {
-        egui::ScrollArea::vertical().id_salt("sensor-table").max_height(table_h).auto_shrink([false, true]).show(
-            ui,
-            |ui| {
-                for g in groups {
-                    let rows: Vec<&Series> = series
+        ui.allocate_ui(egui::vec2(ui.available_width(), table_h), |ui| {
+            table.show(ui, &series, &mut v.table, |ui, sel| {
+                let ids: Vec<String> = sel.iter().map(|s| s.id.clone()).collect();
+                if ui.button(format!("{}  {}", icon::CHART_LINE, tr("Plot"))).clicked() {
+                    plot = Some((ids.clone(), true));
+                    ui.close();
+                }
+                if ui.button(tr("Stop plotting")).clicked() {
+                    plot = Some((ids, false));
+                    ui.close();
+                }
+                if ui.button(tr("Pin to Overview")).clicked() {
+                    pin = sel
                         .iter()
-                        .filter(|s| s.group == g)
-                        .filter(|s| {
-                            needle.is_empty()
-                                || s.label.to_lowercase().contains(&needle)
-                                || g.to_lowercase().contains(&needle)
+                        .map(|s| crate::settings::Pin {
+                            card: s.group.clone(),
+                            label: s.label.clone(),
+                            value: fmt(s.current, s.unit),
+                            metric: Some(s.id.clone()),
                         })
                         .collect();
-                    if rows.is_empty() {
-                        continue;
-                    }
-                    let head = RichText::new(format!("{}  {g}", group_icon(g))).strong();
-                    egui::CollapsingHeader::new(head).id_salt(g).default_open(true).show(ui, |ui| {
-                        egui::Grid::new(("sensor-grid", g)).num_columns(5).striped(true).min_col_width(COL_W).show(
-                            ui,
-                            |ui| {
-                                for h in [tr("Sensor"), tr("Current"), tr("Min"), tr("Max"), tr("Avg")] {
-                                    ui.label(RichText::new(h).small().color(secondary));
-                                }
-                                ui.end_row();
-                                for s in rows {
-                                    sensor_row(ui, s, &mut v.plotted, tjmax);
-                                }
-                            },
-                        );
-                    });
+                    ui.close();
                 }
-            },
-        );
+                if let [s] = sel
+                    && ui.button(tr("Copy value")).clicked()
+                {
+                    ui.ctx().copy_text(fmt(s.current, s.unit));
+                    ui.close();
+                }
+            });
+        });
     });
+    if let Some((ids, on)) = plot {
+        for id in ids {
+            if on {
+                v.plotted.insert(id);
+            } else {
+                v.plotted.remove(&id);
+            }
+        }
+    }
+    for p in pin {
+        super::pins::request(ui.ctx(), p);
+    }
     ui.add_space(theme::GAP);
     widgets::card(ui, icon::CHART_LINE, tr("History"), |ui| {
         charts(ui, &series, &v.plotted, mon.settings.graph_seconds as f64);
     });
 }
 
-fn sensor_row(ui: &mut egui::Ui, s: &Series, plotted: &mut BTreeSet<String>, tjmax: f64) {
-    let mut on = plotted.contains(&s.id);
-    ui.horizontal(|ui| {
-        ui.checkbox(&mut on, "");
-        if ui.selectable_label(on, &s.label).clicked() {
-            on = !on;
+/// "CPU temperature above 90 °C for 30 s (now 93 °C)" for each rule that holds.
+fn firing_alerts(rules: &[cpuzeez_core::alerts::Rule], series: &[Series], tel: &Telemetry) -> Vec<String> {
+    rules
+        .iter()
+        .filter(|r| r.enabled)
+        .filter_map(|r| {
+            let s = super::layout_view::resolve(&r.metric, series)?;
+            cpuzeez_core::alerts::firing(r, &tel.points(&s.id)).then(|| {
+                let key = if r.above { "{} above {} for {} s (now {})" } else { "{} below {} for {} s (now {})" };
+                super::i18n::trf(key, &[&tr(&r.label), &fmt(r.threshold, s.unit), &r.secs, &fmt(s.current, s.unit)])
+            })
+        })
+        .collect()
+}
+
+/// One-click filters over the table's own syntax (S1-G08); the filter box
+/// shows what each one typed, so it doubles as an example.
+fn presets(ui: &mut egui::Ui, st: &mut super::table::State) {
+    ui.horizontal_wrapped(|ui| {
+        for (label, q) in [
+            ("All", ""),
+            ("Temperatures", "unit:°"),
+            ("Clocks", "unit:mhz"),
+            ("Power", "unit:w"),
+            ("Voltages", "unit:v"),
+            ("Fans", "unit:rpm"),
+            ("Loads", "unit:%"),
+            ("Disks", "id:disk"),
+            ("Network", "id:net"),
+        ] {
+            if ui.selectable_label(st.filter == q, tr(label)).clicked() {
+                st.filter = q.to_string();
+            }
         }
     });
-    if on {
-        plotted.insert(s.id.clone());
-    } else {
-        plotted.remove(&s.id);
-    }
-    let lim = (s.unit == Unit::Celsius).then(|| limit_for(&s.group, tjmax)).flatten();
-    for x in [s.current, s.min, s.max, s.avg] {
-        let mut t = RichText::new(fmt(x, s.unit)).monospace();
-        if let Some(c) = lim.and_then(|l| tone_color(ui, temp_tone(x, l))) {
-            t = t.color(c);
+    ui.add_space(4.0);
+}
+
+fn hash(s: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    s.hash(&mut h);
+    h.finish()
+}
+
+/// The rows the table shows right now (filter applied) as CSV, base units.
+fn export_view(mon: &Monitor, tel: &Telemetry) -> Result<PathBuf, String> {
+    let series = tel.series_with(|_| false);
+    let cols: Vec<Column<Series>> = vec![
+        Column::new("sensor", "", 0.0, |s: &Series| Cell::Text(s.label.clone())),
+        Column::new("unit", "", 0.0, |s: &Series| Cell::Text(units::get().suffix(s.unit).into())),
+        Column::new("id", "", 0.0, |s: &Series| Cell::Text(s.id.clone())),
+    ];
+    let shown = super::table::view(&series, &cols, &mon.view.table, None);
+    let q = |s: &str| {
+        let s = cpuzeez_core::report::spreadsheet_safe(s);
+        if s.contains([',', '"', '\n']) { format!("\"{}\"", s.replace('"', "\"\"")) } else { s.into_owned() }
+    };
+    let mut out = String::from("group,sensor,id,unit,current,min,max,avg\n");
+    for it in shown {
+        if let super::table::Item::Row(i) = it {
+            let s = &series[i];
+            out += &format!(
+                "{},{},{},{},{},{},{},{}\n",
+                q(&s.group),
+                q(&s.label),
+                q(&s.id),
+                s.unit.suffix(),
+                s.current,
+                s.min,
+                s.max,
+                s.avg
+            );
         }
-        ui.label(t);
     }
-    ui.end_row();
+    let dir = log_path()
+        .and_then(|p| p.parent().map(Path::to_path_buf))
+        .ok_or_else(|| tr("No settings folder").to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let stamp = cpuzeez_core::metrics::iso8601(std::time::SystemTime::now()).replace([':', '.'], "-");
+    let path = dir.join(format!("sensors-view-{stamp}.csv"));
+    std::fs::write(&path, out).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(path)
 }
 
 /// Header actions (right-aligned, so added right to left).
 fn toolbar_actions(ui: &mut egui::Ui, mon: &mut Monitor, tel: &Telemetry) {
+    if ui.button(format!("{}  {}", icon::EXPORT, tr("Export view"))).clicked() {
+        mon.view.status = match export_view(mon, tel) {
+            Ok(p) => super::i18n::trf("Saved {}", &[&p.display()]),
+            Err(e) => e,
+        };
+    }
     if tel.csv_path().is_some() {
         if ui.button(format!("{}  {}", icon::STOP, tr("Stop CSV log"))).clicked() {
             tel.stop_csv();
@@ -595,11 +826,6 @@ fn toolbar_actions(ui: &mut egui::Ui, mon: &mut Monitor, tel: &Telemetry) {
 
 fn toolbar(ui: &mut egui::Ui, mon: &mut Monitor, tel: &Telemetry) {
     ui.horizontal_wrapped(|ui| {
-        ui.add(
-            egui::TextEdit::singleline(&mut mon.view.filter)
-                .hint_text(format!("{}  {}", icon::MAGNIFYING_GLASS, tr("Search…")))
-                .desired_width(180.0),
-        );
         ui.label(tr("Sampling"));
         let cur = mon.settings.sample_ms;
         egui::ComboBox::from_id_salt("sample-period").selected_text(format!("{} s", cur as f64 / 1000.0)).show_ui(
@@ -666,55 +892,23 @@ fn charts(ui: &mut egui::Ui, series: &[Series], plotted: &BTreeSet<String>, span
     });
 }
 /// `settings::dir()/logs/cpuzeez-YYYYmmdd-HHMMSS.csv` (local time).
-fn log_path() -> Option<PathBuf> {
+pub(super) fn log_path() -> Option<PathBuf> {
     let dir = crate::settings::dir()?.join("logs");
     std::fs::create_dir_all(&dir).ok()?;
     Some(dir.join(format!("{}-{}.csv", crate::NAME, local_stamp())))
 }
 
+/// Local time as "HH:MM:SS" (the layouts' Clock widget).
+pub fn local_time() -> String {
+    let s = local_stamp(); // YYYYMMDD-HHMMSS
+    match (s.get(9..11), s.get(11..13), s.get(13..15)) {
+        (Some(h), Some(m), Some(sec)) => format!("{h}:{m}:{sec}"),
+        _ => String::new(),
+    }
+}
+
 fn local_stamp() -> String {
-    #[cfg(unix)]
-    {
-        // SAFETY: localtime_r only writes into the zeroed tm we pass.
-        let tm = unsafe {
-            let t = libc::time(std::ptr::null_mut());
-            let mut tm: libc::tm = std::mem::zeroed();
-            libc::localtime_r(&t, &mut tm);
-            tm
-        };
-        format!(
-            "{:04}{:02}{:02}-{:02}{:02}{:02}",
-            tm.tm_year + 1900,
-            tm.tm_mon + 1,
-            tm.tm_mday,
-            tm.tm_hour,
-            tm.tm_min,
-            tm.tm_sec
-        )
-    }
-    #[cfg(windows)]
-    {
-        #[repr(C)]
-        #[derive(Default)]
-        struct SystemTime {
-            year: u16,
-            month: u16,
-            dow: u16,
-            day: u16,
-            hour: u16,
-            min: u16,
-            sec: u16,
-            ms: u16,
-        }
-        #[link(name = "kernel32")]
-        unsafe extern "system" {
-            fn GetLocalTime(t: *mut SystemTime);
-        }
-        let mut t = SystemTime::default();
-        // SAFETY: GetLocalTime fills the struct we own.
-        unsafe { GetLocalTime(&mut t) };
-        format!("{:04}{:02}{:02}-{:02}{:02}{:02}", t.year, t.month, t.day, t.hour, t.min, t.sec)
-    }
+    cpuzeez_platform::os::local_stamp()
 }
 
 fn open_folder(p: &Path) {

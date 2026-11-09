@@ -4,27 +4,46 @@
 // Style-only lints; the tuple/type shapes are local to one function each.
 #![allow(clippy::type_complexity, clippy::field_reassign_with_default)]
 
+mod access;
+mod applog;
 mod battery;
 mod bench;
+mod benchkit;
 mod bios;
 mod chipset;
-mod config;
 mod cpu;
+mod cpusuite;
+mod data;
 mod diff;
+mod diskbench;
+mod drivetest;
+mod executor;
 mod gpu;
 #[cfg(feature = "gui")]
+mod gpubench;
+#[cfg(feature = "gui")]
 mod gui;
+mod health;
 mod history;
-mod hw;
+mod latency;
+mod live_frames;
+#[cfg(target_os = "linux")]
+mod live_mangohud;
 mod membench;
+mod memplus;
+mod memtest;
 mod network;
 mod npu;
-mod os;
 mod pci;
-mod report;
+mod peripherals;
+mod procs;
+#[cfg(test)]
+mod robustness;
 mod sensors;
 mod settings;
 mod smbios;
+#[cfg(feature = "soak")]
+mod soak;
 mod software;
 mod spd;
 mod storage;
@@ -36,10 +55,17 @@ mod usb;
 use report::{Section, f, section};
 use std::sync::OnceLock;
 
-/// Binary, package and file-name stem.
-pub const NAME: &str = "cpuzeez";
-/// Name shown to people (window title, About, report headers).
-pub const DISPLAY_NAME: &str = "CpuZeeZ";
+// Pure logic lives in cpuzeez-core (docs/adr/0011); these keep the old `crate::` paths.
+pub use cpuzeez_core::{DISPLAY_NAME, NAME, config, report};
+pub use cpuzeez_platform::{hw, os};
+
+/// Tests that load every core (benchmarks, stress) or time themselves take
+/// turns: run in parallel they starve each other and fail on a busy runner.
+#[cfg(test)]
+pub fn heavy_test() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const REPO_URL: &str = env!("CARGO_PKG_REPOSITORY");
 
@@ -60,6 +86,18 @@ impl Ctx {
 }
 
 /// Every report section, in CPU-Z's order.
+/// Writes to stdout. A reader that stops early (`cpuzeez -sensors | head`)
+/// closes the pipe: that's a normal end of the output, not a crash.
+pub fn out(s: &str) {
+    use std::io::Write;
+    let mut o = std::io::stdout().lock();
+    if let Err(e) = o.write_all(s.as_bytes()).and_then(|()| o.flush())
+        && e.kind() == std::io::ErrorKind::BrokenPipe
+    {
+        std::process::exit(0);
+    }
+}
+
 pub fn collect(ctx: &Ctx) -> Vec<Section> {
     let mut r = vec![section(
         "Binaries",
@@ -93,21 +131,25 @@ enum Out {
 }
 
 const USAGE: &str = "usage: cpuzeez [-txt=FILE] [-html=FILE] [-json=FILE] [-jsontxt=FILE] [-console] \
-[-bench] [-membench] [-core=ID] [-coremask=HEX] [-sensors] [-log=FILE[,SECONDS]] [-diff=OLD.json,NEW.json|now] [-checkupdate] [-screenshots=DIR]\nWith no output option the GUI opens.";
+[-bench] [-membench] [-core=ID] [-coremask=HEX] [-sensors] [-log=FILE[,SECONDS]] [-diff=OLD.json,NEW.json|now] [-checkupdate[=stable|snapshot|beta|alpha]] [-screenshots=DIR]\nWith no output option the GUI opens.";
 
 fn main() {
+    applog::install_panic_hook();
     let mut outs = Vec::new();
     let (mut console, mut bench, mut core, mut coremask) = (false, false, None, None);
     let mut shots: Option<std::path::PathBuf> = None;
+    let mut handoff = None;
     for a in std::env::args().skip(1) {
         let (k, v) = a.split_once('=').map_or((a.as_str(), ""), |(k, v)| (k, v));
         match k.to_ascii_lowercase().trim_start_matches('-') {
+            // Per-action elevation: runs one allow-listed action and exits (executor.rs).
+            "elevated-op" => std::process::exit(executor::elevated_main(v)),
             "txt" => outs.push(Out::Txt(v.into())),
             "html" => outs.push(Out::Html(v.into())),
             "json" => outs.push(Out::Json(v.into())),
             "jsontxt" => outs.push(Out::JsonTxt(v.into())),
             "console" => console = true,
-            "checkupdate" => return update::cli(),
+            "checkupdate" => return update::cli(v),
             "sensors" => return telemetry::cli_once(&Ctx::new(config::Config::load())),
             "membench" => return membench::cli(&Ctx::new(config::Config::load())),
             "diff" => return diff::cli(&Ctx::new(config::Config::load()), v),
@@ -119,6 +161,8 @@ fn main() {
             "core" => core = v.parse::<usize>().ok(),
             "coremask" => coremask = u64::from_str_radix(v.trim_start_matches("0x"), 16).ok(),
             "screenshots" => shots = Some(if v.is_empty() { "screenshots" } else { v }.into()),
+            // Set by "Restart as administrator" on Linux; see platform::elevation.
+            "elevated-handoff" => handoff = Some(v.to_string()),
             "h" | "help" | "?" => return println!("{USAGE}"),
             _ => return eprintln!("unknown option {a}\n{USAGE}"),
         }
@@ -135,6 +179,16 @@ fn main() {
         #[cfg(feature = "gui")]
         {
             os::hide_own_console();
+            applog::info(&format!(
+                "start {DISPLAY_NAME} {VERSION} on {} {}, hardware access: {}, elevated: {}",
+                std::env::consts::OS,
+                std::env::consts::ARCH,
+                ctx.hw.name(),
+                cpuzeez_platform::elevation::is_elevated()
+            ));
+            if let Some(m) = &handoff {
+                cpuzeez_platform::elevation::signal_handoff(m);
+            }
             return gui::run(ctx, shots);
         }
         #[cfg(not(feature = "gui"))]
@@ -146,7 +200,7 @@ fn main() {
 
     let rep = collect(&ctx);
     if console {
-        print!("{}", report::to_txt(&rep));
+        out(&report::to_txt(&rep));
     }
     for o in outs {
         let (name, ext, body) = match o {

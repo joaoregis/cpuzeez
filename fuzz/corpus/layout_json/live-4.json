@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "name": "Overclocker",
+  "direction": "grid",
+  "columns": 2,
+  "style": {
+    "scale": 1.0,
+    "opacity": 0.85,
+    "outline": false,
+    "corner": 8,
+    "padding": 8,
+    "theme": "follow"
+  },
+  "widgets": [
+    {
+      "kind": "label-value",
+      "metric": "@cpu_clock",
+      "label": "CPU clock",
+      "decimals": null,
+      "thresholds": [],
+      "min": 0.0,
+      "max": 100.0
+    },
+    {
+      "kind": "label-value",
+      "metric": "@gpu_clock",
+      "label": "GPU clock",
+      "decimals": null,
+      "thresholds": [],
+      "min": 0.0,
+      "max": 100.0
+    },
+    {
+      "kind": "label-value",
+      "metric": "@cpu_vid",
+      "label": "VID",
+      "decimals": null,
+      "thresholds": [],
+      "min": 0.0,
+      "max": 100.0
+    },
+    {
+      "kind": "label-value",
+      "metric": "@cpu_power",
+      "label": "CPU power",
+      "decimals": null,
+      "thresholds": [],
+      "min": 0.0,
+      "max": 100.0
+    },
+    {
+      "kind": "label-value",
+      "metric": "@cpu_temp",
+      "label": "CPU",
+      "decimals": null,
+      "thresholds": [
+        {
+          "at": 85.0,
+          "tone": "warning"
+        },
+        {
+          "at": 95.0,
+          "tone": "danger"
+        }
+      ],
+      "min": 0.0,
+      "max": 100.0
+    },
+    {
+      "kind": "label-value",
+      "metric": "@gpu_temp",
+      "label": "GPU",
+      "decimals": null,
+      "thresholds": [
+        {
+          "at": 80.0,
+          "tone": "warning"
+        },
+        {
+          "at": 90.0,
+          "tone": "danger"
+        }
+      ],
+      "min": 0.0,
+      "max": 100.0
+    },
+    {
+      "kind": "label-value",
+      "metric": "@gpu_power",
+      "label": "GPU power",
+      "decimals": null,
+      "thresholds": [],
+      "min": 0.0,
+      "max": 100.0
+    },
+    {
+      "kind": "label-value",
+      "metric": "frames/fps",
+      "label": "FPS",
+      "decimals": null,
+      "thresholds": [],
+      "min": 0.0,
+      "max": 100.0
+    },
+    {
+      "kind": "throttle",
+      "metric": null,
+      "label": null,
+      "decimals": null,
+      "thresholds": [],
+      "min": 0.0,
+      "max": 100.0
+    }
+  ]
+}

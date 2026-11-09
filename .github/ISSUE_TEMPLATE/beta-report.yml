@@ -1,0 +1,42 @@
+name: Beta report
+description: Something went wrong, or felt wrong, in a pre-release (alpha, beta or release candidate)
+title: "Beta: <what happened>"
+labels: ["beta"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for testing a pre-release. Nothing is sent from your computer: you paste what you choose below.
+        The update channel is in *Settings ▸ Updates*; `cpuzeez -checkupdate=beta` shows what it would offer.
+  - type: input
+    id: version
+    attributes:
+      label: CPU ZeeZ version
+      description: *About* page, or `cpuzeez -checkupdate`.
+      placeholder: "1.0.0-beta.8"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: ["Windows 11", "Windows 10", "Ubuntu / Debian", "Arch", "Other Linux", "macOS (Apple Silicon)", "macOS (Intel)"]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+      description: Steps to see it again help most. A screenshot is welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: where
+    attributes:
+      label: Where in the app
+      description: Page, tab, overlay, installer step… Whether you were running as administrator.
+  - type: textarea
+    id: bundle
+    attributes:
+      label: Diagnostics (optional)
+      description: "*Settings ▸ Privacy & data ▸ Create diagnostics bundle* makes a folder with the logs and a report. Read it first; paste only what you are comfortable sharing."

@@ -2,10 +2,10 @@
 //! Each OS backend fills a `Probe`; this file owns the model and the report
 //! layout (CPU-Z's field names and value formats).
 
-pub mod db;
+pub use cpuzeez_core::gpu::db;
 #[cfg(any(windows, target_os = "linux"))]
 pub(crate) mod dl;
-pub mod edid;
+pub use cpuzeez_core::gpu::edid;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
@@ -68,6 +68,8 @@ pub struct Adapter {
     pub link: Link,
     pub link_max: Link,
     pub pci: Option<Bdf>,
+    /// Windows: DXGI adapter LUID ([low, high]); ties performance counters to it.
+    pub luid: Option<[u32; 2]>,
     pub root: Option<Bdf>,
     pub perf: Vec<Perf>,
     pub driver_version: Option<String>,
@@ -143,6 +145,11 @@ impl Live {
 
 static PROBE: OnceLock<Probe> = OnceLock::new();
 
+/// Monitors' EDIDs (S1-G07: their refresh range shows VRR support).
+pub fn monitors(ctx: &Ctx) -> &'static [Monitor] {
+    &probe(ctx).monitors
+}
+
 fn probe(ctx: &Ctx) -> &'static Probe {
     PROBE.get_or_init(|| {
         if !ctx.cfg.display {
@@ -199,11 +206,6 @@ fn fill_from_db(a: &mut Adapter) {
 /// Every display adapter (GUI Graphics tab).
 pub fn adapters(ctx: &Ctx) -> &'static [Adapter] {
     &probe(ctx).adapters
-}
-
-/// Every attached monitor with a readable EDID.
-pub fn monitors(ctx: &Ctx) -> &'static [Monitor] {
-    &probe(ctx).monitors
 }
 
 /// Live clocks / temperatures / fan / power / load / throttling per adapter

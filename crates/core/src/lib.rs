@@ -1,0 +1,67 @@
+//! cpuzeez-core: domain types and pure logic (decoders, the report model).
+//!
+//! Nothing here calls the OS or the GUI, so every module is testable on any
+//! platform with recorded data. Per-OS collection lives in the `cpuzeez`
+//! binary crate (docs/adr/0011).
+
+#![forbid(unsafe_code)]
+
+/// Binary, package and file-name stem.
+pub const NAME: &str = "cpuzeez";
+/// Name shown to people (window title, About, report headers).
+pub const DISPLAY_NAME: &str = "CPU ZeeZ";
+/// The data folder's name on Windows and macOS (`%APPDATA%\CpuZeeZ`). It keeps the old spelling
+/// so settings, history and sessions of existing installs are found after the rename.
+pub const DATA_DIR_NAME: &str = "CpuZeeZ";
+
+pub mod acpi;
+pub mod actions;
+pub mod alerts;
+pub mod availability;
+pub mod bottleneck;
+pub mod config;
+pub mod detail;
+pub mod diskio;
+pub mod frames;
+pub mod health;
+pub mod layout;
+pub mod live;
+pub mod mangohud;
+pub mod memory;
+pub mod metrics;
+pub mod netio;
+pub mod pci;
+pub mod procs;
+pub mod query;
+pub mod report;
+#[cfg(test)]
+mod robustness;
+pub mod screens;
+pub mod services;
+pub mod session;
+pub mod smbios;
+pub mod startup;
+#[doc(hidden)]
+pub mod testkit;
+pub mod units;
+
+pub mod cpu {
+    pub mod db;
+    pub mod limits;
+}
+pub mod gpu {
+    pub mod db;
+    pub mod edid;
+    pub mod engines;
+}
+pub mod sensors {
+    pub mod amd_pm;
+}
+pub mod spd {
+    pub mod decode;
+    pub mod jep106;
+}
+pub mod storage {
+    pub mod identify;
+    pub mod smart;
+}

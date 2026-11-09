@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "name": "Compact",
+  "direction": "horizontal",
+  "columns": 2,
+  "style": {
+    "scale": 1.0,
+    "opacity": 0.85,
+    "outline": false,
+    "corner": 8,
+    "padding": 8,
+    "theme": "follow"
+  },
+  "widgets": [
+    {
+      "kind": "label-value",
+      "metric": "frames/fps",
+      "label": "FPS",
+      "decimals": null,
+      "thresholds": [],
+      "min": 0.0,
+      "max": 100.0
+    },
+    {
+      "kind": "label-value",
+      "metric": "frames/low1",
+      "label": "1% low",
+      "decimals": null,
+      "thresholds": [],
+      "min": 0.0,
+      "max": 100.0
+    },
+    {
+      "kind": "label-value",
+      "metric": "@gpu_temp",
+      "label": "GPU",
+      "decimals": null,
+      "thresholds": [
+        {
+          "at": 80.0,
+          "tone": "warning"
+        },
+        {
+          "at": 90.0,
+          "tone": "danger"
+        }
+      ],
+      "min": 0.0,
+      "max": 100.0
+    },
+    {
+      "kind": "label-value",
+      "metric": "@gpu_load",
+      "label": "GPU %",
+      "decimals": null,
+      "thresholds": [],
+      "min": 0.0,
+      "max": 100.0
+    },
+    {
+      "kind": "label-value",
+      "metric": "@cpu_temp",
+      "label": "CPU",
+      "decimals": null,
+      "thresholds": [
+        {
+          "at": 85.0,
+          "tone": "warning"
+        },
+        {
+          "at": 95.0,
+          "tone": "danger"
+        }
+      ],
+      "min": 0.0,
+      "max": 100.0
+    },
+    {
+      "kind": "label-value",
+      "metric": "@cpu_load",
+      "label": "CPU %",
+      "decimals": null,
+      "thresholds": [],
+      "min": 0.0,
+      "max": 100.0
+    },
+    {
+      "kind": "label-value",
+      "metric": "@mem_load",
+      "label": "RAM",
+      "decimals": null,
+      "thresholds": [
+        {
+          "at": 90.0,
+          "tone": "warning"
+        }
+      ],
+      "min": 0.0,
+      "max": 100.0
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=CpuZeeZ
+Name=CPU ZeeZ
 GenericName=System Information
 Comment=CPU, caches, mainboard, memory, SPD and GPU information
 Exec=cpuzeez

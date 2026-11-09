@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         Thanks! See [docs/boards.md](https://github.com/joaoregis/cpuzeez/blob/main/docs/boards.md) for the details.
-        Run CpuZeeZ elevated with `CPUZEEZ_EC_DUMP=1 cpuzeez -txt=board` (Windows: `set CPUZEEZ_EC_DUMP=1` first, as administrator with PawnIO).
+        Run CPU ZeeZ elevated with `CPUZEEZ_EC_DUMP=1 cpuzeez -txt=board` (Windows: `set CPUZEEZ_EC_DUMP=1` first, as administrator with PawnIO).
   - type: input
     id: board
     attributes:
@@ -50,5 +50,5 @@ body:
   - type: input
     id: version
     attributes:
-      label: CpuZeeZ version and OS
+      label: CPU ZeeZ version and OS
       placeholder: "0.2.0, Windows 11 24H2"

@@ -16,8 +16,28 @@
 // Parsers stay OS-neutral so their unit tests run on every host.
 #![allow(dead_code)]
 
-mod smart;
-pub use smart::*;
+pub use cpuzeez_core::storage::smart::*;
+/// `smartctl -j -a <dev>` when smartmontools is installed. Exit bits 0/1 mean
+/// the command or the device open failed; higher bits only report findings.
+#[cfg(unix)]
+pub fn smartctl(dev: &str) -> Option<Smart> {
+    for exe in [
+        "smartctl",
+        "/usr/sbin/smartctl",
+        "/usr/local/sbin/smartctl",
+        "/opt/homebrew/bin/smartctl",
+        "/usr/local/bin/smartctl",
+    ] {
+        let Ok(o) = std::process::Command::new(exe).args(["-j", "-a", dev]).output() else { continue };
+        if o.status.code().is_some_and(|c| c & 3 == 0)
+            && let Ok(v) = serde_json::from_slice::<serde_json::Value>(&o.stdout)
+        {
+            return from_smartctl(&v);
+        }
+        return None; // found smartctl but it couldn't read this device
+    }
+    None
+}
 
 use crate::Ctx;
 use crate::report::{Node, Section, f, gv, section};
@@ -52,6 +72,8 @@ pub struct Drive {
     pub health: Vec<(String, String)>,
     /// SMART / NVMe health (only when `cfg.smart` and the OS lets us read it).
     pub smart: Option<Smart>,
+    /// Raw NVMe Identify Controller (4096 B) or ATA IDENTIFY DEVICE (512 B).
+    pub identify: Option<Vec<u8>>,
 }
 
 const BUS: [&str; 21] = [
@@ -235,6 +257,7 @@ pub(crate) mod win {
     pub const KEY_LINK_WIDTH: PropKey = PropKey(PCI_PROPS, 10);
 
     pub const DRP_DEVICEDESC: u32 = 1;
+    pub const DRP_FRIENDLYNAME: u32 = 0xD;
     pub const DRP_COMPATIBLEIDS: u32 = 3;
     pub const DRP_BUSNUMBER: u32 = 0x16;
     pub const DRP_ADDRESS: u32 = 0x1D;
@@ -272,6 +295,56 @@ pub(crate) mod win {
             len: *mut u32,
             fl: u32,
         ) -> u32;
+        fn CM_Get_First_Log_Conf(lc: *mut usize, dn: u32, fl: u32) -> u32;
+        fn CM_Get_Next_Res_Des(rd: *mut usize, cur: usize, ty: u32, got: *mut u32, fl: u32) -> u32;
+        fn CM_Get_Res_Des_Data_Size(size: *mut u32, rd: usize, fl: u32) -> u32;
+        fn CM_Get_Res_Des_Data(rd: usize, buf: *mut u8, len: u32, fl: u32) -> u32;
+        fn CM_Free_Res_Des_Handle(rd: usize) -> u32;
+        fn CM_Free_Log_Conf_Handle(lc: usize) -> u32;
+    }
+
+    /// (base, size) of every memory range the device was given (its BARs, as
+    /// Device Manager's Resources tab lists them). No admin.
+    pub fn memory_ranges(dn: u32) -> Vec<(u64, u64)> {
+        const ALLOC_LOG_CONF: u32 = 2;
+        // ResType_Mem (1) and ResType_MemLarge (7, ranges above 4 GiB).
+        let mut out = Vec::new();
+        unsafe {
+            let mut lc = 0usize;
+            if CM_Get_First_Log_Conf(&mut lc, dn, ALLOC_LOG_CONF) != 0 {
+                return out;
+            }
+            for ty in [1u32, 7] {
+                let mut cur = lc;
+                loop {
+                    let (mut rd, mut got) = (0usize, 0u32);
+                    if CM_Get_Next_Res_Des(&mut rd, cur, ty, &mut got, 0) != 0 {
+                        break;
+                    }
+                    let mut size = 0u32;
+                    if CM_Get_Res_Des_Data_Size(&mut size, rd, 0) == 0 && size >= 24 {
+                        let mut b = vec![0u8; size as usize];
+                        if CM_Get_Res_Des_Data(rd, b.as_mut_ptr(), size, 0) == 0 {
+                            // MEM_DES / MEM_LARGE_DES: Count(4), Type(4), Alloc_Base(8), Alloc_End(8).
+                            let base = u64::from_le_bytes(b[8..16].try_into().unwrap_or_default());
+                            let end = u64::from_le_bytes(b[16..24].try_into().unwrap_or_default());
+                            if end > base {
+                                out.push((base, end - base + 1));
+                            }
+                        }
+                    }
+                    if cur != lc {
+                        CM_Free_Res_Des_Handle(cur);
+                    }
+                    cur = rd;
+                }
+                if cur != lc {
+                    CM_Free_Res_Des_Handle(cur);
+                }
+            }
+            CM_Free_Log_Conf_Handle(lc);
+        }
+        out
     }
 
     #[link(name = "kernel32")]
@@ -383,6 +456,14 @@ pub(crate) mod win {
         reg_prop(dn, p).filter(|b| b.len() >= 4).map(|b| le32(&b, 0))
     }
 
+    /// A device property's raw bytes (any type up to 64 bytes).
+    pub fn prop_bytes(dn: u32, key: &PropKey) -> Option<Vec<u8>> {
+        let mut buf = [0u8; 64];
+        let (mut ty, mut len) = (0u32, 64u32);
+        let r = unsafe { CM_Get_DevNode_PropertyW(dn, key, &mut ty, buf.as_mut_ptr(), &mut len, 0) };
+        (r == 0).then(|| buf[..len as usize].to_vec())
+    }
+
     pub fn prop_u32(dn: u32, key: &PropKey) -> Option<u32> {
         let mut buf = [0u8; 8];
         let (mut ty, mut len) = (0u32, 8u32);
@@ -440,7 +521,7 @@ pub(crate) mod win {
 }
 
 #[cfg(windows)]
-mod imp {
+pub(crate) mod imp {
     use super::win::*;
     use super::{Drive, Volume, ata_identify, controller_class, controller_line, link_line};
     use crate::Ctx;
@@ -461,6 +542,11 @@ mod imp {
     /// (0xEC) or SMART (0xB0) READ DATA (0xD0) / READ THRESHOLDS (0xD1).
     /// Needs a read/write handle, i.e. admin.
     fn ata_cmd(h: &Handle, command: u8, features: u8) -> Option<Vec<u8>> {
+        ata_cmd_lba(h, command, features, 0)
+    }
+
+    /// [`ata_cmd`] with LBA low set (SMART READ LOG takes the log address there).
+    pub(crate) fn ata_cmd_lba(h: &Handle, command: u8, features: u8, lba_lo: u8) -> Option<Vec<u8>> {
         const IOCTL_ATA_PASS_THROUGH: u32 = 0x4D02C;
         // ATA_PASS_THROUGH_EX: DataBufferOffset is a ULONG_PTR.
         let (hdr, off_at) = if cfg!(target_pointer_width = "64") { (48, 24) } else { (40, 20) };
@@ -474,12 +560,69 @@ mod imp {
         let tf = &mut q[hdr - 8..hdr];
         tf[0] = features;
         tf[1] = 1;
+        tf[2] = lba_lo;
         if command == 0xB0 {
             (tf[3], tf[4]) = (0x4F, 0xC2); // SMART signature
         }
         tf[6] = command;
         let out = h.ioctl(IOCTL_ATA_PASS_THROUGH, &q, q.len())?;
         out.get(hdr..hdr + 512).filter(|d| d.iter().any(|&b| b != 0)).map(<[u8]>::to_vec)
+    }
+
+    /// A non-data SMART command (SMART EXECUTE OFF-LINE IMMEDIATE: features
+    /// D4h, the subcommand in LBA low). Needs a read/write handle (admin).
+    pub(crate) fn ata_smart_nodata(h: &Handle, features: u8, lba_lo: u8) -> Result<(), String> {
+        const IOCTL_ATA_PASS_THROUGH: u32 = 0x4D02C;
+        let (hdr, off_at) = if cfg!(target_pointer_width = "64") { (48, 24) } else { (40, 20) };
+        let mut q = vec![0u8; hdr];
+        q[0..2].copy_from_slice(&(hdr as u16).to_le_bytes());
+        q[2] = 0x1; // ATA_FLAGS_DRDY_REQUIRED, no data
+        q[12..16].copy_from_slice(&10u32.to_le_bytes());
+        q[off_at..off_at + 4].copy_from_slice(&(hdr as u32).to_le_bytes());
+        let tf = &mut q[hdr - 8..hdr];
+        (tf[0], tf[2], tf[3], tf[4], tf[6]) = (features, lba_lo, 0x4F, 0xC2, 0xB0);
+        let out =
+            h.ioctl(IOCTL_ATA_PASS_THROUGH, &q, q.len()).ok_or_else(|| std::io::Error::last_os_error().to_string())?;
+        // Status register (CurrentTaskFile[6] on return): ERR bit 0.
+        if out.get(hdr - 2).is_some_and(|s| s & 1 != 0) {
+            return Err("the drive rejected the command".into());
+        }
+        Ok(())
+    }
+
+    /// An NVMe admin command without data through IOCTL_STORAGE_PROTOCOL_COMMAND
+    /// (Windows 10 1903+ lets Device Self-test through). Needs admin.
+    pub(crate) fn nvme_admin_nodata(h: &Handle, opcode: u8, nsid: u32, cdw10: u32) -> Result<(), String> {
+        const IOCTL_STORAGE_PROTOCOL_COMMAND: u32 = 0x2DD3C0;
+        // STORAGE_PROTOCOL_COMMAND (80 bytes) + the 64-byte NVMe command.
+        let mut q = vec![0u8; 80 + 64];
+        let set = |q: &mut Vec<u8>, off: usize, v: u32| q[off..off + 4].copy_from_slice(&v.to_le_bytes());
+        set(&mut q, 0, 1); // Version
+        set(&mut q, 4, 80); // Length
+        set(&mut q, 8, 3); // ProtocolTypeNvme
+        set(&mut q, 12, 0x8000_0000); // STORAGE_PROTOCOL_COMMAND_FLAG_ADAPTER_REQUEST
+        set(&mut q, 24, 64); // CommandLength
+        set(&mut q, 40, 30); // TimeOutValue, s
+        set(&mut q, 56, 1); // CommandSpecific: admin command
+        q[80] = opcode;
+        set(&mut q, 84, nsid);
+        set(&mut q, 80 + 40, cdw10);
+        let out = h
+            .ioctl(IOCTL_STORAGE_PROTOCOL_COMMAND, &q, q.len())
+            .ok_or_else(|| std::io::Error::last_os_error().to_string())?;
+        match le32(&out, 16) {
+            1 => Ok(()),
+            5 => Err("busy: a test is already running".into()),
+            8 => Err("throttled: Windows allows a new self-test about 10 minutes after the last one".into()),
+            0xFF => Err("this drive or driver doesn't support it".into()),
+            s => Err(format!("the drive answered status {s}")),
+        }
+    }
+
+    /// NVMe log page `lid` (`len` bytes) without admin.
+    pub(crate) fn nvme_log_page(h: &Handle, lid: u32, len: u32) -> Option<Vec<u8>> {
+        // StorageDeviceProtocolSpecificProperty, ProtocolTypeNvme, NVMeDataTypeLogPage.
+        protocol(h, 50, 3, 2, lid, len)
     }
 
     /// SMART_RCV_DRIVE_DATA (legacy SMART IOCTL, admin): 0xD0 data / 0xD1 thresholds.
@@ -609,6 +752,7 @@ mod imp {
                     d.serial = ascii(&id[4..24]).or(d.serial);
                     d.name = ascii(&id[24..64]).unwrap_or(d.name);
                     d.revision = ascii(&id[64..72]).or(d.revision);
+                    d.identify = Some(id);
                 }
                 if ctx.cfg.smart {
                     let log = protocol(&h, 50, 3, 2, 2, 512).or_else(|| protocol(&h, 49, 3, 2, 2, 512));
@@ -625,6 +769,7 @@ mod imp {
                     if rpm == Some(1) {
                         d.ssd = true;
                     }
+                    d.identify = Some(id);
                 }
                 if ctx.cfg.smart && d.bus != 7 {
                     d.smart = ata_smart(&h, rw.as_ref());
@@ -704,7 +849,7 @@ pub fn unescape_mount(s: &str) -> String {
 }
 
 #[cfg(target_os = "linux")]
-mod imp {
+pub(crate) mod imp {
     use super::*;
     use crate::os::{read_trim, read_u64};
     use std::os::unix::fs::OpenOptionsExt;
@@ -794,22 +939,38 @@ mod imp {
 
     /// Get Log Page, SMART / Health (02h), controller-wide. Needs root.
     fn nvme_log(ctrl: &str) -> Option<Vec<u8>> {
+        nvme_log_page(ctrl, 0x02, 512)
+    }
+
+    /// Get Log Page `lid` (`len` bytes, a multiple of 4). Needs root.
+    pub(crate) fn nvme_log_page(ctrl: &str, lid: u32, len: u32) -> Option<Vec<u8>> {
+        let mut buf = vec![0u8; len as usize];
+        nvme_admin(ctrl, 0x02, (((len / 4 - 1) & 0xFFFF) << 16) | lid, Some(&mut buf)).ok()?;
+        Some(buf)
+    }
+
+    /// An NVMe admin command on controller `ctrl` ("nvme0"), all namespaces.
+    pub(crate) fn nvme_admin(ctrl: &str, opcode: u8, cdw10: u32, buf: Option<&mut [u8]>) -> Result<u32, String> {
         use std::os::fd::AsRawFd;
         const NVME_IOCTL_ADMIN_CMD: u32 = 0xC048_4E41; // _IOWR('N', 0x41, 72 bytes)
-        let f = std::fs::File::open(format!("/dev/{ctrl}")).ok()?;
-        let mut buf = vec![0u8; 512];
+        let f = std::fs::File::open(format!("/dev/{ctrl}")).map_err(|e| e.to_string())?;
+        let (addr, len) = buf.map_or((0, 0), |b| (b.as_mut_ptr() as u64, b.len() as u32));
         let mut c = NvmeAdminCmd {
-            opcode: 0x02,
+            opcode,
             nsid: 0xFFFF_FFFF,
-            addr: buf.as_mut_ptr() as u64,
-            data_len: 512,
-            cdw10: (127 << 16) | 0x02, // NUMDL = 512/4 - 1, LID 02h
+            addr,
+            data_len: len,
+            cdw10,
             timeout_ms: 3000,
             ..NvmeAdminCmd::default()
         };
         // SAFETY: c and buf outlive the call; the kernel writes at most data_len bytes.
         let r = unsafe { libc::ioctl(f.as_raw_fd(), NVME_IOCTL_ADMIN_CMD as _, &mut c) };
-        (r == 0).then_some(buf)
+        match r {
+            0 => Ok(c.result),
+            r if r < 0 => Err(std::io::Error::last_os_error().to_string()),
+            status => Err(format!("the drive answered status {status:#x}")),
+        }
     }
 
     /// struct sg_io_hdr (scsi/sg.h).
@@ -842,17 +1003,25 @@ mod imp {
     /// SMART READ DATA / READ THRESHOLDS through SCSI ATA PASS-THROUGH(16)
     /// (SAT, PIO data-in, 1 sector). Needs root (O_RDWR on the disk node).
     fn sat_smart_cmd(f: &std::fs::File, features: u8) -> Option<Vec<u8>> {
+        sat_cmd(f, features, 0, true)
+    }
+
+    /// A SMART command through ATA PASS-THROUGH(16): PIO data-in of one sector
+    /// (`data`), or non-data. LBA low carries the log address / subcommand.
+    pub(crate) fn sat_cmd(f: &std::fs::File, features: u8, lba_lo: u8, data: bool) -> Option<Vec<u8>> {
         use std::os::fd::AsRawFd;
         const SG_IO: u32 = 0x2285;
-        let cdb: [u8; 16] = [0x85, 4 << 1, 0x0E, 0, features, 0, 1, 0, 0, 0, 0x4F, 0, 0xC2, 0, 0xB0, 0];
+        let (proto, t) = if data { (4u8, 0x0Eu8) } else { (3, 0x20) }; // PIO in / non-data (+CK_COND)
+        let cdb: [u8; 16] =
+            [0x85, proto << 1, t, 0, features, 0, u8::from(data), 0, lba_lo, 0, 0x4F, 0, 0xC2, 0, 0xB0, 0];
         let (mut buf, mut sense) = (vec![0u8; 512], [0u8; 32]);
         let mut h = SgIoHdr {
             interface_id: b'S' as i32,
-            dxfer_direction: -3, // SG_DXFER_FROM_DEV
+            dxfer_direction: if data { -3 } else { -1 }, // SG_DXFER_FROM_DEV / SG_DXFER_NONE
             cmd_len: 16,
             mx_sb_len: sense.len() as u8,
             iovec_count: 0,
-            dxfer_len: 512,
+            dxfer_len: if data { 512 } else { 0 },
             dxferp: buf.as_mut_ptr().cast(),
             cmdp: cdb.as_ptr(),
             sbp: sense.as_mut_ptr(),
@@ -872,6 +1041,10 @@ mod imp {
         };
         // SAFETY: every pointer in h refers to a live local buffer of the stated size.
         let r = unsafe { libc::ioctl(f.as_raw_fd(), SG_IO as _, &mut h) };
+        if !data {
+            // CK_COND returns the ATA status in the sense data: ERR is bit 0 of byte 21.
+            return (r == 0 && h.host_status == 0 && sense[21] & 1 == 0).then_some(Vec::new());
+        }
         (r == 0 && h.status == 0 && h.host_status == 0 && h.info & 1 == 0 && buf.iter().any(|&b| b != 0)).then_some(buf)
     }
 
@@ -932,6 +1105,7 @@ mod imp {
             // ATA Information VPD page carries the IDENTIFY block at offset 60.
             if let Some(id) = std::fs::read(dev.join("vpd_pg89")).ok().filter(|b| b.len() >= 572) {
                 let id = &id[60..572];
+                d.identify = Some(id.to_vec());
                 (d.rpm, d.features) = ata_identify(id);
                 d.revision = ata_string(id, 23, 27).or(d.revision); // sysfs `rev` keeps 4 chars
                 d.serial = d.serial.or_else(|| ata_string(id, 10, 20));
@@ -963,6 +1137,14 @@ mod imp {
                     s.evaluate();
                     Some(s)
                 });
+            }
+            if d.bus == 17 {
+                // Identify Controller (CNS 01h), root only.
+                let n: String = name.trim_start_matches("nvme").chars().take_while(char::is_ascii_digit).collect();
+                let mut id = vec![0u8; 4096];
+                if nvme_admin(&format!("nvme{n}"), 0x06, 1, Some(&mut id)).is_ok() {
+                    d.identify = Some(id);
+                }
             }
             d.volumes = volumes(&name);
             out.push(d);

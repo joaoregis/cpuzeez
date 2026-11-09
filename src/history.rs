@@ -54,10 +54,6 @@ pub fn remove(index: usize) {
     })
 }
 
-pub fn clear() {
-    update(Vec::clear)
-}
-
 fn update(f: impl FnOnce(&mut Vec<Entry>)) {
     match path() {
         Some(p) => {
@@ -86,6 +82,10 @@ fn update_at(p: &Path, f: impl FnOnce(&mut Vec<Entry>)) -> std::io::Result<()> {
             Vec::new()
         }
     };
+    // Entries saved by a newer CPU ZeeZ may carry fields this version would drop.
+    if let Some(e) = v.iter().find(|e| crate::update::newer(crate::VERSION, &e.app_version)) {
+        return Err(std::io::Error::other(format!("saved by CPU ZeeZ {}; not overwriting it", e.app_version)));
+    }
     f(&mut v);
     let tmp = p.with_extension("json.tmp");
     std::fs::write(&tmp, serde_json::to_vec_pretty(&v)?)?;

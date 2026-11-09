@@ -17,7 +17,29 @@ pub enum Lang {
 pub const LANGS: [(Lang, &str, &str); 3] =
     [(Lang::En, "en", "English"), (Lang::PtBr, "pt-BR", "Português (Brasil)"), (Lang::Es, "es", "Español")];
 
+#[cfg(not(test))]
 static CURRENT: AtomicUsize = AtomicUsize::new(0);
+
+// Tests run in parallel threads: each keeps its own language, so a test that
+// switches to Portuguese can't change the labels another test clicks.
+#[cfg(test)]
+thread_local! {
+    static CURRENT: AtomicUsize = const { AtomicUsize::new(0) };
+}
+
+fn store(i: usize) {
+    #[cfg(not(test))]
+    CURRENT.store(i, Ordering::Relaxed);
+    #[cfg(test)]
+    CURRENT.with(|c| c.store(i, Ordering::Relaxed));
+}
+
+fn load() -> usize {
+    #[cfg(not(test))]
+    return CURRENT.load(Ordering::Relaxed);
+    #[cfg(test)]
+    CURRENT.with(|c| c.load(Ordering::Relaxed))
+}
 
 type Table = &'static [(&'static str, &'static str)];
 
@@ -33,15 +55,43 @@ fn tables() -> &'static [(Table, Table)] {
         (super::settings_ui::PT_BR, super::settings_ui::ES),
         (super::tools::PT_BR, super::tools::ES),
         (super::devices::PT_BR, super::devices::ES),
+        (super::access_ui::PT_BR, super::access_ui::ES),
+        (super::welcome::PT_BR, super::welcome::ES),
+        (super::table::PT_BR, super::table::ES),
+        (super::layout_view::PT_BR, super::layout_view::ES),
+        (super::detail::PT_BR, super::detail::ES),
+        (super::pins::PT_BR, super::pins::ES),
+        (super::palette::PT_BR, super::palette::ES),
+        (super::pages::processor_more::PT_BR, super::pages::processor_more::ES),
+        (super::pages::mainboard_more::PT_BR, super::pages::mainboard_more::ES),
+        (super::pages::memory_more::PT_BR, super::pages::memory_more::ES),
+        (super::latency_view::PT_BR, super::latency_view::ES),
+        (super::diskbench_view::PT_BR, super::diskbench_view::ES),
+        (super::benchkit_view::PT_BR, super::benchkit_view::ES),
+        (super::cpusuite_view::PT_BR, super::cpusuite_view::ES),
+        (super::memplus_view::PT_BR, super::memplus_view::ES),
+        (super::gpubench_view::PT_BR, super::gpubench_view::ES),
+        (super::drivehealth_view::PT_BR, super::drivehealth_view::ES),
+        (super::mini::PT_BR, super::mini::ES),
+        (super::live::PT_BR, super::live::ES),
+        (super::bottleneck_ui::PT_BR, super::bottleneck_ui::ES),
+        (super::live_sessions::PT_BR, super::live_sessions::ES),
+        (super::layout_editor::PT_BR, super::layout_editor::ES),
+        (super::system::PT_BR, super::system::ES),
+        (super::system_history::PT_BR, super::system_history::ES),
+        (super::system_perf::PT_BR, super::system_perf::ES),
+        (super::system_services::PT_BR, super::system_services::ES),
+        (super::system_startup::PT_BR, super::system_startup::ES),
+        (super::system_users::PT_BR, super::system_users::ES),
     ]
 }
 
 pub fn set(lang: Lang) {
-    CURRENT.store(LANGS.iter().position(|l| l.0 == lang).unwrap_or(0), Ordering::Relaxed);
+    store(LANGS.iter().position(|l| l.0 == lang).unwrap_or(0));
 }
 
 pub fn current() -> Lang {
-    LANGS[CURRENT.load(Ordering::Relaxed)].0
+    LANGS[load()].0
 }
 
 pub fn from_code(code: &str) -> Lang {
@@ -66,17 +116,8 @@ pub fn os_lang() -> Lang {
             return from_code(&v);
         }
     }
-    #[cfg(windows)]
-    {
-        #[link(name = "kernel32")]
-        unsafe extern "system" {
-            fn GetUserDefaultLocaleName(buf: *mut u16, len: i32) -> i32;
-        }
-        let mut buf = [0u16; 85];
-        let n = unsafe { GetUserDefaultLocaleName(buf.as_mut_ptr(), buf.len() as i32) };
-        if n > 1 {
-            return from_code(&String::from_utf16_lossy(&buf[..n as usize - 1]));
-        }
+    if let Some(l) = cpuzeez_platform::os::user_locale() {
+        return from_code(&l);
     }
     #[cfg(target_os = "macos")]
     if let Some(l) = crate::os::cmd("defaults", &["read", "-g", "AppleLocale"]) {
@@ -141,5 +182,82 @@ mod tests {
                 assert_eq!(k.matches("{}").count(), v.matches("{}").count(), "placeholders in {k:?}");
             }
         }
+    }
+
+    /// Every literal passed to `tr`/`trf` in the GUI's code (tests left out)
+    /// has a pt-BR (and so an es) translation.
+    #[test]
+    fn every_literal_is_translated() {
+        fn files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            for e in std::fs::read_dir(dir).unwrap().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    files(&p, out);
+                } else if p.extension().is_some_and(|x| x == "rs") {
+                    out.push(p);
+                }
+            }
+        }
+        /// The string literal at the start of `s` (after its opening quote), unescaped.
+        fn literal(s: &str) -> Option<String> {
+            let mut out = String::new();
+            let mut it = s.chars();
+            while let Some(c) = it.next() {
+                match c {
+                    '"' => return Some(out),
+                    '\\' => match it.next()? {
+                        'n' => out.push('\n'),
+                        't' => out.push('\t'),
+                        c => out.push(c),
+                    },
+                    c => out.push(c),
+                }
+            }
+            None
+        }
+        let keys: std::collections::HashSet<&str> = tables().iter().flat_map(|t| t.0.iter().map(|e| e.0)).collect();
+        let mut srcs = Vec::new();
+        files(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/gui"), &mut srcs);
+        let (mut missing, mut seen) = (Vec::new(), 0usize);
+        for f in srcs {
+            let text = std::fs::read_to_string(&f).unwrap();
+            let code = text.split("#[cfg(test)]").next().unwrap_or("");
+            for pat in ["tr(\"", "trf(\""] {
+                for (i, _) in code.match_indices(pat) {
+                    let before = code[..i].chars().next_back();
+                    if before.is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                        continue; // e.g. `str("`
+                    }
+                    let Some(k) = literal(&code[i + pat.len()..]) else { continue };
+                    seen += 1;
+                    if !keys.contains(k.as_str()) {
+                        missing.push(format!("{}: {k}", f.file_name().unwrap().to_string_lossy()));
+                    }
+                }
+            }
+        }
+        assert!(seen > 500, "the scan found only {seen} literals");
+        assert!(missing.is_empty(), "untranslated:\n{}", missing.join("\n"));
+    }
+
+    /// The bottleneck detector's texts come from the core as keys (evidence,
+    /// advice, class names): each has a pt-BR and an es translation.
+    #[test]
+    fn bottleneck_texts_are_translated() {
+        use cpuzeez_core::bottleneck::{Class, Confidence, keys};
+        let have: std::collections::HashSet<&str> = tables().iter().flat_map(|t| t.0.iter().map(|e| e.0)).collect();
+        let mut want: Vec<&str> = keys();
+        want.extend(Class::ALL.iter().flat_map(|c| [c.label(), c.headline()]));
+        want.extend([Confidence::Low, Confidence::Medium, Confidence::High].map(Confidence::label));
+        let missing: Vec<&&str> = want.iter().filter(|k| !have.contains(**k)).collect();
+        assert!(
+            missing.is_empty(),
+            "untranslated:
+{}",
+            missing.iter().map(|k| format!("{k:?}")).collect::<Vec<_>>().join(
+                "
+"
+            )
+        );
     }
 }

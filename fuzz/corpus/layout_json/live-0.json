@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "name": "Minimal",
+  "direction": "vertical",
+  "columns": 2,
+  "style": {
+    "scale": 1.6,
+    "opacity": 0.85,
+    "outline": false,
+    "corner": 8,
+    "padding": 8,
+    "theme": "follow"
+  },
+  "widgets": [
+    {
+      "kind": "value",
+      "metric": "frames/fps",
+      "label": "FPS",
+      "decimals": null,
+      "thresholds": [],
+      "min": 0.0,
+      "max": 100.0
+    }
+  ]
+}

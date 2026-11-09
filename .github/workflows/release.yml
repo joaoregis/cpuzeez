@@ -11,8 +11,9 @@ on:
         description: "Tag to release (e.g. v0.1.0)"
         required: true
 
+# Build jobs only read the repository; the one job that publishes gets write access itself.
 permissions:
-  contents: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -22,21 +23,32 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo build --release --locked
-      - name: Version
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - name: Version (tag must match Cargo.toml; per-format mapping for pre-releases)
         shell: bash
-        run: echo "VER=${TAG#v}" >> "$GITHUB_ENV"
+        run: |
+          python .github/scripts/pkgver.py --test
+          python .github/scripts/pkgver.py "${TAG#v}" >> "$GITHUB_ENV"
+          grep -q "^version = \"${TAG#v}\"$" Cargo.toml || { echo "Cargo.toml version != tag ${TAG#v}"; exit 1; }
+      - run: cargo build --release --locked
+      - name: Static C runtime (starts without the VC++ redistributable)
+        run: python .github/scripts/check_no_crt.py target/release/cpuzeez.exe
+      - name: PawnIO installer and modules (pinned in packaging/pins.txt, SHA-256 checked)
+        shell: bash
+        run: bash .github/scripts/fetch_pawnio.sh pawnio
       - name: MSI (WiX)
         shell: bash
         run: |
           dotnet tool install --global wix --version 5.0.2
-          wix build packaging/windows/cpuzeez.wxs -arch x64 -d Version="$VER" -d Bin=target/release/cpuzeez.exe -d IconFile=assets/cpuzeez.ico -o "cpuzeez-$VER-windows-x64.msi"
+          wix extension add -g WixToolset.UI.wixext/5.0.2
+          wix build packaging/windows/cpuzeez.wxs -wx -ext WixToolset.UI.wixext -arch x64 -d Version="$MSI_VER" -d Bin=target/release/cpuzeez.exe -d IconFile=assets/cpuzeez.ico -d PawnIo="$(pwd -W)/pawnio" -o "cpuzeez-$VER-windows-x64.msi"
       - name: Portable zip
         shell: pwsh
-        run: Compress-Archive -Path target/release/cpuzeez.exe, README.md, LICENSE-MIT, LICENSE-APACHE -DestinationPath "cpuzeez-$env:VER-windows-x64-portable.zip"
-      - uses: actions/upload-artifact@v4
+        run: Compress-Archive -Path target/release/cpuzeez.exe, pawnio/PawnIO_setup.exe, pawnio/pawnio-modules, pawnio/PresentMon.exe, pawnio/PresentMon-LICENSE.txt, README.md, THIRD_PARTY.md, LICENSE-MIT, LICENSE-APACHE -DestinationPath "cpuzeez-$env:VER-windows-x64-portable.zip"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows
           path: |
@@ -46,13 +58,15 @@ jobs:
   macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with: { targets: "x86_64-apple-darwin,aarch64-apple-darwin" }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          targets: "x86_64-apple-darwin,aarch64-apple-darwin"
       - run: |
           cargo build --release --locked --target aarch64-apple-darwin
           cargo build --release --locked --target x86_64-apple-darwin
-          echo "VER=${TAG#v}" >> "$GITHUB_ENV"
+          python3 .github/scripts/pkgver.py "${TAG#v}" >> "$GITHUB_ENV"
       - name: Universal binary, .app, .dmg and .pkg
         run: |
           set -e
@@ -65,17 +79,17 @@ jobs:
           APP=dist/CpuZeeZ.app
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
           cp dist/cpuzeez "$APP/Contents/MacOS/cpuzeez"
-          sed "s/@VERSION@/$VER/g" packaging/macos/Info.plist > "$APP/Contents/Info.plist"
+          sed "s/@VERSION@/$MAC_VER/g" packaging/macos/Info.plist > "$APP/Contents/Info.plist"
           cp assets/cpuzeez.icns "$APP/Contents/Resources/cpuzeez.icns"
           # Ad-hoc signature: required for arm64 binaries; not a Developer ID signature.
           codesign --force --deep -s - "$APP"
           codesign --verify --all-architectures --deep --strict --verbose=2 "$APP"
           mkdir -p dmg && cp -R "$APP" dmg/ && ln -s /Applications dmg/Applications
-          hdiutil create -volname CpuZeeZ -srcfolder dmg -ov -format UDZO "cpuzeez-$VER-macos-universal.dmg"
+          hdiutil create -volname "CPU ZeeZ" -srcfolder dmg -ov -format UDZO "cpuzeez-$VER-macos-universal.dmg"
           mkdir -p pkgroot/Applications pkgroot/usr/local/bin
           cp -R "$APP" pkgroot/Applications/
           cp dist/cpuzeez pkgroot/usr/local/bin/cpuzeez
-          pkgbuild --root pkgroot --identifier io.github.joaoregis.cpuzeez --version "$VER" --install-location / "cpuzeez-$VER-macos-universal.pkg"
+          pkgbuild --root pkgroot --identifier io.github.joaoregis.cpuzeez --version "$MAC_VER" --install-location / "cpuzeez-$VER-macos-universal.pkg"
           tar -C dist -czf "cpuzeez-$VER-macos-universal.tar.gz" cpuzeez
       - name: Verify shipped macOS signatures
         run: |
@@ -88,7 +102,7 @@ jobs:
           codesign --verify --all-architectures --deep --strict --verbose=2 verify/pkg/Payload/Applications/CpuZeeZ.app
           verify/tar/cpuzeez -help
           verify/pkg/Payload/usr/local/bin/cpuzeez -help
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: macos, path: "cpuzeez-*" }
 
   linux:
@@ -99,21 +113,23 @@ jobs:
           - { os: ubuntu-24.04-arm, arch: aarch64, deb: arm64 }
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
       # Built on Ubuntu 22.04 (glibc 2.35) so the binary runs on Debian 12+, Ubuntu 22.04+ and Arch.
       - run: |
           cargo build --release --locked
-          echo "VER=${TAG#v}" >> "$GITHUB_ENV"
+          python3 .github/scripts/pkgver.py "${TAG#v}" >> "$GITHUB_ENV"
       - name: .deb
         run: |
           cargo install cargo-deb --locked
-          cargo deb --no-build --no-strip -o "cpuzeez_${VER}_${{ matrix.deb }}.deb"
+          cargo deb --no-build --no-strip --deb-version "${DEB_VER}-1" -o "cpuzeez_${VER}_${{ matrix.deb }}.deb"
       - name: tarball
         run: |
           mkdir -p "cpuzeez-$VER" && cp target/release/cpuzeez README.md LICENSE-MIT LICENSE-APACHE packaging/linux/cpuzeez.desktop assets/icon.svg assets/icon-*.png "cpuzeez-$VER/"
           tar -czf "cpuzeez-$VER-linux-${{ matrix.arch }}.tar.gz" "cpuzeez-$VER"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: "linux-${{ matrix.arch }}"
           path: |
@@ -125,30 +141,33 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with: { name: linux-x86_64, path: dl }
       - name: makepkg (repackages the release binary)
         run: |
           set -e
-          pacman -Syu --noconfirm --needed base-devel
+          pacman -Syu --noconfirm --needed base-devel python
           VER=${TAG#v}
+          ARCH_VER=$(python .github/scripts/pkgver.py "$VER" | sed -n 's/^ARCH_VER=//p')
           useradd -m builder
           mkdir -p /home/builder/pkg && cp packaging/arch/PKGBUILD /home/builder/pkg/
           tar -xzf dl/cpuzeez-$VER-linux-x86_64.tar.gz -C /home/builder/pkg
-          sed -i "s/@VERSION@/$VER/" /home/builder/pkg/PKGBUILD
+          sed -i "s/@VERSION@/$ARCH_VER/; s/@SRCVER@/$VER/" /home/builder/pkg/PKGBUILD
           chown -R builder /home/builder/pkg
           su builder -c "cd /home/builder/pkg && makepkg --nodeps --noconfirm"
           cp /home/builder/pkg/*.pkg.tar.zst .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: arch, path: "*.pkg.tar.zst" }
 
   publish:
     needs: [windows, macos, linux, arch]
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         # Not "assets/": that is the repo's icon folder after checkout.
         with: { path: dist, merge-multiple: true }
       - name: Checksums
@@ -159,12 +178,15 @@ jobs:
           awk -v v="## [$VER]" 'index($0, v) == 1 { on = 1; next } on && /^## \[/ { exit } on' CHANGELOG.md > notes.md
           test -s notes.md || { echo "CHANGELOG.md has no section for $VER"; exit 1; }
           printf '\n---\n\n' >> notes.md
-          cat packaging/RELEASE_NOTES.md >> notes.md
+          # {TAG}: links point at this release's tag (main may not have the file yet).
+          sed "s/{TAG}/$TAG/g" packaging/RELEASE_NOTES.md >> notes.md
           printf '\nFull changelog: [CHANGELOG.md](https://github.com/%s/blob/%s/CHANGELOG.md)\n' "$GITHUB_REPOSITORY" "$TAG" >> notes.md
           cat notes.md
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$TAG" dist/* --title "CpuZeeZ ${TAG#v}" --notes-file notes.md --verify-tag || \
+          # Pre-releases (X.Y.Z-beta.N / -rc.N) are never "latest", so stable users' update check skips them.
+          PRE=$(python3 .github/scripts/pkgver.py "${TAG#v}" | sed -n 's/^PRERELEASE=true$/--prerelease/p')
+          gh release create "$TAG" dist/* --title "CPU ZeeZ ${TAG#v}" --notes-file notes.md --verify-tag $PRE || \
           { gh release upload "$TAG" dist/* --clobber && gh release edit "$TAG" --notes-file notes.md; }

@@ -15,8 +15,12 @@ pub struct Npu {
     pub cores: Option<u32>,
 }
 
+pub fn list(ctx: &Ctx) -> Vec<Npu> {
+    if ctx.cfg.display { devices() } else { Vec::new() }
+}
+
 pub fn collect(ctx: &Ctx) -> Vec<Section> {
-    let list = if ctx.cfg.display { devices() } else { Vec::new() };
+    let list = list(ctx);
     let ai = list.iter().map(|n| f("AI Device", &n.name)).collect();
     let npu = list
         .iter()

@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "name": "Benchmark",
+  "direction": "vertical",
+  "columns": 2,
+  "style": {
+    "scale": 1.0,
+    "opacity": 0.85,
+    "outline": false,
+    "corner": 8,
+    "padding": 8,
+    "theme": "follow"
+  },
+  "widgets": [
+    {
+      "kind": "label-value",
+      "metric": "frames/fps",
+      "label": "FPS",
+      "decimals": null,
+      "thresholds": [],
+      "min": 0.0,
+      "max": 100.0
+    },
+    {
+      "kind": "label-value",
+      "metric": "frames/low1",
+      "label": "1% low",
+      "decimals": null,
+      "thresholds": [],
+      "min": 0.0,
+      "max": 100.0
+    },
+    {
+      "kind": "label-value",
+      "metric": "frames/low01",
+      "label": "0.1% low",
+      "decimals": null,
+      "thresholds": [],
+      "min": 0.0,
+      "max": 100.0
+    },
+    {
+      "kind": "sparkline",
+      "metric": "frames/ms",
+      "label": "Frame time",
+      "decimals": null,
+      "thresholds": [],
+      "min": 0.0,
+      "max": 100.0
+    },
+    {
+      "kind": "label-value",
+      "metric": "frames/gpu_busy",
+      "label": "GPU Busy",
+      "decimals": null,
+      "thresholds": [],
+      "min": 0.0,
+      "max": 100.0
+    },
+    {
+      "kind": "label-value",
+      "metric": "@cpu_max_core",
+      "label": "Busiest core",
+      "decimals": null,
+      "thresholds": [],
+      "min": 0.0,
+      "max": 100.0
+    },
+    {
+      "kind": "throttle",
+      "metric": null,
+      "label": null,
+      "decimals": null,
+      "thresholds": [],
+      "min": 0.0,
+      "max": 100.0
+    },
+    {
+      "kind": "clock",
+      "metric": null,
+      "label": "",
+      "decimals": null,
+      "thresholds": [],
+      "min": 0.0,
+      "max": 100.0
+    }
+  ]
+}

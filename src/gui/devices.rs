@@ -11,6 +11,45 @@ use eframe::egui::{self, RichText};
 use std::sync::{Arc, Mutex};
 
 pub const PT_BR: &[(&str, &str)] = &[
+    ("Supported, off", "Suportado, desligado"),
+    ("Not supported", "Não suportado"),
+    ("Colour depth", "Profundidade de cor"),
+    ("{} bits per channel", "{} bits por canal"),
+    ("Refresh range", "Faixa de atualização"),
+    ("likely (variable refresh)", "provável (taxa variável)"),
+    ("fixed", "fixa"),
+    ("Thunderbolt / USB4", "Thunderbolt / USB4"),
+    ("Audio", "Áudio"),
+    ("idle", "ocioso"),
+    ("Bluetooth devices", "Dispositivos Bluetooth"),
+    ("HDR", "HDR"),
+    ("Encryption", "Criptografia"),
+    ("BitLocker on", "BitLocker ativado"),
+    ("BitLocker (encrypting)", "BitLocker (criptografando)"),
+    ("BitLocker (decrypting)", "BitLocker (descriptografando)"),
+    ("BitLocker suspended", "BitLocker suspenso"),
+    ("BitLocker on (locked)", "BitLocker ativado (bloqueado)"),
+    ("FileVault on", "FileVault ativado"),
+    ("Identify data ({} bytes)", "Dados de identificação ({} bytes)"),
+    ("Raw (hex)", "Bruto (hex)"),
+    ("Displays", "Telas"),
+    ("{} Hz (supports {} Hz)", "{} Hz (suporta {} Hz)"),
+    ("Below its refresh rate", "Abaixo da sua taxa de atualização"),
+    ("Refresh rate", "Taxa de atualização"),
+    ("Connected to", "Conectado a"),
+    ("USB", "USB"),
+    (
+        "USB 3 device at USB 2 speed: try another port or cable",
+        "Dispositivo USB 3 em velocidade USB 2: tente outra porta ou cabo",
+    ),
+    ("Partition alignment", "Alinhamento das partições"),
+    ("All {} partitions aligned", "Todas as {} partições alinhadas"),
+    ("Partition {} not aligned to 4 KiB (slower writes)", "Partição {} não alinhada a 4 KiB (gravação mais lenta)"),
+    ("TRIM (OS)", "TRIM (sistema)"),
+    ("On", "Ligado"),
+    ("Off", "Desligado"),
+    ("Thermal throttling", "Limitação térmica"),
+    ("{} times, {} s in total", "{} vezes, {} s no total"),
     ("Devices", "Dispositivos"),
     ("Storage", "Armazenamento"),
     ("Network", "Rede"),
@@ -79,6 +118,45 @@ pub const PT_BR: &[(&str, &str)] = &[
 ];
 
 pub const ES: &[(&str, &str)] = &[
+    ("Supported, off", "Compatible, apagado"),
+    ("Not supported", "No compatible"),
+    ("Colour depth", "Profundidad de color"),
+    ("{} bits per channel", "{} bits por canal"),
+    ("Refresh range", "Rango de refresco"),
+    ("likely (variable refresh)", "probable (frecuencia variable)"),
+    ("fixed", "fija"),
+    ("Thunderbolt / USB4", "Thunderbolt / USB4"),
+    ("Audio", "Audio"),
+    ("idle", "inactivo"),
+    ("Bluetooth devices", "Dispositivos Bluetooth"),
+    ("HDR", "HDR"),
+    ("Encryption", "Cifrado"),
+    ("BitLocker on", "BitLocker activado"),
+    ("BitLocker (encrypting)", "BitLocker (cifrando)"),
+    ("BitLocker (decrypting)", "BitLocker (descifrando)"),
+    ("BitLocker suspended", "BitLocker suspendido"),
+    ("BitLocker on (locked)", "BitLocker activado (bloqueado)"),
+    ("FileVault on", "FileVault activado"),
+    ("Identify data ({} bytes)", "Datos de identificación ({} bytes)"),
+    ("Raw (hex)", "Sin procesar (hex)"),
+    ("Displays", "Pantallas"),
+    ("{} Hz (supports {} Hz)", "{} Hz (admite {} Hz)"),
+    ("Below its refresh rate", "Por debajo de su frecuencia"),
+    ("Refresh rate", "Frecuencia de actualización"),
+    ("Connected to", "Conectado a"),
+    ("USB", "USB"),
+    (
+        "USB 3 device at USB 2 speed: try another port or cable",
+        "Dispositivo USB 3 a velocidad USB 2: prueba otro puerto o cable",
+    ),
+    ("Partition alignment", "Alineación de particiones"),
+    ("All {} partitions aligned", "Las {} particiones alineadas"),
+    ("Partition {} not aligned to 4 KiB (slower writes)", "Partición {} sin alinear a 4 KiB (escrituras más lentas)"),
+    ("TRIM (OS)", "TRIM (sistema)"),
+    ("On", "Activado"),
+    ("Off", "Desactivado"),
+    ("Thermal throttling", "Limitación térmica"),
+    ("{} times, {} s in total", "{} veces, {} s en total"),
     ("Devices", "Dispositivos"),
     ("Storage", "Almacenamiento"),
     ("Network", "Red"),
@@ -151,6 +229,13 @@ struct Data {
     drives: Vec<crate::storage::Drive>,
     adapters: Vec<crate::network::Adapter>,
     batteries: Vec<crate::battery::Battery>,
+    usb: Vec<crate::usb::UsbDevice>,
+    displays: Vec<cpuzeez_platform::display::Mode>,
+    audio: Vec<crate::peripherals::Audio>,
+    bluetooth: Vec<crate::peripherals::Peripheral>,
+    thunderbolt: Vec<crate::peripherals::Thunderbolt>,
+    /// (EDID name, refresh range) per monitor.
+    ranges: Vec<(String, (u32, u32))>,
 }
 
 #[derive(Default)]
@@ -243,6 +328,15 @@ impl State {
                 drives: crate::storage::drives(&ctx),
                 adapters: crate::network::adapters(&ctx),
                 batteries: crate::battery::batteries(&ctx),
+                usb: crate::usb::devices(&ctx),
+                displays: cpuzeez_platform::display::modes(),
+                audio: crate::peripherals::audio(),
+                bluetooth: crate::peripherals::bluetooth_batteries(),
+                thunderbolt: crate::peripherals::thunderbolt(),
+                ranges: crate::gpu::monitors(&ctx)
+                    .iter()
+                    .filter_map(|m| Some((m.model.clone()?, m.v_range_hz?)))
+                    .collect(),
             };
             *slot.lock().unwrap() = Some(d);
         });
@@ -283,6 +377,126 @@ impl State {
             }
             for a in &d.adapters {
                 adapter(ui, a);
+            }
+            if !d.displays.is_empty() {
+                section(ui, icon::MONITOR, "Displays");
+                for m in &d.displays {
+                    let hz = if m.max_hz > m.hz {
+                        trf("{} Hz (supports {} Hz)", &[&m.hz, &m.max_hz])
+                    } else {
+                        format!("{} Hz", m.hz)
+                    };
+                    let tone = if m.max_hz > m.hz + 1 {
+                        (Tone::Warning, tr("Below its refresh rate"))
+                    } else {
+                        (Tone::Success, tr("OK"))
+                    };
+                    let name = m.name.clone().unwrap_or_else(|| m.monitor.clone());
+                    let mut r = vec![("Refresh rate", hz), ("Connected to", m.adapter.clone())];
+                    if let Some((sup, on)) = m.hdr {
+                        let t = match (sup, on) {
+                            (true, true) => tr("On"),
+                            (true, false) => tr("Supported, off"),
+                            _ => tr("Not supported"),
+                        };
+                        r.push(("HDR", t.to_string()));
+                    }
+                    if let Some(b) = m.bits {
+                        r.push(("Colour depth", trf("{} bits per channel", &[&b])));
+                    }
+                    // VRR: a wide refresh range in the EDID (FreeSync / G-SYNC Compatible / HDMI VRR).
+                    if let Some(&(_, (lo, hi))) = d.ranges.iter().find(|x| name.contains(&x.0) || x.0.contains(&name)) {
+                        let vrr = if hi > lo + 20 { tr("likely (variable refresh)") } else { tr("fixed") };
+                        r.push(("Refresh range", format!("{lo}–{hi} Hz, {vrr}")));
+                    }
+                    device_card(ui, icon::MONITOR, &name, tone, |ui| widgets::kv_list(ui, &rows(r)));
+                }
+            }
+            if !d.usb.is_empty() {
+                section(ui, icon::USB, "USB");
+                widgets::card(ui, "", "", |ui| {
+                    let p = theme::palette(ui);
+                    for (depth, i) in crate::usb::tree(&d.usb) {
+                        let u = &d.usb[i];
+                        ui.horizontal(|ui| {
+                            ui.add_space(depth as f32 * 18.0);
+                            let mark = if depth > 0 { "└ " } else { "" };
+                            ui.label(RichText::new(format!("{mark}{}", u.name)).color(p.text));
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                ui.label(
+                                    RichText::new(format!("{:04X}:{:04X}", u.vendor, u.product))
+                                        .monospace()
+                                        .color(p.text_muted),
+                                );
+                                let speed = [u.speed_text(), u.version_text()]
+                                    .into_iter()
+                                    .filter(|s| !s.is_empty())
+                                    .collect::<Vec<_>>()
+                                    .join(" · ");
+                                ui.label(RichText::new(speed).color(p.text_secondary));
+                                if u.slowed() {
+                                    ui.label(
+                                        RichText::new(format!(
+                                            "{} {}",
+                                            icon::WARNING,
+                                            tr("USB 3 device at USB 2 speed: try another port or cable")
+                                        ))
+                                        .color(p.warning),
+                                    );
+                                }
+                            });
+                        });
+                    }
+                });
+                ui.add_space(theme::GAP);
+            }
+            if !d.thunderbolt.is_empty() {
+                section(ui, icon::LIGHTNING, "Thunderbolt / USB4");
+                widgets::card(ui, "", "", |ui| {
+                    let rows: Vec<(&str, String)> = d
+                        .thunderbolt
+                        .iter()
+                        .map(|t| {
+                            let extra = [t.generation.clone(), t.link.clone()]
+                                .into_iter()
+                                .flatten()
+                                .collect::<Vec<_>>()
+                                .join(" · ");
+                            (t.name.as_str(), extra)
+                        })
+                        .collect();
+                    widgets::kv_list(ui, &rows);
+                });
+                ui.add_space(theme::GAP);
+            }
+            if !d.audio.is_empty() {
+                section(ui, icon::SPEAKER_HIGH, "Audio");
+                widgets::card(ui, "", "", |ui| {
+                    let p = theme::palette(ui);
+                    for a in &d.audio {
+                        ui.horizontal(|ui| {
+                            let ic = if a.output { icon::SPEAKER_HIGH } else { icon::MICROPHONE };
+                            ui.label(RichText::new(format!("{ic}  {}", a.name)).color(p.text));
+                            if !a.device.is_empty() {
+                                ui.label(RichText::new(&a.device).color(p.text_muted));
+                            }
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                let f = a.format.clone().unwrap_or_else(|| tr("idle").to_string());
+                                ui.label(RichText::new(f).monospace().color(p.text_secondary));
+                            });
+                        });
+                    }
+                });
+                ui.add_space(theme::GAP);
+            }
+            if !d.bluetooth.is_empty() {
+                section(ui, icon::BLUETOOTH, "Bluetooth devices");
+                widgets::card(ui, "", "", |ui| {
+                    let rows: Vec<(&str, String)> =
+                        d.bluetooth.iter().map(|b| (b.name.as_str(), format!("{} %", b.battery))).collect();
+                    widgets::kv_list(ui, &rows);
+                });
+                ui.add_space(theme::GAP);
             }
             section(ui, icon::BATTERY_HIGH, "Batteries");
             if d.batteries.is_empty() {
@@ -329,13 +543,26 @@ fn level(l: crate::storage::HealthLevel) -> Health {
     }
 }
 
+/// Partitions and TRIM of a drive, read once (they don't change while we run).
+fn layout(path: &str) -> (Vec<cpuzeez_platform::partitions::Partition>, Option<bool>) {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+    static CACHE: Mutex<Option<HashMap<String, (Vec<cpuzeez_platform::partitions::Partition>, Option<bool>)>>> =
+        Mutex::new(None);
+    let mut g = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    g.get_or_insert_with(HashMap::new)
+        .entry(path.to_string())
+        .or_insert_with(|| (cpuzeez_platform::partitions::of(path), cpuzeez_platform::partitions::trim(path)))
+        .clone()
+}
+
 fn bytes_tb(b: u64) -> String {
     if b >= 1_000_000_000_000 { format!("{:.2} TB", b as f64 / 1e12) } else { format!("{:.1} GB", b as f64 / 1e9) }
 }
 
 fn drive(ui: &mut egui::Ui, i: usize, d: &crate::storage::Drive) {
     let s = d.smart.as_ref();
-    let temp = s.and_then(|s| s.temperature_c).map(|t| format!("{t:.0} °C")).or_else(|| {
+    let temp = s.and_then(|s| s.temperature_c).map(|t| super::units::temp(t, 0)).or_else(|| {
         d.health.iter().find(|(k, _)| k.to_ascii_lowercase().contains("temperature")).map(|(_, v)| v.clone())
     });
     let kind = format!("{}{}", tr(if d.removable { "Removable" } else { "Fixed" }), if d.ssd { ", SSD" } else { "" });
@@ -357,6 +584,43 @@ fn drive(ui: &mut egui::Ui, i: usize, d: &crate::storage::Drive) {
         ("Link Speed", d.link.clone().unwrap_or_default()),
     ];
     r.extend(d.volumes.iter().map(|v| ("Volume", crate::storage::volume_line(v))));
+    // S1-G06: encryption per volume (read in the background the first time).
+    let names: Vec<String> = d.volumes.iter().map(|v| v.name.clone()).collect();
+    if let Some(enc) = cpuzeez_platform::encryption::status(&names) {
+        for v in &d.volumes {
+            if let Some(e) = enc.get(&v.name) {
+                r.push(("Encryption", format!("{} {}", v.name, tr(e))));
+            }
+        }
+    }
+    // S1-G06: alignment, the OS's TRIM setting, NVMe thermal throttling.
+    let (parts, trim) = layout(&d.path);
+    if !parts.is_empty() {
+        let bad: Vec<String> = parts.iter().filter(|p| !p.aligned()).map(|p| p.number.to_string()).collect();
+        let text = if bad.is_empty() {
+            trf("All {} partitions aligned", &[&parts.len()])
+        } else {
+            trf("Partition {} not aligned to 4 KiB (slower writes)", &[&bad.join(", ")])
+        };
+        r.push(("Partition alignment", text));
+    }
+    if d.ssd
+        && let Some(t) = trim
+    {
+        r.push(("TRIM (OS)", tr(if t { "On" } else { "Off" }).to_string()));
+    }
+    if let Some(s) = s {
+        let num = |k: &str| {
+            s.nvme_log.iter().find(|(n, _)| n == k).and_then(|(_, v)| v.split_whitespace().next()?.parse::<u64>().ok())
+        };
+        let count = num("Thermal Mgmt Temp 1 Transition Count").unwrap_or(0)
+            + num("Thermal Mgmt Temp 2 Transition Count").unwrap_or(0);
+        let secs = num("Total Time For Thermal Mgmt Temp 1").unwrap_or(0)
+            + num("Total Time For Thermal Mgmt Temp 2").unwrap_or(0);
+        if s.nvme_log.iter().any(|(n, _)| n.starts_with("Thermal Mgmt")) {
+            r.push(("Thermal throttling", trf("{} times, {} s in total", &[&count, &secs])));
+        }
+    }
     let h = s.map_or_else(|| health(&d.health), |s| level(s.health));
     let (t, text) = tone(h);
     device_card(ui, icon::HARD_DRIVE, &d.name, (t, tr(text)), |ui| {
@@ -367,6 +631,33 @@ fn drive(ui: &mut egui::Ui, i: usize, d: &crate::storage::Drive) {
             }
         }
         widgets::kv_list(ui, &rows(r));
+        // Expert: the drive's whole Identify block, decoded and as hex.
+        if let Some(id) =
+            d.identify.as_ref().filter(|_| super::detail::get(ui.ctx()) >= cpuzeez_core::detail::Level::Expert)
+        {
+            let fields = if id.len() >= 4096 {
+                cpuzeez_core::storage::identify::nvme(id)
+            } else {
+                cpuzeez_core::storage::identify::ata(id)
+            };
+            egui::CollapsingHeader::new(trf("Identify data ({} bytes)", &[&id.len()])).id_salt(("identify", i)).show(
+                ui,
+                |ui| {
+                    egui::Grid::new(("identify-grid", i)).striped(true).spacing([12.0, 3.0]).show(ui, |ui| {
+                        for (k, v) in &fields {
+                            ui.label(tr(k));
+                            super::value(ui, v);
+                            ui.end_row();
+                        }
+                    });
+                    egui::CollapsingHeader::new(tr("Raw (hex)")).id_salt(("identify-hex", i)).show(ui, |ui| {
+                        egui::ScrollArea::both().id_salt(("identify-hex-scroll", i)).max_height(260.0).show(ui, |ui| {
+                            ui.label(RichText::new(cpuzeez_core::storage::identify::hex_dump(id)).monospace().small());
+                        });
+                    });
+                },
+            );
+        }
         let Some(s) = s else { return };
         let n = s.ata_attributes.len() + s.nvme_log.len();
         if n == 0 {
@@ -465,7 +756,7 @@ fn battery(ui: &mut egui::Ui, b: &crate::battery::Battery) {
         ("Status", b.status.clone()),
         ("Rate", opt(b.rate_w, |w| format!("{w:+.2} W"))),
         ("Voltage", opt(b.voltage_v, |v| format!("{v:.3} V"))),
-        ("Temperature", opt(b.temperature_c, |t| format!("{t:.1} °C"))),
+        ("Temperature", opt(b.temperature_c, |t| super::units::temp(t, 1))),
     ];
     let (t, text) = tone(h);
     device_card(ui, icon::BATTERY_HIGH, &b.name, (t, tr(text)), |ui| {

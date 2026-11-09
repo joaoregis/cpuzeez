@@ -21,7 +21,6 @@ pub struct Palette {
     pub text_secondary: Color32,
     pub text_muted: Color32,
     pub accent: Color32,
-    pub accent_hover: Color32,
     pub accent_soft: Color32,
     pub on_accent: Color32,
     pub success: Color32,
@@ -46,18 +45,17 @@ pub const LIGHT: Palette = Palette {
     border: rgb(0xE4E2EE),
     text: rgb(0x1B1A23),
     text_secondary: rgb(0x5F5C72),
-    text_muted: rgb(0x8E8BA3),
+    text_muted: rgb(0x6A677E),
     accent: rgb(0x7C3AED),
-    accent_hover: rgb(0x6D28D9),
     accent_soft: rgb(0xEDE9FE),
     on_accent: rgb(0xFFFFFF),
-    success: rgb(0x15803D),
+    success: rgb(0x147A38),
     success_soft: rgb(0xDCFCE7),
-    warning: rgb(0xB45309),
+    warning: rgb(0xA24A07),
     warning_soft: rgb(0xFEF3C7),
     danger: rgb(0xB91C1C),
     danger_soft: rgb(0xFEE2E2),
-    series: [rgb(0x7C3AED), rgb(0xDB2777), rgb(0x0D9488), rgb(0x2563EB), rgb(0xD97706), rgb(0x64748B)],
+    series: [rgb(0x7C3AED), rgb(0xDB2777), rgb(0x0D9488), rgb(0x2563EB), rgb(0xCC6B04), rgb(0x64748B)],
 };
 
 pub const DARK: Palette = Palette {
@@ -68,9 +66,8 @@ pub const DARK: Palette = Palette {
     border: rgb(0x2E2C3D),
     text: rgb(0xECEBF4),
     text_secondary: rgb(0xA6A3BA),
-    text_muted: rgb(0x75728A),
+    text_muted: rgb(0x9491A8),
     accent: rgb(0xA78BFA),
-    accent_hover: rgb(0xC4B5FD),
     accent_soft: rgb(0x2E2650),
     on_accent: rgb(0x14121C),
     success: rgb(0x4ADE80),
@@ -86,15 +83,10 @@ pub fn palette(ui: &egui::Ui) -> &'static Palette {
     if ui.visuals().dark_mode { &DARK } else { &LIGHT }
 }
 
-pub fn palette_ctx(ctx: &egui::Context) -> &'static Palette {
-    if ctx.theme() == Theme::Dark { &DARK } else { &LIGHT }
-}
-
 // ---- spacing / radii (logical px) ----
 pub const RADIUS_CONTROL: u8 = 8;
 pub const RADIUS_CARD: u8 = 12;
 pub const PAD_CARD: i8 = 14;
-pub const PAD_PAGE: f32 = 20.0;
 pub const GAP: f32 = 12.0;
 pub const SIDEBAR_WIDTH: f32 = 196.0;
 

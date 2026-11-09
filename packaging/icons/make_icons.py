@@ -1,15 +1,18 @@
 """Build every icon format from assets/icon.svg.
 
-Needs `resvg` on PATH (`cargo install resvg`). Writes PNGs, a Windows .ico and
-a macOS .icns into assets/. Both containers simply embed PNGs, so this uses the
-standard library only.
+Renders with `resvg` when it is on PATH (`cargo install resvg`), and with the
+built-in `raster.py` (standard library only, same geometry) when it is not.
+Writes PNGs, a Windows .ico and a macOS .icns into assets/. Both containers
+simply embed PNGs.
 
     python packaging/icons/make_icons.py
 """
 
 import pathlib
+import shutil
 import struct
 import subprocess
+import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 ASSETS = ROOT / "assets"
@@ -19,6 +22,12 @@ SIZES = [16, 24, 32, 48, 64, 128, 256, 512, 1024]
 
 def render(size: int) -> bytes:
     out = ASSETS / f"icon-{size}.png"
+    if not shutil.which("resvg"):
+        sys.path.insert(0, str(pathlib.Path(__file__).parent))
+        import raster
+
+        out.write_bytes(raster.render_png(size))
+        return out.read_bytes()
     subprocess.run(["resvg", "-w", str(size), "-h", str(size), str(SVG), str(out)], check=True)
     return out.read_bytes()
 

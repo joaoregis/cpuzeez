@@ -1,0 +1,339 @@
+# CpuZeeZ 1.0: detailed roadmap
+
+> Part of the [1.0 plan](README.md). This document is the **work list**: every fix, foundation piece, improvement, new feature, spike, packaging task and doc change that came out of the planning, with an ID, its source, its dependencies and a testable "done when".
+> **Status:** S0, S1 (`1.0.0-beta.1` / `beta.2`) and S2a (`1.0.0-beta.3`, fixes in `beta.4`, finished in `beta.5`) closed; S2b built (`1.0.0-beta.6`) and S2c built (`1.0.0-beta.7`), their gates wait on play sessions; S3's automated parts built (`1.0.0-beta.8`), what needs a person or a free machine is marked ⏳/🟡 per row · **Baseline:** 0.3.0 (`26d9f0e`) · **Date:** 2026-11-05.
+
+## How to read this
+
+- **One public release: `1.0.0`.** The four stages are internal. A stage closes only when its [quality gate](README.md) passes (README §6.2), and each closed stage produces a **pre-release** for testers (§6).
+- **Item types:**
+
+| Icon | Type |
+|---|---|
+| 🐞 | Fix |
+| 🧱 | Foundation |
+| ✨ | Improvement to an existing feature |
+| 🆕 | New feature |
+| 🔬 | Spike (prove before building) |
+| 📦 | Packaging |
+| 🧪 | Tests/CI |
+| 📝 | Docs |
+
+- **Every item's definition of done** also includes the general rules in [engineering §9](engineering.md), on top of its own "done when":
+  - tests at every applicable layer;
+  - per-OS availability declared;
+  - actions declare their risk and privilege;
+  - i18n complete;
+  - docs and the CHANGELOG `Unreleased` updated;
+  - the performance budget holds.
+- **Spikes run early.** The risky research for later stages (ZeeZ Live, System hub) runs **during S0–S1**, in parallel, so S2 never stalls on an unknown. A spike's output is a short ADR with the result: go, no-go, or alternative.
+
+```
+S0 Foundation ──► S1 Existing features ──► S2a System ──► S2b ZeeZ Live ──► S2c Bottleneck ──► S3 Hardening ──► 1.0.0
+   │                 │ beta.1 (+ beta.2 fix)    │ beta.3–beta.5   │ next beta │ next beta      rc.N
+   └─ spikes ────────┴──────────────────────────┴───────────────┴─── feed S2 ─────┘
+```
+
+---
+
+## S0. Foundation
+
+Goal: fix what's broken, build the shared building blocks, and set up the tests that will guard everything after.
+
+### S0.1 Fixes found during planning
+
+| ID | Item | Type | Source | Done when |
+|---|---|---|---|---|
+| S0-F01 | **Static CRT on Windows**: the release exe imports `VCRUNTIME140.dll`, which isn't shipped | 🐞 | [dependencies §3](dependencies.md) | `+crt-static` for `*-windows-msvc`; CI starts the exe on a clean Windows image with no VC++ redistributable — ✅ `+crt-static`; `check_no_crt.py` fails CI if the release exe imports the VC++ runtime |
+| S0-F02 | **Clock busy-spin**: 30 ms per core, in sequence (≈480 ms per sample on 16 cores), plus the 80 ms fallback loop | 🐞 | README D1, `cpu/clocks.rs:64,76-81` | Delta-based APERF/MPERF/TSC per tick; CI bench: tick cost < 1 ms on 16 cores (fake MSR source) — ✅ Clocks come from per-tick deltas (`cpu/clocks.rs`, tested); the engine's own per-tick cost is budgeted by `tick_overhead_budget` |
+| S0-F03 | `rdmsr` spawns a thread per read on Windows | 🐞 | D2, `os.rs:45`, `hw/windows.rs:385` | One sampler thread re-pins itself; no thread creation in the sampling path (test counts threads) — ✅ `os::on_cpu` pins the calling thread and restores it; no thread is created per read |
+| S0-F04 | SMART probe of every drive inside the sampler | 🐞 | D3, `telemetry.rs:310` | SMART on the slow worker; a slow fake drive doesn't delay fast metrics (test) — ✅ Storage and SMART are Slow-class sources (4 reads in 40 s of `-log`), off the fast tick |
+| S0-F05 | macOS spawns `ioreg` twice per sample | 🐞 | D4, `battery.rs:393`, `sensors/macos.rs:208` | Battery on the slow class (or native IOKit); no process spawn per fast tick — ✅ The battery is read on the slow cadence (8 reads in 40 s); no process is spawned per fast tick |
+| S0-F06 | `series()` clones the whole history; a duplicate sampler runs in the GUI | 🐞 | D5, `telemetry.rs:672,748`, `gui/mod.rs:259` | Replaced by the Metric Engine (S0-B01); the GUI sampler is removed — ✅ The Metric Engine (S0-B01) replaced the history clone, and the GUI shares its sampler |
+| S0-F07 | Changing `sample_ms`/`graph_seconds` doesn't restart the sampler; the mini monitor isn't persisted | 🐞 | D9 | Settings apply live (GUI test); mini monitor state survives a restart — ✅ The period and history length apply live (`Telemetry::set_period`/`set_keep`); mini monitors persist in the settings |
+| S0-F08 | `update::newer()` treats every pre-release as equal (`beta.2` isn't newer than `beta.1`) | 🐞 | README §6.1, `update.rs:95-101` | SemVer pre-release ordering with unit tests (`beta.2>beta.1`, `rc.1>beta.9`, `1.0.0>rc.N`) — ✅ SemVer precedence in `update::newer`; tests `prerelease_order` and `versions` |
+| S0-F09 | MSI versions must be numeric; a `-beta.N` tag would break the MSI build | 🐞 | README §6.1, `release.yml:35` | Per-format mapping (MSI `0.99.N`, deb `1.0.0~beta.N`, Arch/macOS equivalents); upgrade 0.3.0 → beta → rc → 1.0.0 passes in CI — ✅ `pkgver.py` maps versions per format (self-tested in CI); the `msi-upgrade` chain and `msi-releases` (every published MSI) run in CI |
+| S0-F10 | Update check is on by default | 🐞 | P1, `update.rs` | Off until opted in on first run (S0-B07); test: zero network calls without consent — ✅ Off until opted in (`startup_check_is_opt_in`); `update_is_the_only_network_path` scans the tree; a Linux job runs with no network (`unshare -n`) |
+| S0-F11 | 20 compiler warnings in the release build | 🐞 | engineering §1 | `clippy -D warnings` green — ✅ `clippy -D warnings` on Windows, Linux and macOS targets, in the local gate and in CI |
+| S0-F12 | Dead code: `Monitor::menu`, `autoshot`, `autoshot_next` | 🐞 | GUI map, `gui/sensors.rs:176,316,339` | Removed — ✅ Removed |
+
+### S0.2 Engineering foundation
+
+| ID | Item | Type | Source | Depends | Done when |
+|---|---|---|---|---|---|
+| S0-E01 | **ADRs** for Q1–Q10 in `docs/adr/` | 📝 | README §8 | — | One ADR per decision: context, decision, alternatives, consequences — ✅ [docs/adr/](../adr/README.md): 0001–0015 |
+| S0-E02 | **Workspace migration** step 1: pure decoders → `core` | 🧱 | [engineering §10](engineering.md) | — | Existing tests pass unchanged; `core` builds with no OS API — ✅ `crates/core` has `#![forbid(unsafe_code)]` and no OS API |
+| S0-E03 | Step 2: per-OS sources → `platform` behind the traits (`trait Hw` included) | 🧱 | engineering §3, §10 | E02 | Contract suites run per OS in CI — ✅ `crates/platform` (ADR 0011); `trait Hw` in `hw/mod.rs`; the platform tests run on all five CI runners |
+| S0-E04 | Step 3: extract the pages out of `gui/mod.rs`; separate the Super I/O data from logic | 🧱 | engineering §9 | E02 | Visual regression shows no difference; `gui/mod.rs` holds only navigation and composition — 🟡 The pages live in their own modules (`gui/pages/`, `system*.rs`, `live.rs`, …); `gui/mod.rs` is still ~1.5k lines (navigation, app state and composition), not yet reduced to navigation only ([1.1.0 plan](../v1.1/README.md#6-guimodrs-down-to-navigation-and-composition)) |
+| S0-E05 | `windows-sys` in `platform/windows` (new code; old `extern`s migrate when touched) | 🧱 | dependencies §2.2 | E03 | New Win32 calls use it — ✅ New Win32 code uses `windows-sys` (ADR 0006) |
+| S0-E06 | `unsafe` confined to `platform/*/sys/`; `forbid(unsafe_code)` in `core` and `gui`; `// SAFETY:` comments | 🧱 | engineering §7 | E03 | Lint enforces it in CI — 🟡 `forbid(unsafe_code)` in `core` and, since beta.8, in `gui` (its two OS calls moved to `platform::os`); `unsafe` in the root binary's older hardware modules is documented with `SAFETY:` but not yet moved under `platform` ([1.1.0 plan](../v1.1/README.md#8-unsafe-only-in-platform)) |
+
+### S0.3 Test infrastructure and CI
+
+| ID | Item | Type | Done when |
+|---|---|---|---|
+| S0-T01 | CI matrix: Windows, Ubuntu X11 + Wayland (headless compositor), macOS Intel + ARM | 🧪 | Every job is required for merge. ✅ Wayland: headless Weston 13 renders all 17 screens on x64 and arm64 |
+| S0-T02 | `rustfmt`, `clippy -D warnings` (agreed pedantic subset), MSRV, **`cargo-deny`** (licenses, advisories, duplicates) | 🧪 | Required checks — ✅ fmt, clippy `-D warnings` (3 targets) and `cargo-deny` in CI; the MSRV is checked: `rust-version = "1.95"` (it was declared 1.89, which egui 0.36 does not build on) with its own CI job |
+| S0-T03 | **Fakes** for every source trait + the **contract test** harness | 🧪 | Every trait has a suite; every platform runs it. ✅ `metrics::check_contract`; every real source checked on each CI OS (`every_source_keeps_the_contract`) |
+| S0-T04 | **Fixture** framework (recorded `/proc`, SMART/NVMe dumps, SMU tables, PresentMon/MangoHud CSV) | 🧪 | Fixture tests in CI on every OS. ✅ `crates/core/fixtures/` (convention + privacy rule in its README); first: `/proc/diskstats`. Each later parser adds its own |
+| S0-T05 | **GUI interaction tests** with `egui_kittest` | 🧪 | At least one test per existing page, as the template — 🟡 kittest tests cover Overview, Settings, the first-run screen, the command palette, the six System tabs, the Bottleneck tab, the layout editor and view, the table and the benchmark views; the other pages are covered by the visual-regression set only ([1.1.0 plan](../v1.1/README.md#2-interaction-tests-for-the-remaining-pages)) |
+| S0-T06 | **Visual regression** from the `-screenshots` set (light and dark, with tolerance) | 🧪 | Diffs fail CI — ✅ `visual` job: PR against base on the same machine, `shotdiff.py` fails on layout change (`visual-change` label to accept) |
+| S0-T07 | **Fuzz** targets: SMBIOS, SPD, EDID, CSV import, session/report JSON, elevated-op parser | 🧪 | Scheduled runs; corpus committed — ✅ 11 targets in `fuzz/`, scheduled in `fuzz.yml`; the same inputs run as deterministic tests on every push (`robustness.rs` ×3). A starting corpus is committed in `fuzz/corpus/` (made by `write_fuzz_seeds`); no long campaign has been run yet ([1.1.0 plan](../v1.1/README.md#5-a-long-fuzz-campaign-with-its-results)) |
+| S0-T08 | **Performance benches** with thresholds: engine tick, overlay frame, 10k-row table frame. Per-source read time is already recorded (`Engine::costs`, printed after `-log`) | 🧪 | Regressions fail CI — 🟡 `tick_overhead_budget` (engine tick) and the 10k-row table test fail CI on regression; the overlay frame is measured by the soak's `--max-cpu`, not by a bench ([1.1.0 plan](../v1.1/README.md#4-an-overlay-frame-budget-that-counts-work)) |
+| S0-T09 | **Security tests**: no network without opt-in (unit test + a Linux job in a network namespace with no network), executor allow-list, data-folder permissions | 🧪 | Required checks — ✅ No network without opt-in (unit test + `unshare -n` job), executor allow-list (`actions` tests + fuzz), data folder `0o700` on Unix |
+| S0-T10 | **Soak** runner (nightly): sampler + overlay + capture for N hours | 🧪 | Flat memory, handles and fds — ✅ `.github/scripts/soak.py` (sampler nightly; GUI mode with a synthetic game, see [soak.md](../testing/soak.md)); its analysis is self-tested in CI. ⏳ The long GUI run is by hand: it opens a window |
+| S0-T11 | **Packaging tests** extended: clean-Windows start, PawnIO checkbox, `.deb`/Arch install, pre-release version mapping | 🧪 | Required on release-touching PRs — ✅ MSI optional driver, upgrade from every published MSI, clean removal (`msi-releases`), `.deb` install/remove, Arch/Debian/Ubuntu containers, version mapping |
+
+### S0.4 Shared building blocks
+
+| ID | Item | Type | Source | Depends | Done when |
+|---|---|---|---|---|---|
+| S0-B01 | **Metric Engine**: catalog with stable IDs, cost classes, subscriptions, fast/slow/event/on-demand workers, snapshots, `since(t)` | 🧱 | README §4.1 | E02, F02–F06 | All existing consumers (Sensors, Overview, Stress, tray, mini monitor, `-sensors`, `-log`) run on it; P6 benches pass — ✅ `core::metrics` engine; every consumer runs on it; the P6 tick budget is a test |
+| S0-B02 | **Widget Engine**: `Layout` model (JSON, versioned), widget renderer, threshold styles; the editor core | 🧱 | README §4.2 | B01 | The tray and mini monitor can render a layout (used in S1) — ✅ `core::layout` (versioned JSON) and `gui/layout_view.rs`; tray, mini monitors and the overlay render layouts. Since beta.8: throttling pills, a real glyph outline |
+| S0-B03 | **Virtualized table**: columns and presets, sort, filter syntax, grouping, multi-select, context menu from `Action`s, CSV export | 🧱 | engineering §4.3 | — | 10k rows within the frame budget (bench); kittest coverage — ✅ `gui/table.rs`: columns, sort, filter, groups, multi-select, menu, CSV; 10k rows under budget; keyboard test |
+| S0-B04 | **Availability model** + the single `capability_banner` | 🧱 | engineering §4.1, P3 | E03 | Every existing page shows a banner when data is missing; the README permissions map is generated or checked from it — 🟡 `access_ui::banner` and `core::availability` drive every banner; the README permissions map is written by hand, not generated or checked from it ([1.1.0 plan](../v1.1/README.md#1-permissions-map-checked-against-the-code)) |
+| S0-B05 | **Actions + Executor + audit log**, elevated subprocess with allow-list (**option B**) | 🧱 | engineering §4.2, README §4.3 | E03 | Unknown/malformed ops rejected (tests + fuzz); every action logged locally — ✅ `core::actions` (closed enum, `validate`), `executor` with `--elevated-op`, audit log; malformed ops are rejected (tests + `robustness`) |
+| S0-B06 | **Restart as administrator** (**option A**): Windows `runas`, Linux `pkexec`, macOS authorization | 🧱 | README §4.3 | B04 | Button in banners works on all OSes; manual test matrix — ✅ UAC `runas`, `pkexec`, macOS authorization. ⏳ The manual matrix needs people |
+| S0-B07 | **First run: Privacy & permissions**; *Settings › Privacy & data* (storage view, export, delete by category, retention); the shared **● REC** indicator | 🧱 | P1, P2 | B08 | Update check and recordings off until opted in (tests) — ✅ First-run screen, Privacy & data, the ● REC title; nothing is recorded or checked before opt-in (tests) |
+| S0-B08 | **Local storage**: data-folder layout, schema versions + migrations, retention jobs. ✅ in S0: settings `schema` + read-only when newer, atomic saves, unreadable files kept as `.bad`, history refuses entries from a newer app, layouts versioned, log retention. **SQLite moves to S2a-10** with its first consumer (app history): no dependency without a user (ADR 0006) | 🧱 | README §4.4, dependencies | E02 | A newer file never gets overwritten by an older app (test) |
+| S0-B09 | **Local logs** with rotation, plus a manual diagnostics bundle (logs + report, never uploaded) | 🧱 | engineering §9 | — | Bundle created from Settings; no network involved — ✅ `applog.rs` (rotated at 1 MB) and a diagnostics bundle from Settings; no network involved |
+| S0-B10 | Probe isolation: `catch_unwind`, timeouts, cancellation on workers | 🧱 | engineering §5–6 | B01 | A panicking fake probe shows "unavailable" and the GUI stays up (test) — ✅ `catch_unwind` around probes (`metrics.rs`, `gui/mod.rs`); a panicking probe is "unavailable" (test) |
+
+### S0.5 Packaging and distribution
+
+| ID | Item | Type | Source | Done when |
+|---|---|---|---|---|
+| S0-P01 | Bundle the **official PawnIO installer**: MSI optional checkbox + in-app "Install hardware access" (portable). ✅ Feature ticked by default (owner's decision), can be unticked; the in-app action re-checks the pinned SHA-256 with the file locked; CI installs it and checks uninstall keeps it | 📦 | dependencies §3 | Checkbox installs PawnIO; uninstalling CpuZeeZ leaves it, and says so |
+| S0-P02 | Release workflow downloads pinned **PawnIO modules**, verifies SHA-256, and ships them with `COPYING` and the source tag. ✅ `packaging/pins.txt` + `fetch_pawnio.sh`, MSI and portable zip | 📦 | dependencies §3 | Modules load from a fresh MSI install with no manual copy |
+| S0-P03 | `THIRD_PARTY.md` + *About › Third-party components* ✅ | 📦📝 | dependencies §4 | Every bundled binary listed with version, license and hash |
+| S0-P04 | **Pre-release pipeline**: prerelease flag for `-beta`/`-rc` tags, opt-in **Beta channel** in Settings, "Beta report" issue template | 📦 | README §6.1 | A test tag publishes a pre-release that stable users don't see — ✅ `release.yml` marks `-alpha`/`-beta`/`-rc` as pre-releases; **update channels** (Stable, Beta, Alpha) in *Settings ▸ Updates* and `-checkupdate=beta`; a *Beta report* issue template |
+| S0-P05 | Zero-cost signing mitigations: README notice ✅ (done), release notes text ✅, hash-check steps ✅ | 📝 | dependencies §3.1, Q9 | Release notes template includes the notice |
+
+### S0.6 Early spikes (de-risk S1–S2)
+
+| ID | Question | For | Done when |
+|---|---|---|---|
+| S0-X01 | **eframe on wgpu** instead of glow: transparency, overlay, startup cost, VM/RDP (WARP) | Q6c, ZeeZ Live | ADR: switch or stay on glow. ✅ [ADR 0013](../adr/0013-gui-renders-with-glow-and-falls-back-to-wgpu.md): glow stays, automatic wgpu fallback (WARP verified) |
+| S0-X02 | **SP1** PresentMon sidecar: overhead and API coverage, FG | ZeeZ Live | < 0.5% CPU; DX11/DX12/Vulkan/OpenGL covered. 🟡 2.6.0: 0.04 % of the machine (~1 % of one core), 15 MB; DX11 ✅ (VALORANT), DX12 ✅ Vulkan ✅ OpenGL ✅ (CpuZeeZ's own renderers, runtime + present mode right); FG and 240+ FPS need a game session (zeez-live §3) |
+| S0-X03 | **SP2** external overlay over games on Windows (display modes × latency) | ZeeZ Live | Matrix documented — ⏳ Needs a person with that hardware or game; outside the automated pass (see the S0 gate note) |
+| S0-X04 | **SP3** macOS overlay over fullscreen Spaces | ZeeZ Live | Proof of concept or documented limit — ⏳ Needs a person with that hardware or game; outside the automated pass (see the S0 gate note) |
+| S0-X05 | **SP4** Wayland layer-shell with winit/eframe | ZeeZ Live | PoC on KDE/Hyprland, or a "MangoHud only" ADR — ⏳ Needs a person with that hardware or game; outside the automated pass (see the S0 gate note) |
+| S0-X06 | **SP5** MangoHud live data latency | ZeeZ Live | < 1 s, or a "post-session only" ADR — ⏳ Needs a person with that hardware or game; outside the automated pass (see the S0 gate note) |
+| S0-X07 | **SP6** Metal HUD log; ScreenCaptureKit FPS cost | ZeeZ Live | Feasibility + cost — ⏳ Needs a person with that hardware or game; outside the automated pass (see the S0 gate note) |
+| S0-X08 | **SP7** PawnIO × kernel anti-cheats (Vanguard, FACEIT…) | ZeeZ Live | Compatibility list. 🟡 Started in zeez-live §5: Vanguard + PawnIO coexist outside a match; in-match and FACEIT/EAC/BattlEye need a player (see the S0 gate note) |
+| S0-X09 | **SP8** overlay GPU cost | ZeeZ Live | < 0.3 ms per game frame — ⏳ Needs a person with that hardware or game; outside the automated pass (see the S0 gate note) |
+| S0-X10 | Per-process network: ETW Kernel-Network (Win), eBPF/sock_diag (Linux), `nettop` (macOS) | System | Feasibility per OS. ✅ task-manager §3: ETW (admin), sock_diag TCP_INFO (no eBPF), `nettop` sidecar. macOS needs a check on the Mac (docs/testing/macos.md) |
+| S0-X11 | Per-process GPU on macOS (IOAccelerator `AppUsage`); "not responding" on macOS | System | Feasibility — ⏳ Needs a person with that hardware or game; outside the automated pass (see the S0 gate note) |
+| S0-X12 | Task Manager clean-room confirmations: startup-impact thresholds, `StartupApproved` format | System | Documented in task-manager §1. ✅ Layout and thresholds confirmed; WDI files found stale, so impact shows its date and falls back to the recorder |
+| S0-X13 | NVMe Device Self-test through Windows' protocol command path | S1 tools | Works, or a documented limit. ✅ Supported (1903+, admin) with a ~10 min throttle, per core-pages §7.3. The first real run happens in S1-K08 with the user's consent |
+| S0-X14 | SignPath Foundation eligibility; package-manager policies for unsigned builds (winget, Scoop, AUR, Homebrew) | Distribution | Decision per channel. ✅ dependencies §3.1: winget, Scoop and AUR OK; Homebrew needs our own tap; SignPath: ask about dual licensing first |
+
+**S0 gate:** every 🐞 closed; the building blocks have tests and benches; existing features behave exactly as in 0.3.0 (visual regression), but run on the new architecture; every spike has an ADR. *No pre-release: nothing new for users yet.*
+
+**S0 gate status (2026-11-05): closed for S1, with spikes carried.**
+- Every 🐞 is closed, every building block has tests, and CI is green on Windows, Linux (x64, arm64, Debian, Ubuntu 22.04, Arch) and macOS (Intel, ARM).
+- The spikes that need hardware, games or another OS stay open. None of them blocks S1, which improves the existing pages; each must close before the gate of the stage it de-risks:
+
+  | Spike | Waiting on | Blocks |
+  |---|---|---|
+  | X02 (rest): Frame Generation, 240+ FPS | A play session (DLSS/FSR FG game) | S2b gate |
+  | X03, X09: overlay over games × display modes; overlay GPU cost | A play session with the overlay prototype (S2b) | S2b gate |
+  | X04, X07, X11: macOS overlay over fullscreen, Metal HUD, per-process GPU | Mac results ([docs/testing/macos.md](../testing/macos.md)) | S2a/S2b gates |
+  | X05, X06: Wayland layer-shell, MangoHud | A Linux desktop (KDE/Hyprland) | S2b gate |
+  | X08 (rest): in-match with sensors on; FACEIT/EAC/BattlEye | The account owner, at their own risk | S2b gate |
+
+---
+
+## S1. Existing features, improved
+
+Goal: everything CpuZeeZ already does becomes complete, configurable and polished. New data sources built here are reused in S2.
+
+### S1.1 New platform data sources
+
+| ID | Item | Type | Source | Done when |
+|---|---|---|---|---|
+| S1-D01 | Per-disk I/O (bytes, IOPS, queue, latency, active time) | 🧱 | task-manager §4 | Win/Linux/macOS sources + contract tests. ✅ `disks` source (`disk<N>/…`): `IOCTL_DISK_PERFORMANCE`, `/proc/diskstats` (fixture-tested), IOKit statistics (macOS: active time estimated, no queue); no privileges |
+| S1-D02 | Per-adapter network throughput, errors and drops | 🧱 | task-manager §4 | Same. ✅ `net` source (`net<N>/…`, Mbps, packets/s, errors, drops): `GetIfTable2` (hardware, up), `/proc/net/dev` (fixture-tested), routing-socket `if_data64`; plumbing interfaces left out |
+| S1-D03 | Memory composition (commit, pools, standby, compressed, *wired*), page file/swap | 🧱 | task-manager §4 | Same. ✅ `core::memory::Composition` (missing ≠ 0); `GetPerformanceInfo` + memory-list PDH counters, `/proc/meminfo` (fixture-tested), `vm_statistics64` + `vm.swapusage`; `mem/size/*`, `mem/load/{commit,swap}` |
+| S1-D04 | GPU per-engine utilization (adapter level) | 🧱 | zeez-live §4 | Same. ✅ `gpu-engines` source (`gpu<N>/engine/*`): `GPU Engine` counters aggregated like the Task Manager (sum per engine, busiest engine per type; unit-tested), amdgpu `gpu_busy_percent`, IOAccelerator Device/Renderer/Tiler |
+| S1-D05 | **Split the `cpu+board` source by device** (CPU, Super I/O, DIMMs, SMU, chipset) so a lease reads only what it needs, and find the ~170 ms of waiting per read (measured 2026-11-04 on the reference machine, elevated: 193 ms mean latency but ~19 ms of CPU) | 🐞 | P6, measurement below | Overlay lease "cpu temp + clock" reads < 5 ms per tick. ✅ Sources `cpu`, `board`, `dimms`; the "waiting" was the first read averaged in (now reported apart); typical cpu tick ~3 ms under game load. 🟡 Rare ~30 ms spikes on busy cores: a per-core pinned reader pool is the next step if ZeeZ Live's SP8 budget needs it |
+
+### S1.2 Shared page patterns
+
+| ID | Item | Type | Source | Done when |
+|---|---|---|---|---|
+| S1-U01 | Detail levels: Basic / Advanced / Expert | ✨ | [core-pages §1](core-pages.md) | On every page; kittest. ✅ Switch in the Processor, Mainboard, Memory and Graphics headers, remembered per page; Advanced (default) = the pre-1.0 view, Basic = essentials, Expert adds thread 0's CPUID leaves and MSRs (`core::detail`, kittest `detail_levels_filter_cards`). Devices/Sensors get it with their S1-G07/G08 rebuilds |
+| S1-U02 | **Command palette** (`Ctrl+K`): search every page, run actions | ✨ | core-pages §1 | Finds fields and actions across pages. ✅ Every report field (with its value and path), every page and six actions; every word must match, title-prefix first; Enter opens the page that shows it (tests + kittest) |
+| S1-U03 | Copy / copy as report text / **pin to Overview** on every row and card | ✨ | core-pages §1 | Everywhere. ✅ Right-click any card row (`widgets::kv_list`, so every page): copy value, row, card as text, pin. Sensors rows pin their metric (live on the Overview's *Pinned* card); pins persist in settings; kittest `a_row_pins_under_its_card` |
+| S1-U04 | Global units (°C/°F, MHz/GHz, MB/MiB, decimals) and a raw-value toggle | ✨ | core-pages §1 | Everywhere. ✅ `core::units` (tested) + *Settings › Units*; every live value, tile, tray/mini text and page clock goes through it; stored values stay °C/MHz/MiB. Raw values come with Expert detail (U01) |
+
+### S1.3 Pages
+
+| ID | Item | Type | Source | Done when |
+|---|---|---|---|---|
+| S1-G01 | **Overview**: identity strip, health strip, configurable tiles (Widget Engine) with deep links, presets, opt-in local alerts, quick actions, Customize mode | ✨ | core-pages §2 | Every tile deep-links; layouts persist. ✅ Clickable identity strip; health pills (build, drives, battery wear); tiles from `layout::presets::overview` (Default = pre-1.0, Gamer, Overclocker, Laptop, Workstation) open Sensors filtered; Customize mode (kittest); quick actions; pinned card; opt-in local alerts (`core::alerts`, whole-window rule, tested; Overview banner + tray tooltip; *Settings › Alerts*). SMART is in the health strip |
+| S1-G02 | **Build health** checks on the Overview: single channel, XMP/EXPO off, reduced PCIe link, ReBAR, power plan/governor, monitor refresh, iGPU cable | 🆕 | [bottleneck §2.5](bottleneck-detector.md) | Each check has fixtures and a plain-language fix. ✅ `core::health` (rules unit-tested per mistake; unknown facts skip their rule) fed by `src/health.rs` (SPD/SMBIOS, Chipset, adapters' links, `platform::display` modes + power plan/governor); translated fixes. ReBAR ✅ from the GPU's BAR windows (Windows CfgMgr32 allocated memory ranges, no admin; Linux sysfs `resource`): RTX 4060 here = 8 GiB window above 4 GiB → on; rule `rebar-off` for discrete GPUs (tested). 🟡 Linux refresh needs KMS |
+| S1-G03 | **Processor**: per-core table (type, CCD/CCX, clocks, ratio, temp, VID, power, load, C-states, CPPC rank), topology diagram, limits, vulnerabilities/mitigations, virtualization/VBS, OS power/EPP, grouped instructions | ✨ | core-pages §3 | ✅ Per-core table (live clock/temp/load), topology (package → CCD → CCX → cores, L3), SMU limits, vulnerabilities (Windows speculation-control/KVA classes, Linux sysfs), VT-x/AMD-V + VBS/HVCI + KVM, power plan/governor/EPP (`platform::cpu_os`), instructions grouped and explained. C-state residency per thread (`platform::cstates`: PDH `% C1/C2/C3 Time`, Linux cpuidle deltas; tested), CPPC preferred-core rank (sysfs, else AMD C00102B0h / Intel 771h; ranks tested; 7900X: cores 0–1 = 216, CCD1 lowest), Intel PL1/PL2 + τ from 606h/610h (decode tested; no Intel machine here to read one). Per-OS table in FEATURES.md updated |
+| S1-G04 | **Mainboard**: full SMBIOS browser, PCIe tree with link alerts, firmware security (Secure Boot, TPM, ReBAR, Above 4G, CSM), ACPI tables, Super I/O with board names, slots/ports | ✨ | core-pages §4 | ✅ Firmware (UEFI/CSM, Secure Boot, TPM via `platform::firmware`), PCIe links table (current vs max; narrower = warning, slower = idle), Super I/O readings by board-map name, slots/ports (SMBIOS 8/9), SMBIOS tree browser, ACPI table headers at Expert (`core::acpi`). ReBAR and Above 4G decoding ✅ from the discrete GPU's BAR windows (see G02) |
+| S1-G05 | **Memory**: full timings (primary/secondary/tertiary), topology, active profile vs JEDEC/XMP/EXPO, ECC + EDAC, DIMM temp/PMIC, OS composition, theoretical vs measured bandwidth | ✨ | core-pages §5 | ✅ AMD UMC secondary/tertiary (tRCDWR, tRRD_S/L, tFAW, tWR, tRTP, tCWL, tWTR_S/L, tREFI, DDR5 tRFC1/2; decoded from registers read on a 7900X, unit-tested), active profile (exact match or "tuned …"), SMBIOS slot map, ECC type + Linux EDAC counters, DIMM temps, OS composition bar, theoretical bandwidth → memory benchmark. 🟡 Intel secondaries, DDR5 GDM/2T/power-down (unverified fields left out) |
+| S1-G06 | **Storage**: complete NVMe Identify / ATA IDENTIFY, full SMART with thresholds and throttle counts, link current/max, partitions/volumes with alignment and encryption, OS TRIM status, live I/O | ✨ | core-pages §6.1 | ✅ Full SMART tables (ATA thresholds, whole NVMe health log), NVMe thermal-throttle count/time, link, partition alignment (`platform::partitions`, no admin), OS TRIM (NTFS setting / Linux discard); live I/O per disk is the Sensors *Disks* preset (D01). Identify ✅: decoded NVMe Identify Controller / ATA IDENTIFY + hex dump at Expert (`core::storage::identify`, tested; verified on Kingston A1000, WD SN350, WD10EZEX; self-test buttons follow OACS bit 4). Encryption ✅ without admin (`platform::encryption`: BitLocker via the shell property in the background, LUKS/dm-crypt through LVM, FileVault) |
+| S1-G07 | **Devices**: USB tree with negotiated vs supported speed, Thunderbolt/USB4, Bluetooth peripheral battery, monitor current mode/HDR/VRR, audio formats, live network | ✨ | core-pages §6.2 | ✅ USB devices with negotiated speed and supported version, flagging USB 3 devices at USB 2 speed (Windows hub IOCTL, Linux sysfs; tested); displays with refresh vs supported and the adapter driving them; live network is the Sensors *Network* preset (D02). ✅ USB tree (parent hub per device; tested), Thunderbolt/USB4 (Windows: USB4 host routers / TB controllers; Linux: `/sys/bus/thunderbolt` with generation and lane speed), Bluetooth battery (`DEVPKEY_Bluetooth_Battery`, power_supply scope Device, `BatteryPercent`), HDR supported/on + bits per channel (DisplayConfig) and the EDID refresh range as the VRR hint, audio endpoints with the mix format (MMDevices `DeviceFormat`, ALSA `hw_params`, CoreAudio; tested). Verified here: 21 endpoints, USB4 router, 27G2G4 HDR-capable 48–144 Hz |
+| S1-G08 | **Sensors** on the virtualized table (search syntax, presets, export) | ✨ | engineering §4.3 | Same features as today, plus table features. ✅ Grouped table (sort, filter syntax incl. `cur>80`/`unit:°`/`id:disk`, multi-select, Ctrl+C), hot values tinted, presets, *Export view* (CSV of the filtered rows), plot/pin from the selection. The release build has 0 warnings again |
+
+### S1.4 Benchmarks and tools
+
+| ID | Item | Type | Source | Done when |
+|---|---|---|---|---|
+| S1-K01 | Benchmark principles: test-file only, reproducibility (conditions recorded, N runs + median), documented score (1000 = reference machine) | ✨ | core-pages §7.1 | Every benchmark follows them. ✅ `src/benchkit.rs` (tested): conditions saved with every result (version, power plan/governor, starting CPU temperature, runs), N runs → median + spread, sub-test points (1000 = the 7900X), total = geometric mean; one `Job` (progress/cancel) for every background run |
+| S1-K02 | **CPU suite**: integer, FP, SIMD GEMM, crypto, ray tracer, branchy, thread scaling, P × E, 10-min sustained | ✨ | core-pages §7.2 | Scores stable within tolerance across 3 runs on the reference machine. ✅ `src/cpusuite.rs`: 8 workloads × ST/MT (AES checked against FIPS-197, hardware = software; GEMM checked A×I = A), thread scaling, P × E (hybrids), 1/10/30-min sustained with first/last-minute drop. Reference run: totals 1012 / 1007 / 992 (±1 %). Single-thread runs on CPU 2 (CPU 0 takes the interrupts: up to 45 % spread) and GEMM buffers are 64-byte aligned (split lines cost ~40 %) |
+| S1-K03 | **Core-to-core latency** heat map | 🆕 | core-pages §7.2 | Win/Linux; macOS statistical. ✅ *Benchmarks › Latency*: pinned ping-pong per core pair (`src/latency.rs`, tested), heat map with min/median/max. 7900X: ~20 ns within a CCD, ~165 ns across, 0.3 s total. macOS statistical mode ✅: 200 unpinned ping-pongs → min/p10/median/p90/max (`latency::statistical`, tested on Windows unpinned; runs on the Mac in the beta checklist) |
+| S1-K04 | **Memory** additions: GUPS, STREAM triad, huge pages, per-CCD/NUMA latency | ✨ | core-pages §7.2 | Same. ✅ `src/memplus.rs` (tested: the walk is one cycle) + `platform::large_pages` (Windows `MEM_LARGE_PAGES` with SeLockMemoryPrivilege, Linux THP `madvise`, macOS none: each says why). 7900X: triad 41/55 GB/s ST/MT, 0.13/0.70 GUPS, 94 ns random walk, 87 ns from either CCD |
+| S1-K05 | **GPU benchmark** (`wgpu`, feature `gpu-bench`): FP32/FP16, VRAM bandwidth, PCIe host↔GPU, raster scene | 🆕 | core-pages §7.2 | DX12/Vulkan/Metal. ✅ `src/gpubench.rs` on the wgpu that already ships (ADR 0013), so no separate `gpu-bench` feature: FMA chains (FP16 where `shader-f16` exists), 256 MiB VRAM copy, upload/download timed as the slower of CPU-write and GPU-copy (Vulkan puts staging in ReBAR VRAM: timing the copy alone read 126 GB/s), 65 536-triangle 1080p scene. RTX 4060: 10.5/13.3 TFLOPS, 256 GB/s, 11.4/13.1 GB/s (PCIe 4.0 x8), 3700 fps; also verified on the Radeon iGPU and on DX12 |
+| S1-K06 | **Storage benchmark** (CrystalDiskMark-style + sustained write with a warning) | 🆕 | core-pages §7.2 | Uncached I/O verified; cleans up its test file. ✅ *Benchmarks › Storage*: SEQ1M/RND4K × T1/T8, write then read, uncached (`platform::direct_io`: NO_BUFFERING/O_DIRECT/F_NOCACHE, aligned buffers), test file deleted on every exit path (tested); drive or app-data folder, 256 MiB–4 GiB. Sustained write ✅: 8/32/64 GB (only sizes under 80 % of the free space), 4 uncached sequential writers, MB/s per second charted, start/end/average and the GB written before the speed halves (≈ SLC cache; tested on a synthetic curve), warning with the GB written, file deleted (tested) |
+| S1-K07 | **Stability**: CPU stress variants, user-mode memory test, GPU stress, combined | ✨ | core-pages §7.2 | Auto-stop limits tested. ✅ CPU loads Light (scalar) / Heavy (widest SIMD) / Mixed (50 ms steps); `src/memtest.rs` (5 patterns, each tested to catch a flipped bit; labelled "not a MemTest86/TestMem5 replacement"); GPU stress = the FP32 shader in a loop (cancel tested); any combination. Auto-stop at CPU Tjmax/limit, GPU 90 °C, first memory error, allocation failure or GPU failure (kittest-free unit test `auto_stop_limits`) |
+| S1-K08 | **SSD/HDD health**: SMART self-tests, health panel (life, TBW, temperature history, alerts), read-only surface scan | 🆕 | core-pages §7.3 | Per-OS availability declared. ✅ *Tools › Drive health* (`src/drivetest.rs`, availability table in its header): NVMe Device Self-test (Windows `IOCTL_STORAGE_PROTOCOL_COMMAND`, statuses incl. the 10-min throttle worded; Linux admin ioctl), ATA SMART EXECUTE OFF-LINE (pass-through / SG_IO, conveyance too), progress + history parsed from NVMe log 06h and ATA byte 363 + log 06h (fixture-tested), health panel (life, written vs user TBW per serial, temperature history, error counters, reasons), read-only surface scan (sample/full, latency buckets, unreadable blocks; tested). Read paths verified on 2 NVMe + 1 SATA drive here; no self-test started on the user's drives (their call, in the beta checklist). macOS ❌ self-tests |
+| S1-K09 | History and compare for every benchmark type | ✨ | core-pages §7.2 | Same UI as today's history. ✅ CPU suite/scaling/P×E/sustained, storage and core-to-core latency save to the history; kinds come from the file; Compare lists every sub-test with its % (tested) |
+
+### S1.5 Tray and mini monitor
+
+| ID | Item | Type | Source | Done when |
+|---|---|---|---|---|
+| S1-M01 | **Tray**: several icons (one per metric), styles (number, bar, mini graph, ring), DPI-sized text, colour + shape thresholds, rich tooltip, dynamic re-translatable menu, configurable click, macOS multi-metric menu-bar text, honest limits shown | ✨ | core-pages §8 | Win/mac/Linux SNI; kittest for the settings UI. ✅ `gui/trayicon.rs` (4 styles at `SM_CXSMICON` size, text from egui's glyph atlas, warning notch / danger frame; tested at 16–32 px) + `gui/tray.rs` (N icons on tray-icon/ksni, menu rebuilt on state or language change, tooltip clipped to Windows' 127 chars, click action; tested) + `core::layout::tray` model + *Settings › Tray icons* (kittest `tray_icons_settings`). Menu items for the overlay, capture, bottleneck detector and System hub arrive with S2a–S2c |
+| S1-M02 | **Mini monitor** on the Widget Engine: layouts, resizable, appearance, lock (click-through), snap and remember, several instances, hide on fullscreen, expand on hover, context menu, persistence | ✨ | core-pages §9 | Shares layouts with the overlay editor. ✅ `core::layout::mini` (model, edge snap, hover expansion; tested) + Grid direction, per-layout theme, *Grid* and *Big number* presets; `gui/mini.rs` (one transparent always-on-top viewport per monitor, click-through lock also from the tray, `SHQueryUserNotificationState` full-screen hide, Ctrl+scroll scale, context menu, positions saved) + `gui/layout_editor.rs`, the alias-based editor the overlay will reuse (kittest `layout_editor_edits`). Verified on screen: two monitors, dark list + light grid, transparent corners. 🟡 Edge snapping uses the primary monitor's size (secondary-monitor origins need winit); outline = dark plate, not a glyph stroke |
+
+**S1 gate → pre-release `1.0.0-beta.1`.**
+
+**S1 gate status (2026-11-05): closed → `1.0.0-beta.1`.**
+- Every S1 item is in. CI (Windows, Linux x64/arm64 and containers, macOS Intel/ARM) runs rustfmt, clippy `-D warnings`, the unit/fixture/contract tests and the kittests, including the new benchmark views (`gui/bench_views_test.rs`), the tray settings and the layout editor.
+- Known limits shipped as documented, not guessed: Intel memory secondaries and DDR5 GDM/2T (no Intel machine to verify), Linux display refresh (needs KMS), mini-monitor edge snapping on the primary display only, rare ~30 ms per-core read spikes (D05, revisit if SP8 needs it).
+- The manual hardware pass is the beta itself: [docs/testing/beta1.md](../testing/beta1.md).
+
+---
+
+## S2a. System hub (Task Manager)
+
+| ID | Item | Type | Source | Depends | Done when |
+|---|---|---|---|---|---|
+| S2a-01 | `procs` sources per OS: snapshot with threads, no strong handles | 🆕 | [task-manager §3.1](task-manager.md) | S0-E03, X10–X11 | Contract tests; anti-cheat rule enforced (handle-rights test). ✅ `platform::procs` (`NtQuerySystemInformation`, `/proc/<pid>`, `libproc`; `PROCESS_QUERY_LIMITED_INFORMATION` only, enforced by `reading_uses_only_the_limited_right`), `platform::pdh` + `core::gpu::engines::per_process`, `platform::desktop` (`EnumWindows` + `IsHungAppWindow`), `core::procs` (rates, tree, grouping, problems, critical list) |
+| S2a-02 | **Processes**, Grouped and Detailed modes: every column, search syntax, presets, tree, heat map, 60 s sparklines, pinning | 🆕 | task-manager §2–3 | S0-B03 | Every Task Manager column present or marked per OS. ✅ `src/procs.rs` background `Sampler`, `gui/table.rs` `Cell::Heat` + `Cell::Sparkline`, `gui/system.rs` Grouped/Detailed modes, parent→child Tree toggle, 5 column presets (*Essential*, *Gaming*, *Leak hunting*, *Security*, *Everything*), top pinning |
+| S2a-03 | **Process actions** through the Executor: end/tree, restart, suspend/resume, Eco mode, priority, affinity, dump, wait chain, UAC virtualization, run new task (+ admin), window actions | 🆕 | task-manager §3.2 | S0-B05 | Critical-process warnings; kittest flows. ✅ `platform::proc_ops` (end/kill, suspend/resume, priority, affinity, Efficiency mode, minidump, WCT / Linux `wchan`, UAC virtualization, reveal, run new task) wired into `core::actions::ProcessOp` + `executor` (tested on child process) |
+| S2a-04 | **Details panel**: threads, modules, connections, open files, services, windows, GPU, security (signature, integrity, on-demand SHA-256) | 🆕 | task-manager §3.3 | 01 | Protected/anti-cheat processes excluded from on-demand reads. ✅ Side inspector in `gui/system.rs` (*Overview*, *Threads*, *Network* TCP/UDP sockets, *Windows*, *Security* anti-cheat safe badge + on-demand SHA-256) |
+| S2a-05 | Problems filters, multi-select batch actions, export, snapshot compare | 🆕 | task-manager §3.3 | 02 | Same. ✅ Problems filter pills (*Not responding*, *Memory growing*, *Sustained high CPU*, *Running from temp*), multi-select End task, CSV/JSON export, and *Snapshot* + *Compare* diff panel |
+| S2a-06 | **Performance** tab: per-device views (CPU grid, memory, disks, network, GPU engines, NPU), summary view, time ranges, export | 🆕 | task-manager §4 | S1-D01–D04 | Same. ✅ `gui/system_perf.rs` + `src/npu.rs` + `platform::os::cpu_perf_summary`: left device list with mini sparklines, *Summary view*, 1m/10m/1h/session window, CSV export, CPU per-core heat grid + C-states + uptime, Memory composition bar + pools/commit/swap, Disks, Network adapters, GPUs (per-engine), NPUs |
+| S2a-07 | **Services**: SCM / systemd D-Bus (polkit) / launchd; start/stop/pause/restart, startup type, log-on account, recovery, dependencies (graph), logs, health, filters, protected list, undo | 🆕 | task-manager §8 | S0-B05 | Every `services.msc` function present or marked per OS. ✅ `core::services`, `platform::services`, `gui/system_services.rs`, `ServiceOp`: Windows SCM (`EnumServicesStatusExW`, `QueryServiceConfigW`, `QueryServiceConfig2W`, delayed-auto, failure recovery), Linux `systemd`/`journalctl -u`, macOS `launchd`, quick filters, transitive dependency graph & stop confirmation, protected-service lock, Undo |
+| S2a-08 | **Startup**: all sources, enable/disable, impact (WDI / systemd / recorder), last BIOS time (FwPOSTTime / FPDT), boot timeline, read-only advanced view, undo | 🆕 | task-manager §6 | X12 | Same. ✅ `core::startup`, `platform::startup`, `gui/system_startup.rs`, `StartupOp`: Registry `Run`/`RunOnce` + Startup folders + 12-byte `StartupApproved` read/write (with `Date disabled` from `FILETIME`), `FwPOSTTime` / ACPI FPDT Last BIOS time, WDI `StartupInfo*.xml` impact parser, visual Boot timeline, Undo |
+| S2a-09 | **Users**: sessions, per-user resources, disconnect/sign out/message/connect, manage accounts | 🆕 | task-manager §7 | S0-B05 | Same. ✅ `platform::users` + `gui/system_users.rs`: Windows WTS (`WTSEnumerateSessionsW`, `WTSQuerySessionInformationW`, `WTSDisconnectSession`, `WTSLogoffSession`, `WTSSendMessageW`), Linux `loginctl`, macOS `who`, per-user aggregated CPU/Memory/Disk/GPU, expandable per-user process list, Disconnect / Sign out / Send message / Manage accounts |
+| S2a-10 | **App history** recorder (opt-in, retention) + UI | 🆕 | task-manager §5 | S0-B07–B08 | Off by default; covers-only-while-running notice shown. ✅ `gui/system_history.rs`: opt-in per-app recorder (`app_history.json`), honest scope notice, Today / 7d / 30d / All filter, Top consumers pills, per-day bar chart, Delete usage history |
+| S2a-11 | *Settings › System* (every Task Manager setting + new ones) | 🆕 | task-manager §9 | — | Same. ✅ `settings.rs` + `gui/settings_ui.rs`: Default start page, Always on top, Minimize on use, Hide when minimized, Show full account name, Confirm Efficiency mode, Show kernel times, App history toggle & retention |
+
+**S2a gate → pre-release `1.0.0-beta.3`** (System hub / Task Manager).
+
+**S2a gate status (2026-11-05): closed → `1.0.0-beta.3`.**
+- All 11 S2a items (`S2a-01`..`S2a-11`) are implemented, unit/GUI tested (`egui_kittest`), i18n-verified (`pt-BR` and `es`), and clean under multi-target Clippy (`windows`, `linux`, `macos`) and the `pages_never_probe_in_a_frame` guard.
+- **Review after the release (2026-11-05).** Fixed in `1.0.0-beta.4`:
+  - process actions carry each target's start time and the executor refuses a reused PID; service names and startup ids are validated in the app and in the elevated helper (`Action::validate`, tested), `systemctl`/`launchctl` get `--` before the name;
+  - memory dumps are refused for anti-cheat-protected processes (`core::procs::anti_cheat`), as P4 requires;
+  - the details panel's thread/connection refresh and the Performance memory counters moved off the UI thread;
+  - contract tests for `platform::services`, `startup` and `users` (they had none);
+  - Linux/macOS "pause" no longer stops a service; Windows *RunOnce* entries can't be "disabled" silently; the unused *Show kernel times* option was removed.
+- **Closed in `1.0.0-beta.5` (2026-11-05)**, the items the review had left open:
+  - S2a-02:
+    - per-process network: Windows through a private ETW session on `Microsoft-Windows-Kernel-Network` (needs an administrator); Linux through `sock_diag` `tcp_info` (TCP only; other users' sockets need root); macOS through `nettop` (`platform::proc_net`, parser fixtures).
+    - Power usage and its trend: an estimate (`core::procs::power_score`, tested).
+    - Command line (macOS through `KERN_PROCARGS2`), architecture, elevated, integrity level and UAC virtualization (`platform::procs::token`, limited handle only).
+    - CPU time, I/O operation counts, GDI/USER objects.
+    - Per OS: integrity, UAC virtualization and GDI/USER are Windows-only; elevated means root on Unix.
+  - S2a-03: *Restart* for Explorer (`ProcessOp::RestartShell`; the executor checks the target is `explorer.exe`); *Close window* (`WM_CLOSE`); `Action::Process` carries the target names, so `risk()` flags critical processes by name (tested).
+  - S2a-07:
+    - The log-on account can be set to a built-in account. Accounts with a password are left to `services.msc`, so no password crosses the elevation boundary.
+    - Recovery can be edited: SCM failure actions on Windows, a systemd drop-in on Linux, with `RunProgram` refused by `Action::validate`. Start parameters can be set (Windows).
+    - Triggers, SID type and required privileges are shown (contract test on `EventLog`).
+    - macOS `launchctl` now gets `domain/label` targets for `kickstart`/`enable`/`disable`; still **not run on a Mac** (X04/X07/X11 hardware).
+  - S2a-10:
+    - SQLite store (`rusqlite` bundled, Q6a): UPSERT per (day, app), period queries, retention applied, beta.3/beta.4 JSON imported once.
+    - The recorder runs on its own thread whatever page is shown.
+    - Run time is counted per app, not per process. Tested on an in-memory database.
+  - Tables: resizable, movable, sideways-scrolling columns; ellipsis with full-text tooltips; the right-click menu fixed. A GUI test drives resize, move and sort with real mouse events.
+  - Layout: Services and Performance were laid out sideways (`allocate_ui` inherits the parent's direction) and showed nothing; fixed, and all six System tabs are now in `-screenshots`.
+  - i18n: `every_literal_is_translated` fails on any `tr()`/`trf()` literal without a pt-BR/es entry.
+
+## S2b. ZeeZ Live
+
+| ID | Item | Type | Source | Depends | Done when |
+|---|---|---|---|---|---|
+| S2b-01 | **Overlay window** per OS (click-through, no focus, deferred viewport, capture-exclusion option, exclusive-fullscreen detection) | 🆕 | [zeez-live §3.2](zeez-live.md) | X01, X03–X05, X09 | P6 FPS impact ≤ 1%. ✅ `gui/live.rs` overlay viewport + `platform::overlay` (Windows: NOACTIVATE/TOOLWINDOW/TRANSPARENT, the ADR 0013 layered alpha, topmost re-asserted, `WDA_EXCLUDEFROMCAPTURE`); 9 anchors + offset (`core::live::place`, tested); exclusive-fullscreen warning from the present mode. Shown over a running borderless game on Windows (2026-11-05). FPS impact (SP2/SP8) needs a play session |
+| S2b-02 | **Brand and first use**: ZeeZ Live entry with Live / Overlay / Sessions tabs, ● LIVE / ● REC, 3-step first use, glossary, teaching empty states | 🆕 | zeez-live §1 | 01 | Usability check: a new user shows the overlay in under 1 minute. ✅ Sidebar entry, Live / Overlay / Sessions, ● LIVE and ● REC, 3-step first use, metric tooltips, teaching empty states. The in-app glossary is the tooltips; the 1-minute usability check is the beta |
+| S2b-03 | **Styles** (Minimal, Compact, Detailed, Benchmark, Overclocker) and the **layout editor** (WYSIWYG, widgets, styles, anchors/drag, rates) | 🆕 | zeez-live §5.2–5.3 | S0-B02 | Layouts shared with the mini monitor. ✅ `presets::live` (Minimal, Compact, Detailed, Benchmark, Overclocker) on `frames/*` metrics; the layout editor behind *Customize*. Throttling pills (`Kind::Throttle`) ✅ in beta.8; per-range colours beyond thresholds aren't in the Widget Engine yet |
+| S2b-04 | **Global hotkeys** (Win/mac/X11 + Wayland portal), conflict detection | 🆕 | zeez-live §5.5 | — | Per-OS tests. ✅ `global-hotkey` (RegisterHotKey / Carbon / XGrabKey), five actions, editable, conflicts with our actions and with other apps (`core::live::hotkey_conflicts`, tested). Wayland GlobalShortcuts portal not done: focus-only there, tray instead |
+| S2b-05 | **Frame source, Windows**: bundled PresentMon sidecar | 🆕 | zeez-live §3.1, Q3 | X02 | Frames, GPU Busy, FG and present mode parsed (fixtures). ✅ PresentMon 2.6.0 bundled (MSI, zip; SHA-256 pinned; license shipped), run on demand as administrator, SHA-256 checked before each start, ETW session ended on stop and exit; parser on 2.6's real output (UTF-8 pipe / UTF-16 file, `TimeInMs`, `FrameType` via `--track_frame_type`), end-to-end test against a running game. FG frames need a FG game (X02) |
+| S2b-06 | **Frame source, Linux**: MangoHud detect, install, enable for all games, copy launch option, config generator, log ingest, status line | 🆕 | zeez-live §3.1, Q4 | X06 | Works with distro and Flatpak Steam. ✅ `live_mangohud.rs` + `core::mangohud`: detect (distro, Flatpak), pkexec install after confirmation, `environment.d` enable-all, copy launch option, config from the layout, log tail into the frame hub, status line. **Not run on a Linux desktop yet** (X05/X06) |
+| S2b-07 | **Frame source, macOS (experimental)**: Metal HUD launcher, ScreenCaptureKit displayed FPS | 🆕 | zeez-live §3.1 | X07 | Labelled experimental. 🟡 Metal HUD launcher (`open --env MTL_HUD_ENABLED=1`). ScreenCaptureKit displayed FPS waits for X07 on a Mac |
+| S2b-08 | **Live** dashboard tab (target, FPS, graphs, capture button) | 🆕 | zeez-live §5.1 | 05–07 | Same. ✅ Live tab: target (auto/pick), FPS, lows, GPU Busy, frame-time chart, capture card, restart as administrator |
+| S2b-09 | **Capture**: manual, timed, automatic (opt-in); `frames.csv` (PresentMon columns), `hw.csv`, `session.json` | 🆕 | zeez-live §6 | S0-B07–B08 | Files open in CapFrameX (manual check). ✅ Manual, timed (3 s countdown), hotkey, automatic per profile; markers; throttling bands; `frames.csv` (PresentMon columns) / `hw.csv` / `session.json` (round-trip tested). CapFrameX opening our file is a manual check for the beta |
+| S2b-10 | **Reports**: summary (1% convention stated), aligned charts, percentiles, histogram, comparison, validity warnings, HTML/PNG export, CSV import | 🆕 | zeez-live §6 | 09 | Fixture sessions produce known numbers. ✅ `core::session` (comparability, variance, medians, `hw.csv` reader, offline HTML with inline SVG; tested) + `gui/live_sessions.rs` (report, compare, HTML/PNG export, CSV import, tested) |
+| S2b-11 | **Per-game profiles** and automation | 🆕 | zeez-live §5.4 | 03 | Same. ✅ `core::live::Profile`: own layout/place, show on start, capture while running (opt-in, ● REC), detected by process name every 2 s |
+| S2b-12 | **Anti-cheat safety**: "no PawnIO" mode where needed, the compatibility list from X08 | 🆕 | zeez-live §7 | X08 | Documented. ✅ Per-game safe mode: `platform::hw::pause` closes the one PawnIO gate (`Module::exec`); X08 rows in zeez-live §7. In-match results need the account owner (X08) |
+**S2b gate → the next pre-release** (ZeeZ Live; betas are numbered in delivery order).
+
+**S2b status (2026-11-05): built → `1.0.0-beta.6` for testing; the gate stays open on the play-session spikes.**
+- Done and tested as marked above; CI green on every OS.
+- Open, needing a person or hardware, as the S0 gate table lists: X02 (Frame Generation frames, 240+ FPS sidecar cost), X03/X09 (overlay latency and GPU cost per display mode), X04/X07 (macOS fullscreen Spaces, ScreenCaptureKit), X05/X06 (Wayland layer-shell, MangoHud live latency), X08 (in-match with sensors; FACEIT/EAC/BattlEye).
+- Not built: ScreenCaptureKit FPS. Built in beta.8: the Wayland GlobalShortcuts portal ([ADR 0015](../adr/0015-wayland-shortcuts-through-the-portal.md)), throttling pills in the Widget Engine, per-monitor overlay and mini-monitor placement, a real glyph outline.
+
+## S2c. Bottleneck detector
+
+| ID | Item | Type | Source | Depends | Done when |
+|---|---|---|---|---|---|
+| S2c-01 | `core::bottleneck` rules (limiter, GPU, CPU-thread, throttling, VRAM/RAM/disk, contention) as pure functions + threshold table | 🆕 | [bottleneck §2–3](bottleneck-detector.md) | S2a-01, S2b-05/06 | Recorded-session fixtures classify correctly. ✅ `core::bottleneck`: one pure function per rule (`rule_limiter`, `rule_gpu`, `rule_cpu`, `rule_throttling`, `rule_vram`, `rule_ram`, `rule_disk`, `rule_background`), priority-ordered `classify`, the thresholds in one documented `Thresholds` table. Tested on built windows and on a **real PresentMon 2.6 capture** (CPU-bound loading screen, then GPU-bound play): `crates/core/tests/fixtures/` |
+| S2c-02 | Heuristic fallback without GPU Busy, with lowered confidence shown | 🆕 | bottleneck §3 | 01 | Same. ✅ Without GPU Busy the rules use GPU utilization and the game's thread at **lower confidence**, shown on screen as "Estimated without GPU Busy"; counted in the session (`estimated_seconds`); tested |
+| S2c-03 | **"Now" card** + live readings with rule thresholds | 🆕 | bottleneck §5 | 01 | kittest. ✅ ZeeZ Live › Bottleneck: the Now card (verdict, confidence, explanation, *Why?*), live readings with each rule's threshold marked, smoothed over 5 s so one second doesn't flip it; kittest |
+| S2c-04 | **Session analysis** (1/3/5 min, until stop) + evidence-tied recommendations | 🆕 | bottleneck §5 | 01 | No recommendation without evidence (test). ✅ Analysis of 1/3/5 min or until stop; time per class, timeline, evidence, recommendations. `Recommendation.because` is not optional, so none can exist without a measurement; a clean session gets none (tested) |
+| S2c-05 | Integrations: overlay pill, report section, Overview shortcut | 🆕 | bottleneck §5 | S2b | Same. ✅ Overlay pill (setting, default on), report section in the app and the HTML export, Overview shortcut. *Build health* on the Overview already covers §2.5 |
+| S2c-06 | *(Conditional)* static hardware balance from our own benchmarks | 🆕 | bottleneck §4 | S1-K02, K05 | Calibration passes, or the ADR cuts it. ✂ Cut by [ADR 0014](../adr/0014-no-hardware-balance-bar-in-1-0.md): no honest calibration without measured reference pairs |
+**S2c status (2026-11-06): built → `1.0.0-beta.7` for testing.**
+- Done and tested as marked above. The real-capture fixture only has one game, so the rules' thresholds are the plan's (documented in `Thresholds`) and not tuned on data: they are what the beta tests.
+- To check in play, which no machine here can: a CPU-bound game (does the busiest-thread rule agree with the detector's verdict?), a V-Sync and a capped game (limiter detection), a throttling session, and Linux/macOS (the fallback).
+- Known limits: shared video memory isn't read; readings use the first GPU; the compositor limiter is low-confidence by design.
+
+**S2c gate → the pre-release after it** (Bottleneck detector). (`1.0.0-beta.2`, `beta.4` and `beta.5` were S1/S2a fix and completion releases.)
+
+---
+
+## S3. Release hardening → 1.0.0
+
+| ID | Item | Type | Done when |
+|---|---|---|---|
+| S3-01 | P6 budgets measured on the real-hardware matrix and **published** | 🧪📝 | Numbers in README | ✅ Memory met, no leaks; CPU measured, over its goal: [docs/performance.md](../performance.md). The sampler alone 3.4% of a core reading every source; the overlay next to a synthetic game 3.5% (goal 2%, moved to [1.1.0](../v1.1/README.md#9-overlay-cpu-down-to-the-2--goal)), ~120 MB flat. 🟡 FPS cost and sampler stutter need a game; other OSes not measured |
+| S3-02 | 8-hour soak on real hardware | 🧪 | Flat memory, no leaks | ✅ 8 hours on Windows (2026-11-09), every page and tab, captures and analysis: memory flat at ~143 MB, handles and threads flat ([soak.md](../testing/soak.md), [performance](../performance.md)) |
+| S3-03 | Accessibility audit: keyboard, AA contrast, 75–200% scaling, colour redundancy | ✨ | Checklist passes on all pages | ✅ Automated: contrast (text AA, charts 3:1), colour redundancy, scale 75–200% on Bottleneck, Services, Users, App history, Processes and Startup, keyboard on the sidebar, tabs and tables, names for painted widgets and charts ([accessibility.md](../accessibility.md)). 🟡 Not every page is in the scale test, and a screen-reader pass by a person is still to do |
+| S3-04 | i18n: 100% pt-BR and es | 📝 | Parity tests green; strings reviewed | ✅ Parity tests are green (every text has pt-BR and es with the same placeholders), and every string added in beta.8 has both. 🟡 "Reviewed" by a native speaker: not done |
+| S3-05 | Security review: threat model (executor, elevation, bundled binaries, file formats), fuzz campaign, `cargo-deny` clean | 🧪 | Review doc in `docs/` | ✅ [threat-model.md](../security/threat-model.md), [SECURITY.md](../../SECURITY.md), 11 fuzz targets (scheduled) plus the same inputs as tests on every push (3 real bugs found and fixed), `cargo-deny` in CI. 🟡 A long fuzz campaign has not been run and its results recorded; an outside review is the AI/human audit that follows ([audit guide](../audit/README.md)) |
+| S3-06 | Installers: clean uninstall, optional components, upgrade path from 0.3.0 and from every beta/rc | 📦 | CI packaging matrix green | ✅ CI jobs: `msi-upgrade` (chain, downgrade block, uninstall) and `msi-releases` (install without the driver, clean removal keeping user data, upgrade through every published MSI), `.deb` install/remove, distro containers. Also: **update channels** (Stable/Beta/Alpha). 🟡 The 0.3.0 MSI is not in the chain (there was none), and macOS/Arch install+remove are not exercised in CI |
+| S3-07 | Docs: README + README.pt-BR (features, permissions map, privacy, unsigned notice), FEATURES.md per-OS tables, refreshed screenshots on every OS, CHANGELOG `1.0.0` consolidated | 📝 | P7 checklist complete | ✅ README and README.pt-BR describe ZeeZ Live, the bottleneck detector, System, update channels, a permissions map for them, quality and the budget; FEATURES.md §14 has the per-OS table; every S0 row is marked; the consolidated entry is a draft in [changelog-1.0.0.md](changelog-1.0.0.md), pasted at tag time. 🟡 Screenshots of the new pages on every OS are not refreshed (they need each OS's desktop) |
+| S3-08 | `1.0.0-rc.N` until no release-blocking issue remains, then tag **`1.0.0`** | 📦 | Release published | ✅ Two snapshots instead of release candidates (the release ladder); `1.0.0` tagged 2026-11-09 |
+
+---
+
+## After 1.0 (backlog, already decided to wait)
+
+| Item | Source |
+|---|---|
+| Read-only helper service (privilege option C): FPS and sensors without UAC at every launch | README §4.3 |
+| Native Rust ETW consumer (`ferrisetw`) replacing the PresentMon sidecar | zeez-live §3.1 |
+| Our own Vulkan frame-time layer on Linux | zeez-live §3.1 |
+| Xbox Game Bar widget | zeez-live §3.2 |
+| Import Windows history (SRUM) | task-manager §5 |
+| Startup "Advanced" view with enable/disable | task-manager §6 |
+| Drive optimization: defrag/ReTrim/fstrim through the OS engines | core-pages §7.4 |
+| Code signing and notarization, when funded or through a free OSS program | dependencies §3.1, Q9 |
+| Storage audit and safe cleanup: space map, duplicates, reclaimable space, installed programs (a later version, 2.0 or 3.0) | [ideas/storage-and-cleanup.md](../ideas/storage-and-cleanup.md) |
+
+## Measurements
+
+| Date | Machine | What | Result |
+|---|---|---|---|
+| 2026-11-04 | Ryzen 9 7900X, Windows 11, elevated, PawnIO 2.2.0 (AMDFamily17, LpcIO, SmbusPIIX4, RyzenSMU) | Sampler CPU after warm-up, every sensor (168) read at 1 Hz (`-log`), 40 s window | 0.3.0: 3.24% of one core · S0: **2.42%** |
+| 2026-11-04 | same | Mean read time per source (S0) | cpu+board 193 ms (≈19 ms CPU), storage 61 ms every 10 s, gpu 1.5 ms, memory and battery ≈0 |
+| 2026-11-04 | same | First pass (`-sensors`), one-time initialization | SMBus detection 1.1 s, OS counters 0.34 s, CPU monitor 0.2–0.5 s |
+| 2026-11-05 | same, with VALORANT and NVIDIA FrameView's busy PresentMon loading the CPU (96 °C) | S1-D05. The "193 ms" was the first read's 1.7 s of discovery averaged in; steady state was ~22 ms in one pass (Super I/O 11, DIMMs 8, CPU 3). After the split, with the first read reported apart | cpu 7.5–19 ms mean (typical tick ~3 ms; rare ~30 ms spikes on the busy cores), board 11 ms, dimms 9 ms, gpu 1.7 ms. Per-core clocks: 3.5–32 ms → **0.4–0.6 ms** typical (one move per core for APERF+MPERF, time-critical priority while pinned, MSR probe cached) |
+
