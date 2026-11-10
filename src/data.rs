@@ -21,12 +21,15 @@ pub enum Category {
     Settings,
     /// ZeeZ Live captures (`sessions/<date>_<game>/`).
     Sessions,
+    /// Process, performance and sensor exports (`exports/`).
+    Exports,
 }
 
 impl Category {
-    pub const ALL: [Category; 7] = [
+    pub const ALL: [Category; 8] = [
         Category::SensorLogs,
         Category::Sessions,
+        Category::Exports,
         Category::BenchmarkHistory,
         Category::AuditLog,
         Category::AppLog,
@@ -44,6 +47,7 @@ impl Category {
             Category::Diagnostics => "Diagnostics bundles",
             Category::Settings => "Settings",
             Category::Sessions => "ZeeZ Live sessions",
+            Category::Exports => "Exports",
         }
     }
 
@@ -66,6 +70,9 @@ impl Category {
                 })
                 .unwrap_or_default(),
             Category::Settings => existing(&[dir.join("settings.json")]),
+            Category::Exports => std::fs::read_dir(dir.join("exports"))
+                .map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.is_file()).collect())
+                .unwrap_or_default(),
             Category::Sessions => std::fs::read_dir(dir.join("sessions"))
                 .map(|rd| {
                     rd.flatten()
@@ -169,6 +176,11 @@ mod tests {
         assert_eq!(delete_in(&d, Category::SensorLogs).unwrap(), 1);
         assert!(d.join("logs/notes.txt").exists(), "only what the app wrote");
         assert!(d.join("settings.json").exists(), "other categories untouched");
+        // Exports (security review 2026-11-09: they were not listed).
+        std::fs::create_dir_all(d.join("exports")).unwrap();
+        std::fs::write(d.join("exports/2026-11-09T10-00-00-processes.csv"), b"a,b").unwrap();
+        assert_eq!(usage_in(&d).iter().find(|x| x.cat == Category::Exports).map(|x| x.files), Some(1));
+        assert_eq!(delete_in(&d, Category::Exports).unwrap(), 1);
         let _ = std::fs::remove_dir_all(&d);
     }
 
