@@ -1,0 +1,17 @@
+# cargo-nextest (CI): every test in its own process, and a stuck one names
+# itself instead of hanging the job (plan item 14: a 46-minute hang in
+# debian:stable left no trace of which test was running).
+
+[profile.default]
+slow-timeout = { period = "60s", terminate-after = 2 }
+
+[profile.ci]
+# Reported as slow after 60 s, killed after 120 s.
+slow-timeout = { period = "60s", terminate-after = 2 }
+# One retry: a test that passes on retry is reported as flaky, not hidden.
+retries = 1
+fail-fast = false
+failure-output = "immediate-final"
+
+[profile.ci.junit]
+path = "junit.xml"

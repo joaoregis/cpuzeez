@@ -7,6 +7,10 @@ generated from its section below.
 
 ## [Unreleased]
 
+### Changed
+
+- **CI:** tests run with `cargo nextest`. A test running past 60 s is reported and killed at 120 s, with its name in the log. A test that passes only on retry is reported as flaky, and a JUnit report is kept when tests fail.
+
 ### Fixed
 
 - **System ▸ Services and Startup: a refused change.** Windows refusing a change (error 5 on `CodexSandboxService`, whose own permissions refuse administrators) left three problems behind:
