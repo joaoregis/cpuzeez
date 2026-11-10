@@ -135,6 +135,49 @@ pub enum DiffKind {
     MemoryChanged,
 }
 
+/// An action that ended (Services, Startup): its message (the OS error when
+/// it failed), and the undo it earns when it worked.
+pub(crate) struct Finished {
+    pub msg: String,
+    pub ok: bool,
+    pub undo: Option<(String, Action)>,
+}
+
+/// Run `action` off the UI thread; the result lands in `slot`. Its `undo` is
+/// kept only when it worked: a refused change must not offer to undo
+/// something that never happened.
+pub(crate) fn dispatch(slot: &Arc<Mutex<Option<Finished>>>, action: Action, undo: Option<(String, Action)>) {
+    let slot = Arc::clone(slot);
+    std::thread::spawn(move || {
+        let f = match executor::run(&action) {
+            Done::Ok(s) => Finished { msg: if s.is_empty() { action.describe() } else { s }, ok: true, undo },
+            Done::Cancelled => return,
+            Done::Failed(e) => Finished { msg: e, ok: false, undo: None },
+        };
+        *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(f);
+    });
+}
+
+/// A failed action in words, keeping the OS code for support: the codes
+/// Services and Startup meet most, then the raw message.
+pub(crate) fn failure_text(e: &str) -> String {
+    let Some(code) = executor::os_error(e) else { return trf("Error: {}", &[&e]) };
+    let why = match code {
+        5 => {
+            tr("Windows refused access: this item's own permissions don't allow the change, even for an administrator.")
+        }
+        1051 => tr("Other running services depend on this one; stop them first."),
+        1056 => tr("The service is already running."),
+        1058 => tr("The service is disabled; change its startup type first."),
+        1060 => tr("The service no longer exists."),
+        1061 => tr("The service can't take that request right now (it may be starting or stopping)."),
+        1062 => tr("The service isn't running."),
+        1072 => tr("The service is marked for deletion; it goes away after a restart."),
+        _ => return trf("Error: {}", &[&e]),
+    };
+    trf("{} (Windows error {})", &[&why, &code])
+}
+
 pub fn diff_snapshots(base: &[Row], now: &[Row]) -> Vec<DiffEntry> {
     let mut out = Vec::new();
     for r in now {
@@ -1634,6 +1677,31 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("GPU engine", "Motor de GPU"),
     ("{} threads", "{} threads"),
     ("Running", "Em execução"),
+    ("Error: {}", "Erro: {}"),
+    ("{} (Windows error {})", "{} (erro do Windows {})"),
+    (
+        "Windows refused access: this item's own permissions don't allow the change, even for an administrator.",
+        "O Windows recusou o acesso: as permissões deste item não permitem a mudança, nem para um administrador.",
+    ),
+    (
+        "Other running services depend on this one; stop them first.",
+        "Outros serviços em execução dependem deste; pare-os primeiro.",
+    ),
+    ("The service is already running.", "O serviço já está em execução."),
+    (
+        "The service is disabled; change its startup type first.",
+        "O serviço está desativado; mude o tipo de inicialização primeiro.",
+    ),
+    ("The service no longer exists.", "O serviço não existe mais."),
+    (
+        "The service can't take that request right now (it may be starting or stopping).",
+        "O serviço não pode atender a esse pedido agora (talvez esteja iniciando ou parando).",
+    ),
+    ("The service isn't running.", "O serviço não está em execução."),
+    (
+        "The service is marked for deletion; it goes away after a restart.",
+        "O serviço está marcado para exclusão; ele some depois de reiniciar o computador.",
+    ),
     ("No active TCP/UDP sockets for this process.", "Nenhum socket TCP/UDP ativo para este processo."),
     ("No visible top-level windows.", "Nenhuma janela principal visível."),
     ("Account", "Conta"),
@@ -1820,6 +1888,31 @@ pub const ES: &[(&str, &str)] = &[
     ("GPU engine", "Motor de GPU"),
     ("{} threads", "{} hilos"),
     ("Running", "En ejecución"),
+    ("Error: {}", "Error: {}"),
+    ("{} (Windows error {})", "{} (error de Windows {})"),
+    (
+        "Windows refused access: this item's own permissions don't allow the change, even for an administrator.",
+        "Windows denegó el acceso: los permisos de este elemento no permiten el cambio, ni siquiera a un administrador.",
+    ),
+    (
+        "Other running services depend on this one; stop them first.",
+        "Otros servicios en ejecución dependen de este; deténgalos primero.",
+    ),
+    ("The service is already running.", "El servicio ya está en ejecución."),
+    (
+        "The service is disabled; change its startup type first.",
+        "El servicio está deshabilitado; cambie primero su tipo de inicio.",
+    ),
+    ("The service no longer exists.", "El servicio ya no existe."),
+    (
+        "The service can't take that request right now (it may be starting or stopping).",
+        "El servicio no puede atender esa solicitud ahora (puede estar iniciándose o deteniéndose).",
+    ),
+    ("The service isn't running.", "El servicio no está en ejecución."),
+    (
+        "The service is marked for deletion; it goes away after a restart.",
+        "El servicio está marcado para eliminarse; desaparece tras reiniciar el equipo.",
+    ),
     ("No active TCP/UDP sockets for this process.", "No hay sockets TCP/UDP activos para este proceso."),
     ("No visible top-level windows.", "No hay ventanas principales visibles."),
     ("Account", "Cuenta"),

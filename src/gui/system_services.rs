@@ -7,11 +7,10 @@ use super::i18n::tr;
 use super::table::{self, Cell, Column, Table};
 use super::theme::{self, icon};
 use super::widgets::{self, Tone};
-use crate::executor::{self, Done};
 use cpuzeez_core::actions::{Action, ServiceOp};
 use cpuzeez_core::services::{
-    Recovery, RecoveryAction, ServiceAccount, ServiceDetails, ServiceFilter, ServiceRow, ServiceState, StartupType,
-    matches_filter, transitive_dependents,
+    Recovery, RecoveryAction, Refusal, ServiceAccount, ServiceDetails, ServiceFilter, ServiceRow, ServiceState,
+    StartupType, matches_filter, transitive_dependents,
 };
 use eframe::egui::{self, CornerRadius, Frame, Margin, RichText, ScrollArea, Stroke, Ui};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -41,7 +40,7 @@ pub struct State {
     logs_buf: Arc<Mutex<Vec<String>>>,
     busy_logs: Arc<AtomicBool>,
     pub undo_stack: Vec<(String, Action)>,
-    pending_op: Arc<Mutex<Option<String>>>,
+    pending_op: Arc<Mutex<Option<super::system::Finished>>>,
     status_banner: Option<(String, Tone)>,
     modal: Option<Modal>,
 }
@@ -77,9 +76,8 @@ impl Default for State {
 impl State {
     pub fn show(&mut self, ui: &mut Ui) {
         let pending = self.pending_op.lock().unwrap().take();
-        if let Some(msg) = pending {
-            let tone = if msg.starts_with("Error:") { Tone::Danger } else { Tone::Success };
-            self.status_banner = Some((msg, tone));
+        if let Some(f) = pending {
+            self.finish(f);
             self.trigger_refresh();
         }
         let should_poll = self.last_refresh.is_none_or(|t| t.elapsed() >= Duration::from_secs(6));
@@ -88,6 +86,22 @@ impl State {
         }
         let snap = self.rows.lock().unwrap().clone();
         self.show_with_rows(ui, &snap);
+    }
+
+    /// An action ended: keep its undo only if it worked; after a failure show
+    /// the service as it is, not the value Windows refused.
+    fn finish(&mut self, f: super::system::Finished) {
+        if f.ok {
+            self.undo_stack.extend(f.undo);
+            self.status_banner = Some((f.msg, Tone::Success));
+        } else {
+            // Show the service as it is, not the value Windows refused.
+            self.edit_startup = None;
+            self.edit_account = None;
+            self.edit_recovery = None;
+            self.details_for = None;
+            self.status_banner = Some((super::system::failure_text(&f.msg), Tone::Danger));
+        }
     }
 
     fn trigger_refresh(&mut self) {
@@ -128,7 +142,7 @@ impl State {
                 if ui.button(label).clicked()
                     && let Some((_, act)) = self.undo_stack.pop()
                 {
-                    self.dispatch_action(act);
+                    self.dispatch(act, None);
                 }
             }
         });
@@ -256,11 +270,11 @@ impl State {
             match verb {
                 "start" => {
                     let name = row.name.clone();
-                    self.undo_stack.push((
+                    let undo = Some((
                         format!("Stop {name}"),
                         Action::Service { target: ServiceOp::Stop { name: name.clone() }, elevate: true },
                     ));
-                    self.dispatch_action(Action::Service { target: ServiceOp::Start { name }, elevate: true });
+                    self.dispatch(Action::Service { target: ServiceOp::Start { name }, elevate: true }, undo);
                 }
                 "stop" | "restart" => {
                     let deps = transitive_dependents(all_rows, &row.name);
@@ -271,7 +285,7 @@ impl State {
                         } else {
                             ServiceOp::Stop { name: row.name.clone() }
                         };
-                        self.dispatch_action(Action::Service { target: op, elevate: true });
+                        self.dispatch(Action::Service { target: op, elevate: true }, None);
                     } else {
                         self.modal = Some(Modal::ConfirmStop { name: row.name.clone(), restart, dependents: deps });
                     }
@@ -285,6 +299,8 @@ impl State {
 
     fn render_inspector(&mut self, ui: &mut Ui, row: &ServiceRow, all_rows: &[ServiceRow]) {
         let p = theme::palette(ui);
+        // What the service's own permissions refuse even to an administrator.
+        let refusal = self.details_of(&row.name).and_then(|d| d.refusal).unwrap_or_default();
         Frame::default()
             .fill(p.card)
             .stroke(Stroke::new(1.0, p.border))
@@ -328,38 +344,55 @@ impl State {
                             });
                         ui.add_space(6.0);
                     }
+                    if refusal != Refusal::default() {
+                        let what = if refusal.change && (refusal.start || refusal.stop) {
+                            tr("Windows won't let anyone change, start or stop this service, not even an administrator: its own permissions refuse it.")
+                        } else if refusal.change {
+                            tr("Windows won't let anyone change this service's settings, not even an administrator: its own permissions refuse it.")
+                        } else {
+                            tr("Windows won't let anyone start or stop this service, not even an administrator: its own permissions refuse it.")
+                        };
+                        Frame::default()
+                            .fill(p.warning_soft)
+                            .corner_radius(CornerRadius::same(theme::RADIUS_CONTROL))
+                            .inner_margin(Margin::same(8))
+                            .show(ui, |ui| {
+                                ui.label(RichText::new(format!("{} {what}", icon::LOCK)).small().color(p.text));
+                            });
+                        ui.add_space(6.0);
+                    }
 
                     // Control buttons
                     ui.horizontal_wrapped(|ui| {
-                        ui.add_enabled_ui(!row.protected && row.state == ServiceState::Stopped, |ui| {
+                        ui.add_enabled_ui(!row.protected && !refusal.start && row.state == ServiceState::Stopped, |ui| {
                             if widgets::primary_button(ui, tr("Start")).clicked() {
                                 let name = row.name.clone();
-                                self.undo_stack.push((
+                                let undo = Some((
                                     format!("Stop {name}"),
                                     Action::Service { target: ServiceOp::Stop { name: name.clone() }, elevate: true },
                                 ));
-                                self.dispatch_action(Action::Service {
+                                self.dispatch(Action::Service {
                                     target: ServiceOp::Start { name },
                                     elevate: true,
-                                });
+                                }, undo);
                             }
                         });
-                        ui.add_enabled_ui(!row.protected && row.state == ServiceState::Running, |ui| {
+                        ui.add_enabled_ui(!row.protected && !refusal.stop && row.state == ServiceState::Running, |ui| {
                             if ui.button(tr("Stop")).clicked() {
                                 let deps = transitive_dependents(all_rows, &row.name);
                                 if deps.is_empty() {
                                     let name = row.name.clone();
-                                    self.undo_stack.push((
+                                    let undo = Some((
                                         format!("Start {name}"),
                                         Action::Service {
                                             target: ServiceOp::Start { name: name.clone() },
                                             elevate: true,
                                         },
                                     ));
-                                    self.dispatch_action(Action::Service {
+                                    self.dispatch(Action::Service {
                                         target: ServiceOp::Stop { name },
                                         elevate: true,
-                                    });
+                                    }, undo);
                                 } else {
                                     self.modal = Some(Modal::ConfirmStop {
                                         name: row.name.clone(),
@@ -368,13 +401,13 @@ impl State {
                                     });
                                 }
                             }
-                            if ui.button(tr("Restart")).clicked() {
+                            if ui.add_enabled(!refusal.start, egui::Button::new(tr("Restart"))).clicked() {
                                 let deps = transitive_dependents(all_rows, &row.name);
                                 if deps.is_empty() {
-                                    self.dispatch_action(Action::Service {
+                                    self.dispatch(Action::Service {
                                         target: ServiceOp::Restart { name: row.name.clone() },
                                         elevate: true,
-                                    });
+                                    }, None);
                                 } else {
                                     self.modal = Some(Modal::ConfirmStop {
                                         name: row.name.clone(),
@@ -404,22 +437,23 @@ impl State {
                                 }
                             });
                         if !row.protected
+                            && !refusal.change
                             && cur_edit != row.startup
                             && widgets::primary_button(ui, tr("Apply")).clicked()
                         {
                             let prev = row.startup;
                             let name = row.name.clone();
-                            self.undo_stack.push((
+                            let undo = Some((
                                 format!("{name} -> {}", prev.label()),
                                 Action::Service {
                                     target: ServiceOp::SetStartup { name: name.clone(), startup: prev },
                                     elevate: true,
                                 },
                             ));
-                            self.dispatch_action(Action::Service {
+                            self.dispatch(Action::Service {
                                 target: ServiceOp::SetStartup { name, startup: cur_edit },
                                 elevate: true,
-                            });
+                            }, undo);
                         }
                     });
 
@@ -536,7 +570,7 @@ impl State {
     fn render_config(&mut self, ui: &mut Ui, row: &ServiceRow) {
         let p = theme::palette(ui);
         let windows = cfg!(windows);
-        let editable = !row.protected;
+        let editable = !row.protected && !self.details_of(&row.name).and_then(|d| d.refusal).is_some_and(|r| r.change);
 
         if windows && row.state == ServiceState::Stopped && editable {
             ui.add_space(8.0);
@@ -545,10 +579,13 @@ impl State {
                 ui.add(egui::TextEdit::singleline(&mut self.start_params).desired_width(200.0).hint_text("-v /debug"));
                 if ui.button(tr("Start with parameters")).clicked() {
                     let params: Vec<String> = self.start_params.split_whitespace().map(str::to_string).collect();
-                    self.dispatch_action(Action::Service {
-                        target: ServiceOp::StartWithParams { name: row.name.clone(), params },
-                        elevate: true,
-                    });
+                    self.dispatch(
+                        Action::Service {
+                            target: ServiceOp::StartWithParams { name: row.name.clone(), params },
+                            elevate: true,
+                        },
+                        None,
+                    );
                 }
             });
         }
@@ -577,19 +614,22 @@ impl State {
                     && picked != current
                     && widgets::primary_button(ui, tr("Apply")).clicked()
                 {
-                    if let Some(prev) = current {
-                        self.undo_stack.push((
+                    let undo = current.map(|prev| {
+                        (
                             format!("{} -> {}", row.name, prev.windows_name()),
                             Action::Service {
                                 target: ServiceOp::SetAccount { name: row.name.clone(), account: prev },
                                 elevate: true,
                             },
-                        ));
-                    }
-                    self.dispatch_action(Action::Service {
-                        target: ServiceOp::SetAccount { name: row.name.clone(), account: a },
-                        elevate: true,
+                        )
                     });
+                    self.dispatch(
+                        Action::Service {
+                            target: ServiceOp::SetAccount { name: row.name.clone(), account: a },
+                            elevate: true,
+                        },
+                        undo,
+                    );
                     self.edit_account = None;
                 }
             });
@@ -668,17 +708,20 @@ impl State {
             if r != saved {
                 self.edit_recovery = Some((row.name.clone(), r));
                 if editable && widgets::primary_button(ui, tr("Apply")).clicked() {
-                    self.undo_stack.push((
+                    let undo = Some((
                         format!("{} recovery", row.name),
                         Action::Service {
                             target: ServiceOp::SetRecovery { name: row.name.clone(), recovery: saved },
                             elevate: true,
                         },
                     ));
-                    self.dispatch_action(Action::Service {
-                        target: ServiceOp::SetRecovery { name: row.name.clone(), recovery: r },
-                        elevate: true,
-                    });
+                    self.dispatch(
+                        Action::Service {
+                            target: ServiceOp::SetRecovery { name: row.name.clone(), recovery: r },
+                            elevate: true,
+                        },
+                        undo,
+                    );
                     self.edit_recovery = None;
                     self.details_for = None; // read again after the change
                 }
@@ -721,7 +764,7 @@ impl State {
                         } else {
                             ServiceOp::Stop { name: name.clone() }
                         };
-                        self.dispatch_action(Action::Service { target: op, elevate: true });
+                        self.dispatch(Action::Service { target: op, elevate: true }, None);
                         close = true;
                     }
                     if ui.button(tr("Cancel")).clicked() {
@@ -734,17 +777,8 @@ impl State {
         }
     }
 
-    fn dispatch_action(&self, action: Action) {
-        let slot = Arc::clone(&self.pending_op);
-        std::thread::spawn(move || {
-            let msg = match executor::run(&action) {
-                Done::Ok(s) if !s.is_empty() => s,
-                Done::Ok(_) => action.describe(),
-                Done::Cancelled => return,
-                Done::Failed(e) => format!("Error: {e}"),
-            };
-            *slot.lock().unwrap() = Some(msg);
-        });
+    fn dispatch(&self, action: Action, undo: Option<(String, Action)>) {
+        super::system::dispatch(&self.pending_op, action, undo);
     }
 }
 
@@ -795,6 +829,19 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Group", "Grupo"),
     ("Starting", "Iniciando"),
     ("Stopping", "Parando"),
+    ("Stopped", "Parado"),
+    (
+        "Windows won't let anyone change, start or stop this service, not even an administrator: its own permissions refuse it.",
+        "O Windows não deixa ninguém alterar, iniciar ou parar este serviço, nem um administrador: as próprias permissões dele recusam.",
+    ),
+    (
+        "Windows won't let anyone change this service's settings, not even an administrator: its own permissions refuse it.",
+        "O Windows não deixa ninguém alterar as configurações deste serviço, nem um administrador: as próprias permissões dele recusam.",
+    ),
+    (
+        "Windows won't let anyone start or stop this service, not even an administrator: its own permissions refuse it.",
+        "O Windows não deixa ninguém iniciar ou parar este serviço, nem um administrador: as próprias permissões dele recusam.",
+    ),
     ("Paused", "Pausado"),
     ("Automatic", "Automático"),
     ("Automatic (Delayed)", "Automático (Atraso na Inicialização)"),
@@ -869,6 +916,19 @@ pub const ES: &[(&str, &str)] = &[
     ("Group", "Grupo"),
     ("Starting", "Iniciando"),
     ("Stopping", "Deteniendo"),
+    ("Stopped", "Detenido"),
+    (
+        "Windows won't let anyone change, start or stop this service, not even an administrator: its own permissions refuse it.",
+        "Windows no permite a nadie cambiar, iniciar ni detener este servicio, ni siquiera a un administrador: sus propios permisos lo impiden.",
+    ),
+    (
+        "Windows won't let anyone change this service's settings, not even an administrator: its own permissions refuse it.",
+        "Windows no permite a nadie cambiar la configuración de este servicio, ni siquiera a un administrador: sus propios permisos lo impiden.",
+    ),
+    (
+        "Windows won't let anyone start or stop this service, not even an administrator: its own permissions refuse it.",
+        "Windows no permite a nadie iniciar ni detener este servicio, ni siquiera a un administrador: sus propios permisos lo impiden.",
+    ),
     ("Paused", "En pausa"),
     ("Automatic", "Automático"),
     ("Automatic (Delayed)", "Automático (Inicio retrasado)"),
@@ -910,6 +970,50 @@ pub const ES: &[(&str, &str)] = &[
 
 #[cfg(test)]
 mod tests {
+    /// The 2026-11-09 report: Windows refused a startup change (error 5).
+    #[test]
+    fn a_refused_change_leaves_no_undo_and_resets_the_editor() {
+        use super::super::system::Finished;
+        let svc = "CodexSandboxService.OpenAI.Codex";
+        let set =
+            |st| Action::Service { target: ServiceOp::SetStartup { name: svc.into(), startup: st }, elevate: true };
+        let mut s = State { edit_startup: Some((svc.into(), StartupType::Disabled)), ..Default::default() };
+        s.finish(Finished {
+            msg: format!("OpenServiceW({svc}) failed (error 5)"),
+            ok: false,
+            undo: Some((format!("{svc} -> Automatic"), set(StartupType::Automatic))),
+        });
+        assert!(s.undo_stack.is_empty(), "nothing happened, so there is nothing to undo");
+        assert_eq!(s.edit_startup, None, "the combo box shows the real startup type again");
+        let (msg, tone) = s.status_banner.clone().unwrap();
+        assert_eq!(tone, Tone::Danger);
+        assert!(msg.contains("permissions") && msg.contains("(Windows error 5)"), "{msg}");
+        // The same change, accepted: its undo is kept.
+        s.finish(Finished {
+            msg: "done".into(),
+            ok: true,
+            undo: Some((format!("{svc} -> Automatic"), set(StartupType::Automatic))),
+        });
+        assert_eq!(s.undo_stack.len(), 1);
+    }
+
+    #[test]
+    fn every_service_state_is_translated() {
+        for st in [
+            ServiceState::Running,
+            ServiceState::Stopped,
+            ServiceState::StartPending,
+            ServiceState::StopPending,
+            ServiceState::Paused,
+        ] {
+            let all = super::super::i18n::tables();
+            for pick in [|t: &(_, _)| t.0, |t: &(_, _)| t.1] {
+                let found = all.iter().map(pick).any(|t: &[(&str, &str)]| t.iter().any(|(en, _)| *en == st.label()));
+                assert!(found, "{} has no translation", st.label());
+            }
+        }
+    }
+
     use super::*;
 
     #[test]

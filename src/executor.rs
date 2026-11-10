@@ -25,6 +25,7 @@ pub fn run(a: &Action) -> Done {
     let done = if elevate {
         match elevation::run(&[format!("{}{}", actions::ELEVATED_FLAG, actions::encode(a))]) {
             Ok(0) => Done::Ok(String::new()),
+            Ok(code) if code > OS_ERROR => Done::Failed(format!("{} failed (error {})", a.describe(), code - OS_ERROR)),
             Ok(code) => Done::Failed(format!("the elevated copy exited with code {code}")),
             Err(Outcome::Cancelled) => Done::Cancelled,
             Err(Outcome::Unsupported) => Done::Failed("not possible on this OS".into()),
@@ -45,7 +46,10 @@ pub fn run(a: &Action) -> Done {
 
 /// `--elevated-op=<hex>`: the elevated one-shot entry point. It accepts only
 /// what `actions::decode` returns and only runs when actually elevated.
-/// Exit code: 0 done, 1 failed, 2 refused (not an action), 3 not elevated.
+/// Exit code: 0 done, 1 failed, 2 refused (not an action), 3 not elevated,
+/// `OS_ERROR + n` failed with the OS error `n` (so the launching copy, which
+/// sees only the exit code, can still say why).
+pub const OS_ERROR: i32 = 1_000_000;
 pub fn elevated_main(arg: &str) -> i32 {
     let a = match actions::decode(arg) {
         Ok(a) => a,
@@ -62,9 +66,15 @@ pub fn elevated_main(arg: &str) -> i32 {
         Ok(_) => 0,
         Err(e) => {
             eprintln!("{}: {e}", a.describe());
-            1
+            os_error(&e).map_or(1, |n| OS_ERROR + n as i32)
         }
     }
+}
+
+/// The OS error code in a message built as "… failed (error N)".
+pub fn os_error(msg: &str) -> Option<u32> {
+    let tail = msg.rsplit_once("(error ")?.1;
+    tail.strip_suffix(')')?.parse().ok().filter(|&n: &u32| n < 1_000_000)
 }
 
 /// The work itself, already holding whatever privilege it needs.
@@ -268,6 +278,15 @@ pub fn audit_log() -> Vec<AuditEntry> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn os_error_codes_survive_the_elevated_copy() {
+        assert_eq!(os_error("OpenServiceW(CodexSandboxService.OpenAI.Codex) failed (error 5)"), Some(5));
+        assert_eq!(os_error("ControlService(STOP, x) failed (error 1062)"), Some(1062));
+        assert_eq!(os_error("no code here"), None);
+        assert_eq!(os_error("odd (error x)"), None);
+        assert_eq!(os_error("too big (error 1000000)"), None, "would overflow the exit code range");
+    }
+
     use super::*;
 
     #[test]

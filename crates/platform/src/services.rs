@@ -167,7 +167,60 @@ mod imp {
                 d.recovery_command = pwstr_to_string(fa.lpCommand);
             }
         }
+        d.refusal = dacl_sddl(name)
+            .and_then(|s| cpuzeez_core::services::refused_for_admin(&s, crate::instance::user_sid().as_deref()));
         d
+    }
+
+    /// The service's DACL as SDDL (`sc sdshow`). `READ_CONTROL` only, which
+    /// Authenticated Users have on almost every service: no elevation needed.
+    pub(super) fn dacl_sddl(name: &str) -> Option<String> {
+        use windows_sys::Win32::Foundation::LocalFree;
+        use windows_sys::Win32::Security::Authorization::{
+            ConvertSecurityDescriptorToStringSecurityDescriptorW, SDDL_REVISION_1,
+        };
+        use windows_sys::Win32::Security::DACL_SECURITY_INFORMATION;
+        use windows_sys::Win32::Storage::FileSystem::READ_CONTROL;
+        use windows_sys::Win32::System::Services::QueryServiceObjectSecurity;
+        // SAFETY: handles closed by ScHandle; the buffer is sized by the first
+        // call (capped) and outlives the conversion; the SDDL string is read up
+        // to its terminator and freed.
+        unsafe {
+            let scm = ScHandle(OpenSCManagerW(null(), null(), SC_MANAGER_CONNECT));
+            if scm.0.is_null() {
+                return None;
+            }
+            let w = to_wide(name);
+            let svc = ScHandle(OpenServiceW(scm.0, w.as_ptr(), READ_CONTROL));
+            if svc.0.is_null() {
+                return None;
+            }
+            let mut need = 0u32;
+            QueryServiceObjectSecurity(svc.0, DACL_SECURITY_INFORMATION, null_mut(), 0, &mut need);
+            if need == 0 || need > 64 * 1024 {
+                return None;
+            }
+            let mut buf = vec![0u64; (need as usize).div_ceil(8)];
+            if QueryServiceObjectSecurity(svc.0, DACL_SECURITY_INFORMATION, buf.as_mut_ptr().cast(), need, &mut need)
+                == 0
+            {
+                return None;
+            }
+            let mut s: *mut u16 = null_mut();
+            if ConvertSecurityDescriptorToStringSecurityDescriptorW(
+                buf.as_mut_ptr().cast(),
+                SDDL_REVISION_1,
+                DACL_SECURITY_INFORMATION,
+                &mut s,
+                null_mut(),
+            ) == 0
+            {
+                return None;
+            }
+            let out = pwstr_to_string(s);
+            LocalFree(s.cast());
+            Some(out)
+        }
     }
 
     /// SeShutdownPrivilege, which a reboot recovery action needs the caller to hold.
@@ -895,6 +948,10 @@ mod tests {
             let d = super::details("EventLog");
             assert!(!d.sid_type.is_empty() && d.recovery.is_some(), "{d:?}");
             assert!(!d.privileges.is_empty(), "the event log requires privileges: {d:?}");
+            // Its DACL is read (no elevation) and lets administrators do everything.
+            #[cfg(windows)]
+            assert!(super::imp::dacl_sddl("EventLog").is_some_and(|s| s.starts_with("D:")));
+            assert_eq!(d.refusal, None, "{d:?}");
         }
     }
 }

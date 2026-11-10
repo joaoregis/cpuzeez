@@ -73,6 +73,13 @@ pub fn show_running(key: &str, timeout: Duration) -> bool {
     }
 }
 
+/// The current user's SID as a string (`S-1-5-21-…`); the same in an
+/// elevated copy. Windows only.
+#[cfg(windows)]
+pub fn user_sid() -> Option<String> {
+    win::user_sid()
+}
+
 /// Wait up to `timeout` for process `pid` to end. True when it has ended (or
 /// cannot be found), false on timeout.
 pub fn wait_exit(pid: u32, timeout: Duration) -> bool {
@@ -107,7 +114,7 @@ mod win {
     }
 
     /// The current user's SID as a string (`S-1-5-21-…`).
-    fn user_sid() -> Option<String> {
+    pub fn user_sid() -> Option<String> {
         // SAFETY: the token is closed below; the buffer is sized by the first
         // call and outlives the SID pointer read from it; the string from
         // ConvertSidToStringSidW is read up to its terminator, then freed.
