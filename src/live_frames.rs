@@ -24,14 +24,18 @@ pub const WINDOW_S: f64 = 30.0;
 pub enum Status {
     #[default]
     Off,
+    #[cfg_attr(target_os = "macos", allow(dead_code))] // no frame source on macOS yet
     Starting,
     Running,
     /// Frame timing needs an administrator on Windows.
     NeedsAdmin,
     /// The sidecar isn't next to CPU ZeeZ (a dev build, or a damaged install).
+    #[cfg_attr(not(windows), allow(dead_code))] // PresentMon (Windows)
     Missing,
     /// It is there but its SHA-256 isn't the pinned one: it was not run.
+    #[cfg_attr(not(windows), allow(dead_code))] // PresentMon (Windows)
     BadChecksum,
+    #[cfg_attr(not(windows), allow(dead_code))] // PresentMon (Windows)
     Failed(String),
 }
 
@@ -59,12 +63,14 @@ struct Hub {
     /// Every target frame since `begin_capture` (None: not capturing).
     captured: Option<Vec<Frame>>,
     /// The running sidecar's PID (Windows), to stop it on exit.
+    #[cfg_attr(not(windows), allow(dead_code))] // PresentMon (Windows)
     child: Option<u32>,
     /// When the target last presented a frame.
     last_frame: Option<Instant>,
 }
 
 /// At most this many frames per capture (about 2.3 h at 240 FPS).
+#[cfg_attr(target_os = "macos", allow(dead_code))] // no frame source on macOS yet
 const CAPTURE_MAX: usize = 2_000_000;
 
 /// Start keeping every frame of the target.
@@ -104,6 +110,7 @@ pub fn want() {
     }
 }
 
+#[cfg_attr(target_os = "macos", allow(dead_code))] // no frame source on macOS yet
 pub fn wanted() -> bool {
     lock().wanted_at.is_some_and(|t| t.elapsed() < Duration::from_secs(5))
 }
@@ -160,6 +167,7 @@ pub fn recent_ms(secs: f64) -> Vec<f64> {
 }
 
 /// Processes that present but are never the game.
+#[cfg_attr(target_os = "macos", allow(dead_code))] // no frame source on macOS yet
 fn ignored(name: &str, pid: u32) -> bool {
     pid == std::process::id()
         || ["dwm.exe", "explorer.exe", "searchhost.exe", "startmenuexperiencehost.exe", "textinputhost.exe"]
@@ -169,6 +177,7 @@ fn ignored(name: &str, pid: u32) -> bool {
 
 /// Add frames from a source; picks the target (pinned, else the foreground
 /// app if it presents, else the busiest presenter) and keeps its frames.
+#[cfg_attr(target_os = "macos", allow(dead_code))] // no frame source on macOS yet
 pub fn push(batch: Vec<Frame>, foreground: Option<u32>) {
     let mut h = lock();
     for f in batch {

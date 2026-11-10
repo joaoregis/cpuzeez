@@ -34,7 +34,7 @@ jobs:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings -A dead_code  # module APIs are used per-OS
+      - run: cargo clippy --workspace --all-targets -- -D warnings  # per-OS items carry their own cfg
       - run: cargo test --workspace --all-targets
       - name: Workflow files GitHub would refuse (duplicate keys)
         run: |

@@ -6,6 +6,7 @@ use super::Cache;
 use super::{Cluster, Cpu, Logical};
 
 /// MIDR implementer codes (ARM ARM, D23.2.122) and well-known part numbers.
+#[cfg(any(not(target_os = "macos"), test))]
 fn implementer(code: u32) -> &'static str {
     match code {
         0x41 => "ARM",
@@ -26,6 +27,7 @@ fn implementer(code: u32) -> &'static str {
     }
 }
 
+#[cfg(any(not(target_os = "macos"), test))]
 fn part(imp: u32, p: u32) -> Option<&'static str> {
     Some(match (imp, p) {
         (0x41, 0xD03) => "Cortex-A53",
@@ -67,6 +69,7 @@ fn part(imp: u32, p: u32) -> Option<&'static str> {
     })
 }
 
+#[cfg(any(not(target_os = "macos"), test))]
 pub fn midr_text(midr: u64) -> String {
     let (imp, var, p, rev) =
         ((midr >> 24) as u32 & 0xFF, (midr >> 20) as u32 & 0xF, (midr >> 4) as u32 & 0xFFF, midr as u32 & 0xF);

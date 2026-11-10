@@ -11,6 +11,8 @@ generated from its section below.
 
 - **Windows: an update closes CPU ZeeZ and opens it again.** *Download & install* used to end the app abruptly. In administrator mode that left the PresentMon sidecar running, and it kept the installed files locked. Now the app quits normally, and a helper waits for it, installs with only a progress bar, and reopens CPU ZeeZ with the same rights. If the install is cancelled or fails, the old version reopens and says why.
 - **Windows: one running copy.** Opening CPU ZeeZ while it is already running, even hidden in the tray, brings that copy to the front instead of starting a second one next to it. A copy left in the tray also kept the installer from updating the files.
+- **Linux and macOS:** ZeeZ Live said frames came from "the graphics kernel's events", which is the Windows source. It now names MangoHud's logs on Linux and the Metal HUD on macOS.
+- **Builds:** the Linux and macOS release builds no longer print dead-code warnings. CI no longer allows dead code, so a warning that only one OS sees now fails CI.
 
 ## [1.0.1] - 2026-11-09
 

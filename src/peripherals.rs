@@ -57,6 +57,7 @@ impl Bars {
 }
 
 /// From (base, size) ranges.
+#[cfg(any(windows, target_os = "linux", test))]
 pub fn bars_of(vendor: u16, device: u16, ranges: &[(u64, u64)]) -> Bars {
     Bars {
         vendor,
@@ -82,6 +83,7 @@ pub fn thunderbolt() -> Vec<Thunderbolt> {
 }
 
 /// "24-bit, 48 kHz, 2 ch" from a WAVEFORMATEX(TENSIBLE).
+#[cfg(any(windows, test))]
 pub fn wave_format(w: &[u8]) -> Option<String> {
     let u16_at = |o: usize| w.get(o..o + 2).map(|b| u16::from_le_bytes([b[0], b[1]]));
     let u32_at = |o: usize| w.get(o..o + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]));

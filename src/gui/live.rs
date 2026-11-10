@@ -341,11 +341,7 @@ impl State {
                 }
             }
         });
-        ui.label(
-            RichText::new(tr("Frames are read from the graphics kernel's events: nothing is injected into the game."))
-                .small()
-                .color(p.text_muted),
-        );
+        ui.label(RichText::new(tr(FRAME_SOURCE_NOTE)).small().color(p.text_muted));
     }
 
     /// macOS (experimental, zeez-live §3.1): no public API gives another
@@ -1191,6 +1187,15 @@ fn limits() -> Vec<&'static str> {
     v
 }
 
+/// Where frames come from, per OS (the Windows text was shown everywhere).
+const FRAME_SOURCE_NOTE: &str = if cfg!(windows) {
+    "Frames are read from the graphics kernel's events: nothing is injected into the game."
+} else if cfg!(target_os = "macos") {
+    "Frames come from the Metal HUD, which macOS draws itself: CPU ZeeZ injects nothing into the game."
+} else {
+    "Frames are read from MangoHud's logs: CPU ZeeZ itself injects nothing into the game."
+};
+
 pub const PT_BR: &[(&str, &str)] = &[
     ("Metal Performance HUD (experimental)", "Metal Performance HUD (experimental)"),
     (
@@ -1305,6 +1310,14 @@ pub const PT_BR: &[(&str, &str)] = &[
     (
         "Frames are read from the graphics kernel's events: nothing is injected into the game.",
         "Os quadros vêm dos eventos do kernel gráfico: nada é injetado no jogo.",
+    ),
+    (
+        "Frames come from the Metal HUD, which macOS draws itself: CPU ZeeZ injects nothing into the game.",
+        "Os quadros vêm do Metal HUD, que o próprio macOS desenha: o CPU ZeeZ não injeta nada no jogo.",
+    ),
+    (
+        "Frames are read from MangoHud's logs: CPU ZeeZ itself injects nothing into the game.",
+        "Os quadros vêm dos logs do MangoHud: o próprio CPU ZeeZ não injeta nada no jogo.",
     ),
     ("Same shortcut as another action", "Mesmo atalho de outra ação"),
     ("Taken by another app", "Usado por outro app"),
@@ -1528,6 +1541,14 @@ pub const ES: &[(&str, &str)] = &[
     (
         "Frames are read from the graphics kernel's events: nothing is injected into the game.",
         "Los fotogramas vienen de los eventos del kernel gráfico: nada se inyecta en el juego.",
+    ),
+    (
+        "Frames come from the Metal HUD, which macOS draws itself: CPU ZeeZ injects nothing into the game.",
+        "Los fotogramas vienen del Metal HUD, que dibuja el propio macOS: CPU ZeeZ no inyecta nada en el juego.",
+    ),
+    (
+        "Frames are read from MangoHud's logs: CPU ZeeZ itself injects nothing into the game.",
+        "Los fotogramas vienen de los registros de MangoHud: CPU ZeeZ no inyecta nada en el juego.",
     ),
     ("Same shortcut as another action", "Mismo atajo que otra acción"),
     ("Taken by another app", "Usado por otra app"),

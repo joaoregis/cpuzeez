@@ -61,7 +61,7 @@ Each claim names where the evidence is. A claim without evidence is a finding.
 
 ```bash
 cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings -A dead_code
+cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --all-targets
 cargo test --bin cpuzeez --features soak soak
 python .github/scripts/soak.py --selftest
@@ -72,8 +72,8 @@ Cross-target lints (clippy does not link, so no C cross-compiler is needed; SQLi
 
 ```bash
 export LIBSQLITE3_SYS_USE_PKG_CONFIG=1 SQLITE3_LIB_DIR=/nonexistent
-cargo clippy --target x86_64-unknown-linux-gnu --workspace --all-targets -- -D warnings -A dead_code
-cargo clippy --target aarch64-apple-darwin --workspace --all-targets -- -D warnings -A dead_code
+cargo clippy --target x86_64-unknown-linux-gnu --workspace --all-targets -- -D warnings
+cargo clippy --target aarch64-apple-darwin --workspace --all-targets -- -D warnings
 ```
 
 The declared minimum Rust (`rust-version` in `Cargo.toml`, currently 1.95; CI's `msrv` job does this):
