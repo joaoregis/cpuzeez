@@ -10,6 +10,7 @@ generated from its section below.
 ### Changed
 
 - **CI:** tests run with `cargo nextest`. A test running past 60 s is reported and killed at 120 s, with its name in the log. A test that passes only on retry is reported as flaky, and a JUnit report is kept when tests fail.
+- **CI:** the fuzz workflow takes a duration (`minutes`, for the long campaign of plan item 5). It writes each target's executions in the run summary and keeps the corpus it grew.
 
 ### Fixed
 
