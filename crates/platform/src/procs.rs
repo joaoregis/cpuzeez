@@ -792,6 +792,13 @@ mod tests {
     #[test]
     fn our_own_process_is_in_the_snapshot() {
         let me = std::process::id();
+        // Some CPU time first: Linux counts it in 10 ms ticks, and under
+        // nextest this is a fresh process that may not have used one yet.
+        let t0 = std::time::Instant::now();
+        let mut x = 0u64;
+        while t0.elapsed() < std::time::Duration::from_millis(50) {
+            x = std::hint::black_box(x.wrapping_add(1));
+        }
         let all = snapshot(true);
         let p = all.iter().find(|p| p.pid == me).expect("this test's process");
         assert!(p.threads >= 1 && p.working_set > 0, "{p:?}");
