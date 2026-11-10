@@ -9,6 +9,14 @@ generated from its section below.
 
 ### Fixed
 
+- **System ▸ Services and Startup: a refused change.** Windows refusing a change (error 5 on `CodexSandboxService`, whose own permissions refuse administrators) left three problems behind:
+  - an *Undo* button for a change that never happened;
+  - the editor still showing the refused value;
+  - a raw `OpenServiceW(…) failed (error 5)`.
+
+  Now the undo appears only after the change works, the editor shows the service as it is, and common Windows errors read as a sentence with their code (en, pt-BR, es). Before this, a copy not running as administrator said only "the elevated copy exited with code 1"; the error code now comes back from the elevated copy.
+- **System ▸ Services: said before the click.** The inspector reads the service's permissions, which needs no elevation. When they refuse an administrator, *Apply*, *Start*, *Stop* and *Restart* are disabled, with the reason.
+- **System ▸ Services:** *Stopped* is translated.
 - **Windows: an update closes CPU ZeeZ and opens it again.** *Download & install* used to end the app abruptly. In administrator mode that left the PresentMon sidecar running, and it kept the installed files locked. Now the app quits normally, and a helper waits for it, installs with only a progress bar, and reopens CPU ZeeZ with the same rights. If the install is cancelled or fails, the old version reopens and says why.
 - **Windows: one running copy.** Opening CPU ZeeZ while it is already running, even hidden in the tray, brings that copy to the front instead of starting a second one next to it. A copy left in the tray also kept the installer from updating the files.
 - **Linux and macOS:** ZeeZ Live said frames came from "the graphics kernel's events", which is the Windows source. It now names MangoHud's logs on Linux and the Metal HUD on macOS.

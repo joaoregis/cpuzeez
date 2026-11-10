@@ -7,7 +7,6 @@ use super::i18n::{tr, trf};
 use super::table::{self, Cell, Column, Table};
 use super::theme::{self, icon};
 use super::widgets::{self, Tone};
-use crate::executor::{self, Done};
 use cpuzeez_core::actions::{Action, StartupOp};
 use cpuzeez_core::startup::{BootSummary, Impact, StartupRow};
 use eframe::egui::{self, CornerRadius, Frame, Margin, RichText, Sense, Stroke, Ui, vec2};
@@ -23,7 +22,7 @@ pub struct State {
     pub selected_id: Option<String>,
     pub show_timeline: bool,
     pub undo_stack: Vec<(String, Action)>,
-    pending_op: Arc<Mutex<Option<String>>>,
+    pending_op: Arc<Mutex<Option<super::system::Finished>>>,
     status_banner: Option<(String, Tone)>,
 }
 
@@ -48,9 +47,13 @@ impl Default for State {
 impl State {
     pub fn show(&mut self, ui: &mut Ui) {
         let pending = self.pending_op.lock().unwrap().take();
-        if let Some(msg) = pending {
-            let tone = if msg.starts_with("Error:") { Tone::Danger } else { Tone::Success };
-            self.status_banner = Some((msg, tone));
+        if let Some(f) = pending {
+            if f.ok {
+                self.undo_stack.extend(f.undo);
+                self.status_banner = Some((f.msg, Tone::Success));
+            } else {
+                self.status_banner = Some((super::system::failure_text(&f.msg), Tone::Danger));
+            }
             self.trigger_refresh();
         }
         let should_poll = self.last_refresh.is_none_or(|t| t.elapsed() >= Duration::from_secs(10));
@@ -110,7 +113,7 @@ impl State {
                 if ui.button(label).clicked()
                     && let Some((_, act)) = self.undo_stack.pop()
                 {
-                    self.dispatch_action(act);
+                    super::system::dispatch(&self.pending_op, act, None);
                 }
             }
         });
@@ -249,11 +252,15 @@ impl State {
                 target: StartupOp::SetEnabled { id: row.id.clone(), source: row.source, enabled: row.enabled },
                 elevate: row.source.needs_admin(),
             };
-            self.undo_stack.push((format!("{} {}", if row.enabled { "Enable" } else { "Disable" }, row.name), revert));
-            self.dispatch_action(Action::Startup {
-                target: StartupOp::SetEnabled { id: row.id, source: row.source, enabled: new_enabled },
-                elevate: row.source.needs_admin(),
-            });
+            let undo = (format!("{} {}", if row.enabled { "Enable" } else { "Disable" }, row.name), revert);
+            super::system::dispatch(
+                &self.pending_op,
+                Action::Startup {
+                    target: StartupOp::SetEnabled { id: row.id, source: row.source, enabled: new_enabled },
+                    elevate: row.source.needs_admin(),
+                },
+                Some(undo),
+            );
         }
         if let Some(path) = pending_reveal {
             let _ = cpuzeez_platform::proc_ops::reveal(&path);
@@ -289,19 +296,6 @@ impl State {
                     format!("■ {}: {:.2} s", tr("Measured startup apps CPU"), apps_cpu_ms as f64 / 1000.0),
                 );
             });
-        });
-    }
-
-    fn dispatch_action(&self, action: Action) {
-        let slot = Arc::clone(&self.pending_op);
-        std::thread::spawn(move || {
-            let msg = match executor::run(&action) {
-                Done::Ok(s) if !s.is_empty() => s,
-                Done::Ok(_) => action.describe(),
-                Done::Cancelled => return,
-                Done::Failed(e) => format!("Error: {e}"),
-            };
-            *slot.lock().unwrap() = Some(msg);
         });
     }
 }

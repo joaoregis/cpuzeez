@@ -255,6 +255,27 @@ struct App {
 pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>, instance: Option<cpuzeez_platform::instance::Instance>) {
     #[cfg(feature = "soak")]
     crate::soak::start();
+    // Listen from now, not from the first frame: a launch while this copy is
+    // still starting (a cold start can take seconds) must be answered at once,
+    // since the window is about to appear anyway; after that the UI answers.
+    let ui_ctx: Arc<std::sync::OnceLock<egui::Context>> = Default::default();
+    let instance = instance.map(Arc::new);
+    let show_asked: Arc<std::sync::atomic::AtomicBool> = Default::default();
+    if let Some(i) = instance.clone() {
+        let (asked, ui_ctx) = (show_asked.clone(), ui_ctx.clone());
+        std::thread::spawn(move || {
+            loop {
+                i.wait_show();
+                match ui_ctx.get() {
+                    None => i.shown(),
+                    Some(ectx) => {
+                        asked.store(true, std::sync::atomic::Ordering::Relaxed);
+                        ectx.request_repaint();
+                    }
+                }
+            }
+        });
+    }
     let ctx = Arc::new(ctx);
     let report = Arc::new(Mutex::new(None));
     {
@@ -333,8 +354,8 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>, instance: Option<cpuzeez
         diskbench: Default::default(),
         system: Default::default(),
         live: Default::default(),
-        instance: instance.map(Arc::new),
-        show_asked: Default::default(),
+        instance,
+        show_asked,
         update_failed_seen: false,
         #[cfg(feature = "soak")]
         soak: None,
@@ -350,7 +371,7 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>, instance: Option<cpuzeez
     // before eframe asks for the app.
     let app = std::rc::Rc::new(std::cell::RefCell::new(Some(app)));
     let run = |renderer| {
-        let app = app.clone();
+        let (app, ui_ctx) = (app.clone(), ui_ctx.clone());
         eframe::run_native(
             crate::DISPLAY_NAME,
             opts(renderer),
@@ -366,16 +387,7 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>, instance: Option<cpuzeez
                     });
                 }
                 let app = app.borrow_mut().take().ok_or("the app was already started")?;
-                if let Some(i) = app.instance.clone() {
-                    let (asked, ectx) = (app.show_asked.clone(), cc.egui_ctx.clone());
-                    std::thread::spawn(move || {
-                        loop {
-                            i.wait_show();
-                            asked.store(true, std::sync::atomic::Ordering::Relaxed);
-                            ectx.request_repaint();
-                        }
-                    });
-                }
+                let _ = ui_ctx.set(cc.egui_ctx.clone());
                 Ok(Box::new(app))
             }),
         )

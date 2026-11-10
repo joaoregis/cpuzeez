@@ -44,7 +44,7 @@ fn load() -> usize {
 type Table = &'static [(&'static str, &'static str)];
 
 /// (pt-BR, es) tables of every GUI file.
-fn tables() -> &'static [(Table, Table)] {
+pub(super) fn tables() -> &'static [(Table, Table)] {
     &[
         (super::PT_BR, super::ES),
         (super::overview::PT_BR, super::overview::ES),

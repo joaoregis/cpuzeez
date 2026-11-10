@@ -141,6 +141,91 @@ pub struct ServiceDetails {
     pub recovery: Option<Recovery>,
     /// Windows "run a program" command, when set.
     pub recovery_command: String,
+    /// What the service's own permissions refuse even to an administrator
+    /// (Windows); None when unknown or nothing is refused.
+    pub refusal: Option<Refusal>,
+}
+
+/// Changes a service's DACL refuses to an administrator's token.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Refusal {
+    /// `SERVICE_CHANGE_CONFIG`: startup type, account, recovery.
+    pub change: bool,
+    /// `SERVICE_START`.
+    pub start: bool,
+    /// `SERVICE_STOP`.
+    pub stop: bool,
+}
+
+const CHANGE_CONFIG: u32 = 0x0002;
+const START: u32 = 0x0010;
+const STOP: u32 = 0x0020;
+
+/// Read a service DACL in SDDL (`sc sdshow`) and say what it refuses to an
+/// elevated administrator, whose token holds Administrators, Everyone,
+/// Authenticated Users, Interactive, Users and the user's own SID.
+///
+/// Conservative: anything this reader does not understand (a conditional or
+/// object ACE, an unknown right) answers None, so the app never disables a
+/// button the OS would have allowed. Only a DACL it fully reads can refuse.
+pub fn refused_for_admin(sddl: &str, user_sid: Option<&str>) -> Option<Refusal> {
+    let dacl = sddl.split_once("D:")?.1;
+    let dacl = dacl.split("S:").next().unwrap_or(dacl);
+    let ours = |sid: &str| {
+        matches!(
+            sid,
+            "BA" | "WD" | "AU" | "IU" | "BU" | "S-1-5-32-544" | "S-1-1-0" | "S-1-5-11" | "S-1-5-4" | "S-1-5-32-545"
+        ) || user_sid == Some(sid)
+    };
+    let (mut allow, mut deny) = (0u32, 0u32);
+    for ace in dacl.split('(').skip(1) {
+        let ace = ace.strip_suffix(')').or_else(|| ace.split(')').next())?;
+        let f: Vec<&str> = ace.split(';').collect();
+        if f.len() != 6 || !f[3].is_empty() || !f[4].is_empty() {
+            return None;
+        }
+        // Inherit-only entries do not apply to the service itself.
+        if f[1].contains("IO") {
+            continue;
+        }
+        let rights = rights(f[2])?;
+        if !ours(f[5]) {
+            continue;
+        }
+        match f[0] {
+            "A" => allow |= rights,
+            "D" => deny |= rights,
+            _ => return None,
+        }
+    }
+    let refused = |bit: u32| allow & bit == 0 || deny & bit != 0;
+    let r = Refusal { change: refused(CHANGE_CONFIG), start: refused(START), stop: refused(STOP) };
+    (r != Refusal::default()).then_some(r)
+}
+
+/// SDDL access rights, as they apply to a service object.
+fn rights(s: &str) -> Option<u32> {
+    if let Some(h) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        return u32::from_str_radix(h, 16).ok();
+    }
+    if !s.len().is_multiple_of(2) {
+        return None;
+    }
+    let mut v = 0u32;
+    for i in (0..s.len()).step_by(2) {
+        v |= match s.get(i..i + 2)? {
+            "GA" | "FA" | "KA" => CHANGE_CONFIG | START | STOP,
+            // The service generic mapping: write = change config, execute = start/stop.
+            "GW" | "FW" | "KW" => CHANGE_CONFIG,
+            "GX" | "FX" | "KX" => START | STOP,
+            "DC" => CHANGE_CONFIG,
+            "RP" => START,
+            "WP" => STOP,
+            "GR" | "FR" | "KR" | "CC" | "LC" | "SW" | "DT" | "LO" | "CR" | "SD" | "RC" | "WD" | "WO" => 0,
+            _ => return None,
+        };
+    }
+    Some(v)
 }
 
 /// `systemctl show -p TriggeredBy,Restart,RestartUSec,FailureAction,CapabilityBoundingSet` → details.
@@ -394,6 +479,34 @@ pub fn matches_filter(row: &ServiceRow, filter: ServiceFilter, query: &str) -> b
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_dacl_that_refuses_administrators() {
+        // CodexSandboxService.OpenAI.Codex (2026-11-09): users may start and
+        // stop it; only the service's own SID may change its configuration.
+        let sddl = "D:(A;;CCLCSWRPWPDTLOCRRC;;;AU)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;S-1-5-80-1949724575-1)";
+        assert_eq!(
+            refused_for_admin(sddl, Some("S-1-5-21-9")),
+            Some(Refusal { change: true, start: false, stop: false })
+        );
+        // The usual one: Administrators may do everything.
+        let usual = "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)S:(AU;FA;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;WD)";
+        assert_eq!(refused_for_admin(usual, None), None);
+        // The user's own SID counts; a deny entry wins; generic rights are mapped.
+        assert_eq!(refused_for_admin("D:(A;;GA;;;S-1-5-21-9)", Some("S-1-5-21-9")), None);
+        assert_eq!(
+            refused_for_admin("D:(A;;GA;;;BA)(D;;WP;;;WD)", None),
+            Some(Refusal { change: false, start: false, stop: true })
+        );
+        assert_eq!(
+            refused_for_admin("D:P(A;;GRGX;;;BA)", None),
+            Some(Refusal { change: true, start: false, stop: false })
+        );
+        // Anything not understood refuses nothing.
+        for odd in ["D:(XA;;RP;;;BA;(x))", "D:(A;;ZZ;;;BA)", "D:(OA;;RP;guid;;BA)", "no dacl", "D:(A;;RP;;"] {
+            assert_eq!(refused_for_admin(odd, None), None, "{odd}");
+        }
+    }
+
     use super::*;
 
     #[test]
