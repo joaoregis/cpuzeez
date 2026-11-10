@@ -7,6 +7,8 @@ generated from its section below.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-11-10
+
 ### Changed
 
 - **CI:** tests run with `cargo nextest`. A test running past 60 s is reported and killed at 120 s, with its name in the log. A test that passes only on retry is reported as flaky, and a JUnit report is kept when tests fail.
@@ -637,7 +639,8 @@ features.
 - GUI with CPU-Z's tabs.
 - Installers for Windows (MSI), macOS (DMG/PKG), Debian/Ubuntu (DEB) and Arch.
 
-[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/joaoregis/cpuzeez/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/joaoregis/cpuzeez/compare/v0.3.0...v1.0.0
 [1.0.0-snapshot.2]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0-snapshot.1...v1.0.0-snapshot.2
