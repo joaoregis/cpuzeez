@@ -317,6 +317,13 @@ fn rows(r: Vec<(&'static str, String)>) -> Vec<(&'static str, String)> {
 }
 
 impl State {
+    /// Already read: fixed devices, for page tests.
+    #[cfg(test)]
+    pub fn fixture(drives: Vec<crate::storage::Drive>, adapters: Vec<crate::network::Adapter>) -> State {
+        let d = Data { drives, adapters, ..Default::default() };
+        State { data: Arc::new(Mutex::new(Some(d))), started: true }
+    }
+
     fn ensure(&mut self, ctx: &Arc<Ctx>) {
         if self.started {
             return;

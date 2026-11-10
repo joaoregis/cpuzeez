@@ -284,6 +284,19 @@ impl Sessions {
         }
     }
 
+    /// One listed session and no folder read (page tests).
+    #[cfg(test)]
+    pub fn fixture() -> Sessions {
+        let s = Session {
+            game: "fixture-game.exe".into(),
+            started: "2026-11-10T20:00:00".into(),
+            duration_s: 300.0,
+            source: "PresentMon 2.6.0".into(),
+            ..Default::default()
+        };
+        Sessions { list: vec![(PathBuf::from("fixture"), s)], listed: true, ..Default::default() }
+    }
+
     pub fn show(&mut self, ui: &mut Ui) {
         self.poll(ui);
         let p = theme::palette(ui);

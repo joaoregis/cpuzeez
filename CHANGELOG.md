@@ -7,6 +7,10 @@ generated from its section below.
 
 ## [Unreleased]
 
+### Changed
+
+- **Tests:** every page and tab is drawn and driven in a test, from fixed data that reads no hardware: controls have names, and copy, pin, the detail level and the tabs work. A new page or tab without a test fails CI.
+
 ### Fixed
 
 - **Windows: the taskbar icon after an update.** A pinned CPU ZeeZ turned into a blank page after an update and a restart. The shortcut's icon was a copy kept by Windows Installer for that one version, which the update deletes; it now comes from `cpuzeez.exe` itself. A pin made before this version needs to be pinned again once.

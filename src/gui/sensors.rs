@@ -186,6 +186,33 @@ impl Monitor {
         }
     }
 
+    /// Default settings and a telemetry engine over fixed readings (page tests).
+    #[cfg(test)]
+    pub fn fixture(ctx: Arc<Ctx>, tel: Telemetry) -> Monitor {
+        let mut settings = Settings::default();
+        settings.minis.push(Default::default());
+        Monitor {
+            ctx,
+            tel: Some((tel, Instant::now())),
+            show_mini: false,
+            alerts: Vec::new(),
+            settings,
+            show_sensors: false,
+            show_stress: false,
+            pages: true,
+            stress: stress::Stress::default(),
+            tray: tray::Tray::default(),
+            view: View::default(),
+            quitting: false,
+            started: false,
+            hidden: false,
+            paused: false,
+            tray_shape: (0, tray::Click::App),
+            mini_rt: Default::default(),
+            edit_mini: None,
+        }
+    }
+
     /// Sampling period and graph history from the settings.
     fn sampling(&self) -> (Duration, Duration) {
         let s = &self.settings;

@@ -937,6 +937,33 @@ impl Telemetry {
         t
     }
 
+    /// An engine over fixed readings, for page tests: no OS is read.
+    #[cfg(test)]
+    pub fn fixture(readings: Vec<Reading>) -> Telemetry {
+        struct Fixed(Vec<Reading>);
+        impl Source for Fixed {
+            fn name(&self) -> &'static str {
+                "fixture"
+            }
+            fn prefixes(&self) -> &'static [&'static str] {
+                &[""]
+            }
+            fn read(&mut self, out: &mut Vec<Reading>) {
+                out.extend(self.0.iter().cloned());
+            }
+        }
+        let cfg =
+            metrics::Config { period: Duration::from_millis(50), keep: Duration::from_secs(60), ..Default::default() };
+        Telemetry {
+            engine: Engine::start(vec![Box::new(Fixed(readings))], cfg),
+            throttles: Arc::default(),
+            csv: Arc::default(),
+            capture: Arc::default(),
+            logging: Arc::default(),
+            gpu_live: Arc::default(),
+        }
+    }
+
     /// Keep sampling the metrics under `prefixes` ("" = all) for a few more
     /// seconds. Call it every frame from whatever shows them.
     pub fn want(&self, key: &str, prefixes: &[&str]) {

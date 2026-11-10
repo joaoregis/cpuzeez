@@ -157,8 +157,8 @@ pub fn detect() -> Box<dyn Hw> {
     Box::new(NoHw)
 }
 
-#[allow(dead_code)]
-pub(crate) fn none() -> Box<dyn Hw> {
+/// No hardware backend: user mode only (also what page tests draw with).
+pub fn none() -> Box<dyn Hw> {
     Box::new(NoHw)
 }
 
