@@ -35,7 +35,7 @@ item 5 (fuzz on CI) runs in the background from M1 on ────────�
 | Milestone | Release | Plan items | Effort (work days) | Needs the owner |
 |---|---|---|---|---|
 | M0 | `1.0.1` | — | 0.5 | Release go |
-| M1 | `1.0.2` | 10 (part), 11, 14, 15 | 3–4 | A check of *Services* on their machine |
+| M1 | `1.0.2` | 10 (part), 11, 14, 15, 17 | 5–7 | A check of *Services* and of an update on their machine |
 | M2 | `1.1.0-beta.1` | 1, 2, 3, 4, 10 (rest), 12 | 7–9 | — |
 | M3 | `1.1.0-beta.2` | 9, 13 | 4–6 + soaks | 30-minute overlay soaks |
 | M4 | `1.1.0-beta.3` | 6, 8 (partial) | 5–7 | — |
@@ -64,9 +64,11 @@ Total: about 23–30 work days, plus waiting on soaks and CI.
 | M1-07 | **Dead code gated per OS** (D5): about 20 items, Linux and macOS. Remove `-A dead_code` from `ci.yml:37` and from the gate | 10.3 | — | `clippy -D warnings` passes for all three targets with no allowance; the Linux release build has no warnings |
 | M1-08 | **Tests that name themselves**: `cargo nextest` in CI. A test running past 60 s is reported and killed at 120 s; one retry, reported as flaky; JUnit uploaded on failure. `cargo test --doc` stays. The test steps get `timeout-minutes: 20` | 14 | — | A deliberately sleeping test is killed and named in a test run |
 | M1-09 | **No fixed sleeps in tests.** Add a `wait_until(deadline, cond)` helper to `core::testkit` and replace every sleep-then-assert. Check the `tempdir` sweep tests for shared folders | 14 | M1-08 | Repo-wide grep finds no sleep-then-assert in tests |
+| M1-11 | **One running copy** (item 17): a named mutex and two events in `Local\` (user and SYSTEM, Medium label) in `platform::instance`. A second launch brings the first to the front, from the tray too, and quits; with no answer within 3 s it starts anyway. *Restart as administrator* passes `--replaces=<pid>` | 17 | — | `platform` tests: the second claim sees the first, the show request is answered, the slot is free after the holder ends |
+| M1-12 | **The update helper**: a copy of the app in the private download folder waits for the app, runs `msiexec /passive`, and reopens the app with the same rights, or the old version with `--update-failed=<code>` and a translated note. The update bar quits through `on_exit`, which stops PresentMon, instead of `exit(0)` | 17 | M1-11 | CI: install `1.0.0`, start the app, a second launch quits; the helper waits for the app, installs `1.0.1` and reopens one copy |
 | M1-10 | **Security review notes** (item 15): the Windows TCP and UDP tables are read through a `Vec<u32>` (aligned by construction). *Privacy & data* lists `exports/` | 15 | — | The table tests pass; the privacy page lists and deletes exports |
 
-**Gate `1.0.2`:** CI green on all jobs. The owner retries the `CodexSandboxService` change (ChatGPT): the reason shows before the click, and there is no leftover undo entry and no raw code.
+**Gate `1.0.2`:** CI green on all jobs. The owner updates from `1.0.1` through the update bar in administrator mode with the app also in the tray: the app closes, installs and reopens by itself. The owner retries the `CodexSandboxService` change (ChatGPT): the reason shows before the click, and there is no leftover undo entry and no raw code.
 
 ## M2. `1.1.0-beta.1`: tests on every page, panels that fit
 

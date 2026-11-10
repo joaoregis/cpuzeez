@@ -122,8 +122,14 @@ pub struct Access {
 /// and `-screenshots=DIR`, which would make the elevated copy write where the
 /// launching process chose (and the parser accepts any letter case, so a
 /// filter by name is easy to get wrong). The elevated copy opens like a fresh start.
+/// On Windows it is told which copy it replaces, and waits for it to quit
+/// before taking the single-instance slot (see `claim_instance` in main.rs).
 fn relaunch_elevated() -> elevation::Pending {
-    elevation::relaunch(&[])
+    if cfg!(windows) {
+        elevation::relaunch(&[format!("--replaces={}", std::process::id())])
+    } else {
+        elevation::relaunch(&[])
+    }
 }
 
 impl Access {

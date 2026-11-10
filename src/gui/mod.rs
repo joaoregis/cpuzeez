@@ -242,11 +242,17 @@ struct App {
     diskbench: diskbench_view::State,
     system: system::State,
     live: live::State,
+    /// This copy's single-instance slot (Windows); another launch asks through it.
+    instance: Option<Arc<cpuzeez_platform::instance::Instance>>,
+    /// Set by the listener when another launch asked to see this copy.
+    show_asked: Arc<std::sync::atomic::AtomicBool>,
+    /// The note after a failed update was dismissed.
+    update_failed_seen: bool,
     #[cfg(feature = "soak")]
     soak: Option<soak::Tour>,
 }
 
-pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
+pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>, instance: Option<cpuzeez_platform::instance::Instance>) {
     #[cfg(feature = "soak")]
     crate::soak::start();
     let ctx = Arc::new(ctx);
@@ -327,6 +333,9 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
         diskbench: Default::default(),
         system: Default::default(),
         live: Default::default(),
+        instance: instance.map(Arc::new),
+        show_asked: Default::default(),
+        update_failed_seen: false,
         #[cfg(feature = "soak")]
         soak: None,
     };
@@ -357,6 +366,16 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>) {
                     });
                 }
                 let app = app.borrow_mut().take().ok_or("the app was already started")?;
+                if let Some(i) = app.instance.clone() {
+                    let (asked, ectx) = (app.show_asked.clone(), cc.egui_ctx.clone());
+                    std::thread::spawn(move || {
+                        loop {
+                            i.wait_show();
+                            asked.store(true, std::sync::atomic::Ordering::Relaxed);
+                            ectx.request_repaint();
+                        }
+                    });
+                }
                 Ok(Box::new(app))
             }),
         )
@@ -418,6 +437,13 @@ impl eframe::App for App {
         self.hotkeys(&ectx);
         self.window_title(&ectx);
         self.access.frame(&ectx);
+        if self.show_asked.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            // Another launch: come to the front (from the tray too) and tell it.
+            self.mon.show_window(&ectx);
+            if let Some(i) = &self.instance {
+                i.shown();
+            }
+        }
         if std::mem::take(&mut self.access.restarted) {
             self.mon.quit(&ectx); // the elevated copy is up
         }
@@ -1123,6 +1149,19 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Downloading… {} / {} MB", "Baixando… {} / {} MB"),
     ("Verifying checksum…", "Verificando o checksum…"),
     ("Starting the installer…", "Iniciando o instalador…"),
+    ("Closing to install…", "Fechando para instalar…"),
+    (
+        "The update was cancelled; CPU ZeeZ {} is still installed.",
+        "A atualização foi cancelada; o CPU ZeeZ {} continua instalado.",
+    ),
+    (
+        "Another installation was running, so the update did not start; CPU ZeeZ {} is still installed.",
+        "Outra instalação estava em andamento, então a atualização não começou; o CPU ZeeZ {} continua instalado.",
+    ),
+    (
+        "The update did not finish (installer code {}); CPU ZeeZ {} is still installed.",
+        "A atualização não terminou (código do instalador {}); o CPU ZeeZ {} continua instalado.",
+    ),
     ("Installed. Restart CPU ZeeZ to use the new version.", "Instalado. Reinicie o CPU ZeeZ para usar a nova versão."),
     (
         "The installer was opened: follow its steps, then restart CPU ZeeZ.",
@@ -1368,6 +1407,19 @@ pub const ES: &[(&str, &str)] = &[
     ("Downloading… {} / {} MB", "Descargando… {} / {} MB"),
     ("Verifying checksum…", "Verificando la suma de comprobación…"),
     ("Starting the installer…", "Iniciando el instalador…"),
+    ("Closing to install…", "Cerrando para instalar…"),
+    (
+        "The update was cancelled; CPU ZeeZ {} is still installed.",
+        "La actualización se canceló; CPU ZeeZ {} sigue instalado.",
+    ),
+    (
+        "Another installation was running, so the update did not start; CPU ZeeZ {} is still installed.",
+        "Había otra instalación en curso, así que la actualización no empezó; CPU ZeeZ {} sigue instalado.",
+    ),
+    (
+        "The update did not finish (installer code {}); CPU ZeeZ {} is still installed.",
+        "La actualización no terminó (código del instalador {}); CPU ZeeZ {} sigue instalado.",
+    ),
     ("Installed. Restart CPU ZeeZ to use the new version.", "Instalado. Reinicie CPU ZeeZ para usar la nueva versión."),
     (
         "The installer was opened: follow its steps, then restart CPU ZeeZ.",

@@ -17,6 +17,7 @@ pub mod encryption;
 pub mod firmware;
 pub mod gpu_engines;
 pub mod hw;
+pub mod instance;
 pub mod large_pages;
 pub mod memory;
 pub mod net_io;

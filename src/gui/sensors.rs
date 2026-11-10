@@ -293,6 +293,14 @@ impl Monitor {
         ectx.send_viewport_cmd(egui::ViewportCommand::Close);
     }
 
+    /// Bring the main window back: from the tray, minimised or behind others.
+    pub fn show_window(&mut self, ectx: &egui::Context) {
+        self.hidden = false;
+        ectx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+        ectx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+        ectx.send_viewport_cmd(egui::ViewportCommand::Focus);
+    }
+
     /// Call every frame from the app: windows, tray events, auto-stop, close-to-tray.
     pub fn frame(&mut self, ectx: &egui::Context) {
         if !self.started {
@@ -312,10 +320,7 @@ impl Monitor {
                 }
                 tray::Action::Toggle | tray::Action::Sensors => {
                     self.show_sensors |= a == tray::Action::Sensors;
-                    self.hidden = false;
-                    ectx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
-                    ectx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
-                    ectx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                    self.show_window(ectx);
                 }
                 tray::Action::Mini => {
                     let on = !self.show_mini;

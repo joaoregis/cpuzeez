@@ -23,6 +23,7 @@ Items rated BAIXO were fixed during the 1.0.0 hardening instead of being listed 
 | 14 | [Find the tests that hang or fail now and then](#14-find-the-tests-that-hang-or-fail-now-and-then) | S0-T | BAIXO–MEDIO | M1 · 1.0.2 |
 | 15 | [Notes from the 2026-11-09 security review](#15-notes-from-the-2026-11-09-security-review) | S3-05 | BAIXO | M1 · 1.0.2 |
 | 16 | [macOS and Arch installers exercised in CI](#16-macos-and-arch-installers-exercised-in-ci) | S3-06 | MEDIO | M5 · 1.1.0 |
+| 17 | [An update that closes the app and reopens it](#17-an-update-that-closes-the-app-and-reopens-it) | S3-06 | MEDIO | M1 · 1.0.2 |
 
 Out of scope (decision D1 in the [roadmap](ROADMAP.md)): the read-only helper service, the native ETW consumer, the Startup *Advanced* view and the SRUM history import wait for a future major version. What needs a person or specific hardware is in the roadmap's carry-over.
 
@@ -232,6 +233,26 @@ From [review-2026-11-09.md](../security/review-2026-11-09.md#notes-for-110-no-fi
 **What finishing takes.** A macOS job that installs the `.pkg`, runs `cpuzeez --version` and removes it (the files `pkgutil --files` lists, then `pkgutil --forget`); an `archlinux` container job that installs the `.pkg.tar.zst` with `pacman -U`, runs it and removes it.
 
 **Done when.** Both jobs are green on every pull request that touches packaging.
+
+## 17. An update that closes the app and reopens it
+
+**Reported** on 2026-11-09 (1.0.0 → 1.0.1 through the update bar, Windows 11): the installer could not close CPU ZeeZ, and the app had to be opened again by hand. The owner noticed it mostly in administrator mode.
+
+**Two causes, both confirmed.**
+
+1. **Administrator mode.** The update bar ended the app with `std::process::exit(0)` right after starting msiexec. That skips `on_exit`, the only place that stops the PresentMon sidecar (`live_frames::stop`), ends the network ETW session and flushes the history. PresentMon runs only when elevated, so in that mode it kept running from the install folder and held `PresentMon.exe`. It has no window, so the installer's Restart Manager cannot close it.
+2. **A second copy in the tray.** Nothing stops a second launch. With *close to tray* on, a copy whose window was closed keeps running hidden, and opening CPU ZeeZ again starts another. The update quits only the copy that ran it. On the reporting machine, a `1.0.0-snapshot.1` copy started that morning was still running after two updates. The installer's request to close turns into "hide" (close to tray), so it cannot close that copy either.
+
+**What finishing takes (Windows).**
+- **One copy per user session and data folder.** A second launch asks the running copy to come to the front (from the tray too) and quits. The objects are in `Local\`, with a DACL for the user and SYSTEM and a Medium no-write-up label, so a normal copy and an elevated copy reach each other. A copy that doesn't answer within 3 s does not keep the user out: the new one starts anyway. *Restart as administrator* passes `--replaces=<pid>`, so the elevated copy waits for the one it replaces.
+- **An update helper.** After the download and the checksum check, the app copies itself into the private download folder as `cpuzeez-update-helper.exe`, starts it, and quits for real through `on_exit`. The helper:
+  - waits for the app to exit (up to 30 s);
+  - runs `msiexec /i … /passive /norestart`: a progress bar only, though Windows still asks for permission;
+  - reopens the installed app with the same rights the app had, since it inherits them. After a cancelled or failed install it reopens the old version with `--update-failed=<code>`, and the app says why (en, pt-BR, es).
+
+**Done when.** A CI job installs `1.0.0` and starts the app. It checks that a second launch quits and leaves one copy. It runs the helper against the running app's PID and checks that the helper waits, installs `1.0.1`, and reopens exactly one copy.
+
+**Not covered.** Running a downloaded `.msi` by hand while the app is open still meets the installer's *files in use* question. Closing and restarting on that request needs `WM_ENDSESSION` handling and `RegisterApplicationRestart`, which winit does not expose. Linux and macOS keep "restart to use the new version".
 
 ## Order and release
 

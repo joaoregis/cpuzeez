@@ -242,7 +242,8 @@ pub enum Stage {
     OpenedInstaller,
     /// No automatic install for this package: its folder was opened.
     OpenedFolder(PathBuf),
-    /// msiexec started: exit now so it can replace our files.
+    /// The update helper took over (Windows): quit now, for real (not to the
+    /// tray), so it can replace our files; it reopens the app afterwards.
     Quit,
     Failed(String),
 }
@@ -284,7 +285,7 @@ impl Installer {
     }
 }
 
-fn command(prog: &str) -> std::process::Command {
+fn command(prog: impl AsRef<std::ffi::OsStr>) -> std::process::Command {
     #[allow(unused_mut)]
     let mut c = std::process::Command::new(prog);
     // Never inherit stdin: from a GUI whose console was dropped it is not a valid handle.
@@ -375,9 +376,7 @@ fn launch(path: &Path) -> Result<Stage, String> {
         Ok(Stage::OpenedFolder(dir))
     };
     if name.ends_with(".msi") {
-        // msiexec shows its own UI and the UAC prompt; we exit so files aren't locked.
-        command("msiexec").arg("/i").arg(path).spawn().map_err(|e| format!("msiexec: {e}"))?;
-        return Ok(Stage::Quit);
+        return start_helper(path);
     }
     if cfg!(target_os = "macos") && (name.ends_with(".dmg") || name.ends_with(".pkg")) {
         let st = command("open").arg(path).status().map_err(|e| format!("open: {e}"))?;
@@ -404,6 +403,68 @@ fn launch(path: &Path) -> Result<Stage, String> {
         }
         _ => folder(), // tarball / zip, or no pkexec
     }
+}
+
+/// The `--update-failed=CODE` a relaunch after a failed install was given.
+pub static FAILED: std::sync::OnceLock<i32> = std::sync::OnceLock::new();
+
+/// msiexec exit codes that mean the new version is installed.
+pub fn installed_ok(code: i32) -> bool {
+    matches!(code, 0 | 1641 | 3010)
+}
+
+/// Windows: hand the verified MSI to a copy of this program in the same
+/// private folder, which waits for us to quit, installs, and reopens the app.
+/// A copy, because the installer replaces the installed one; in the private
+/// download folder, because only this user may write there (see
+/// [`private_download_dir`]).
+fn start_helper(msi: &Path) -> Result<Stage, String> {
+    let exe = std::env::current_exe().map_err(|e| format!("cannot find this program: {e}"))?;
+    let dir = msi.parent().ok_or("no download folder")?;
+    let helper = dir.join(format!("{}-update-helper.exe", crate::NAME));
+    std::fs::copy(&exe, &helper).map_err(|e| format!("update helper: {e}"))?;
+    command(&helper)
+        .arg(format!("--apply-update={}", msi.display()))
+        .arg(format!("--wait-pid={}", std::process::id()))
+        .arg(format!("--relaunch={}", exe.display()))
+        .spawn()
+        .map_err(|e| format!("update helper: {e}"))?;
+    Ok(Stage::Quit)
+}
+
+/// The update helper (`--apply-update`): wait for the app to quit, run the
+/// installer with a progress bar only (`/passive`; Windows still asks for
+/// permission), then reopen the app with the same rights it had: the helper
+/// inherits them. Returns msiexec's exit code.
+pub fn apply(msi: &Path, wait_pid: Option<u32>, relaunch: Option<&Path>) -> i32 {
+    if let Some(pid) = wait_pid
+        && !cpuzeez_platform::instance::wait_exit(pid, std::time::Duration::from_secs(30))
+    {
+        // Installing anyway: Windows Installer asks the user about files in use.
+        crate::applog::warn(&format!("update: the app (pid {pid}) did not quit within 30 s"));
+    }
+    let code = match command("msiexec").arg("/i").arg(msi).args(["/passive", "/norestart"]).status() {
+        Ok(st) => st.code().unwrap_or(-1),
+        Err(e) => {
+            crate::applog::warn(&format!("update: msiexec: {e}"));
+            -1
+        }
+    };
+    crate::applog::info(&format!("update: msiexec {} exited with {code}", msi.display()));
+    if let Some(exe) = relaunch {
+        let mut c = command(exe);
+        if !installed_ok(code) {
+            c.arg(format!("--update-failed={code}"));
+        }
+        if let Some(d) = exe.parent() {
+            // Not the download folder: the next update's sweep deletes it.
+            c.current_dir(d);
+        }
+        if let Err(e) = c.spawn() {
+            crate::applog::warn(&format!("update: reopening {}: {e}", exe.display()));
+        }
+    }
+    code
 }
 
 fn in_path(prog: &str) -> bool {
