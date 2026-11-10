@@ -7,6 +7,10 @@ generated from its section below.
 
 ## [Unreleased]
 
+### Changed
+
+- **CI:** tests run with `cargo nextest`. A test running past 60 s is reported and killed at 120 s, with its name in the log. A test that passes only on retry is reported as flaky, and a JUnit report is kept when tests fail.
+
 ### Fixed
 
 - **Windows: an update closes CPU ZeeZ and opens it again.** *Download & install* used to end the app abruptly. In administrator mode that left the PresentMon sidecar running, and it kept the installed files locked. Now the app quits normally, and a helper waits for it, installs with only a progress bar, and reopens CPU ZeeZ with the same rights. If the install is cancelled or fails, the old version reopens and says why.

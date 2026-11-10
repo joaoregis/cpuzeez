@@ -222,10 +222,9 @@ mod tests {
     #[test]
     fn no_bus_means_unavailable() {
         let p = Portal::start_on(|| Err(zbus::Error::Failure("no bus".into())));
-        for _ in 0..100 {
-            if p.status() != Status::Starting {
-                break;
-            }
+        // A deadline, not a count: a busy CI runner may take a while to start the thread.
+        let t0 = std::time::Instant::now();
+        while p.status() == Status::Starting && t0.elapsed() < std::time::Duration::from_secs(10) {
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
         assert!(matches!(p.status(), Status::Unavailable(_)), "{:?}", p.status());
