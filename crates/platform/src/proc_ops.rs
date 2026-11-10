@@ -373,12 +373,15 @@ mod imp {
             let mut size = 0u32;
             let _ = GetExtendedTcpTable(std::ptr::null_mut(), &mut size, 0, 2, TCP_TABLE_OWNER_PID_ALL, 0);
             if size >= 4 {
-                let mut buf = vec![0u8; size as usize];
+                // u32 words: the table and its rows are 4-byte aligned by
+                // construction, not by the allocator's courtesy.
+                let mut buf = vec![0u32; (size as usize).div_ceil(4)];
+                let mut size = (buf.len() * 4) as u32;
                 if GetExtendedTcpTable(buf.as_mut_ptr().cast(), &mut size, 0, 2, TCP_TABLE_OWNER_PID_ALL, 0) == 0 {
-                    let count = u32::from_ne_bytes(buf[..4].try_into().unwrap_or_default()) as usize;
+                    let count = buf[0] as usize;
                     let rows = std::slice::from_raw_parts(
-                        buf.as_ptr().add(4).cast::<MIB_TCPROW_OWNER_PID>(),
-                        count.min((buf.len() - 4) / size_of::<MIB_TCPROW_OWNER_PID>()),
+                        buf.as_ptr().add(1).cast::<MIB_TCPROW_OWNER_PID>(),
+                        count.min((buf.len() - 1) * 4 / size_of::<MIB_TCPROW_OWNER_PID>()),
                     );
                     for r in rows.iter().filter(|r| r.dwOwningPid == pid) {
                         let st = match r.dwState as i32 {
@@ -408,12 +411,15 @@ mod imp {
             let mut size = 0u32;
             let _ = GetExtendedUdpTable(std::ptr::null_mut(), &mut size, 0, 2, UDP_TABLE_OWNER_PID, 0);
             if size >= 4 {
-                let mut buf = vec![0u8; size as usize];
+                // u32 words: the table and its rows are 4-byte aligned by
+                // construction, not by the allocator's courtesy.
+                let mut buf = vec![0u32; (size as usize).div_ceil(4)];
+                let mut size = (buf.len() * 4) as u32;
                 if GetExtendedUdpTable(buf.as_mut_ptr().cast(), &mut size, 0, 2, UDP_TABLE_OWNER_PID, 0) == 0 {
-                    let count = u32::from_ne_bytes(buf[..4].try_into().unwrap_or_default()) as usize;
+                    let count = buf[0] as usize;
                     let rows = std::slice::from_raw_parts(
-                        buf.as_ptr().add(4).cast::<MIB_UDPROW_OWNER_PID>(),
-                        count.min((buf.len() - 4) / size_of::<MIB_UDPROW_OWNER_PID>()),
+                        buf.as_ptr().add(1).cast::<MIB_UDPROW_OWNER_PID>(),
+                        count.min((buf.len() - 1) * 4 / size_of::<MIB_UDPROW_OWNER_PID>()),
                     );
                     for r in rows.iter().filter(|r| r.dwOwningPid == pid) {
                         out.push(super::NetConn {
@@ -617,6 +623,21 @@ mod imp {
 
 #[cfg(test)]
 mod tests {
+    /// Windows reads the TCP and UDP tables through u32 words since the
+    /// 2026-11-09 review: the RPC endpoint mapper (port 135), which every
+    /// Windows machine runs, must still come back as listening. No socket of
+    /// our own: only update.rs may touch the network (P1).
+    #[cfg(windows)]
+    #[test]
+    fn the_rpc_endpoint_mapper_is_listening() {
+        let found = crate::procs::snapshot(false).iter().any(|p| {
+            super::connections(p.pid)
+                .iter()
+                .any(|n| n.proto == "TCP" && n.state == "LISTEN" && n.local.ends_with(":135"))
+        });
+        assert!(found, "no process listens on TCP 135");
+    }
+
     use super::*;
 
     #[test]
