@@ -19,8 +19,10 @@ jobs:
   fuzz:
     name: ${{ matrix.target }}
     runs-on: ubuntu-latest
-    # The run itself plus building cargo-fuzz and the target.
-    timeout-minutes: ${{ fromJSON(inputs.minutes || '5') + 30 }}
+    # The run plus building cargo-fuzz and the target. Expressions have no
+    # arithmetic: a campaign gets the most a hosted job may run (6 h), the
+    # nightly 5 minutes get 40.
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 360 || 40 }}
     strategy:
       fail-fast: false
       matrix:
