@@ -57,6 +57,8 @@ pub struct Settings {
     pub detail: std::collections::BTreeMap<String, cpuzeez_core::detail::Level>,
     /// Rows pinned to the Overview, in pin order.
     pub pins: Vec<Pin>,
+    /// Side panels' widths in points, by panel ("services", "processes").
+    pub panel_widths: std::collections::BTreeMap<String, f32>,
     /// The Overview's tiles; None = the default set.
     pub overview_tiles: Option<Vec<cpuzeez_core::layout::Widget>>,
     /// Local alerts are opt-in (P1): off until turned on in Settings.
@@ -122,6 +124,7 @@ impl Default for Settings {
             units: Default::default(),
             detail: Default::default(),
             pins: Vec::new(),
+            panel_widths: Default::default(),
             overview_tiles: None,
             alerts_on: false,
             alerts: cpuzeez_core::alerts::defaults(),

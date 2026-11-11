@@ -682,24 +682,9 @@ impl State {
         // Split view if details panel is open.
         let selected_row = rows.iter().find(|r| self.table.selected.contains(&r.key())).cloned();
         if self.show_details {
-            let avail = ui.available_width();
-            let panel_w = (avail * 0.36).clamp(280.0, 440.0);
-            ui.horizontal_top(|ui| {
-                ui.allocate_ui_with_layout(
-                    egui::vec2(avail - panel_w - theme::GAP, ui.available_height()),
-                    egui::Layout::top_down(egui::Align::Min),
-                    |ui| {
-                        self.render_table(ui, &rows, snap);
-                    },
-                );
-                ui.add_space(theme::GAP);
-                ui.allocate_ui_with_layout(
-                    egui::vec2(panel_w, ui.available_height()),
-                    egui::Layout::top_down(egui::Align::Min),
-                    |ui| {
-                        self.render_details_panel(ui, selected_row.as_ref(), snap);
-                    },
-                );
+            super::split::show(ui, "processes", 380.0, |ui, side| match side {
+                super::split::Side::Left => self.render_table(ui, &rows, snap),
+                super::split::Side::Right => self.render_details_panel(ui, selected_row.as_ref(), snap),
             });
         } else {
             self.render_table(ui, &rows, snap);

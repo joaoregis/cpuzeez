@@ -29,6 +29,7 @@ mod settings_ui;
 mod shots;
 #[cfg(feature = "soak")]
 mod soak;
+mod split;
 mod update_ui;
 // ---- monitoring (sensors / stress / tray) ----
 #[cfg(test)]
@@ -451,6 +452,7 @@ impl eframe::App for App {
         units::set(self.mon.settings.units);
         let ectx = ui.ctx().clone();
         self.take_pins(&ectx);
+        self.take_widths(&ectx);
         ectx.request_repaint_after(Duration::from_millis(500));
         #[cfg(feature = "soak")]
         self.soak_tour(&ectx);
@@ -692,6 +694,17 @@ impl App {
             self.mon.settings.save();
         }
         pins::publish(ectx, &self.mon.settings.pins);
+    }
+
+    /// A side panel resized last frame: save its width (M2-05).
+    fn take_widths(&mut self, ectx: &egui::Context) {
+        if let Some(w) = split::take_changes(ectx) {
+            self.mon.settings.panel_widths = w;
+            if self.auto.is_none() {
+                self.mon.settings.save();
+            }
+        }
+        split::publish(ectx, &self.mon.settings.panel_widths);
     }
 
     /// A page header with the detail switch; the chosen level is remembered per page.
