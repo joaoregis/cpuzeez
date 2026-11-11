@@ -237,8 +237,8 @@ fn at_every_zoom<S: 'static>(name: &str, state: impl Fn() -> S, draw: impl Fn(&m
             },
             state(),
         );
-        h.run();
-        h.run();
+        // A fixed number of frames: pages with live values never stop repainting.
+        h.run_steps(6);
         let mut c = collisions(&h);
         c.extend(beyond(&h, size.x));
         assert!(c.is_empty(), "{name} at {:.0} %: {}", z * 100.0, c.join("; "));
@@ -257,7 +257,8 @@ fn beyond<State>(h: &Harness<'_, State>, width: f32) -> Vec<String> {
         .filter_map(|n| {
             let label = n.accesskit_node().label().or_else(|| n.accesskit_node().value())?;
             let r = n.rect();
-            (!label.trim().is_empty() && r.max.x > width + 1.0 && r.width() < 0.8 * width).then(|| format!("{label:?} ends at x {:.0} of {width:.0}", r.max.x))
+            (!label.trim().is_empty() && r.max.x > width + 1.0 && r.width() < 0.8 * width)
+                .then(|| format!("{label:?} ends at x {:.0} of {width:.0}", r.max.x))
         })
         .collect()
 }
