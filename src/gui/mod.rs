@@ -15,8 +15,12 @@ mod bmp;
 mod bottleneck_ui;
 pub mod detail;
 mod devices;
+#[cfg(test)]
+mod fixture;
 pub mod i18n;
 pub mod overview;
+#[cfg(test)]
+mod page_tests;
 mod pages;
 mod palette;
 pub mod pins;
@@ -252,6 +256,63 @@ struct App {
     soak: Option<soak::Tour>,
 }
 
+impl App {
+    fn new(
+        ctx: Arc<Ctx>,
+        report: Arc<Mutex<Option<Vec<Section>>>>,
+        mon: sensors::Monitor,
+        instance: Option<Arc<cpuzeez_platform::instance::Instance>>,
+        show_asked: Arc<std::sync::atomic::AtomicBool>,
+    ) -> App {
+        App {
+            ctx,
+            report,
+            access: Default::default(),
+            welcome: None,
+            page: Page::Overview,
+            history_dirty: true,
+            mini_edit: None,
+            mini_import: String::new(),
+            bench_view: BenchView::Cpu,
+            tool_view: ToolView::Compare,
+            core: 0,
+            slot: 0,
+            gpu: 0,
+            status: String::new(),
+            shot: None,
+            auto: None,
+            bench: bench_tab::State::default(),
+            devices: devices::State::default(),
+            history: tools::History::default(),
+            compare: tools::Compare::default(),
+            update: Arc::new(Mutex::new(None)),
+            update_dismissed: false,
+            installer: None,
+            logo: None,
+            update_manual: Arc::new(Mutex::new(None)),
+            title: String::new(),
+            mon,
+            palette: Default::default(),
+            overview: Default::default(),
+            cores_table: Default::default(),
+            pcie_table: Default::default(),
+            latency: Default::default(),
+            cpusuite: Default::default(),
+            memplus: Default::default(),
+            drivehealth: Default::default(),
+            gpubench: Default::default(),
+            diskbench: Default::default(),
+            system: Default::default(),
+            live: Default::default(),
+            instance,
+            show_asked,
+            update_failed_seen: false,
+            #[cfg(feature = "soak")]
+            soak: None,
+        }
+    }
+}
+
 pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>, instance: Option<cpuzeez_platform::instance::Instance>) {
     #[cfg(feature = "soak")]
     crate::soak::start();
@@ -309,57 +370,15 @@ pub fn run(ctx: Ctx, shots: Option<std::path::PathBuf>, instance: Option<cpuzeez
         eframe::NativeOptions { viewport: vp, renderer, ..Default::default() }
     };
     let theme = mon.settings.theme;
-    let app = App {
-        ctx,
-        report,
-        access: Default::default(),
-        welcome: (shots.is_none() && mon.settings.privacy_seen < welcome::PRIVACY_VERSION).then(Default::default),
-        page: if shots.is_some() { Page::Overview } else { start_page },
-        history_dirty: true,
-        mini_edit: None,
-        mini_import: String::new(),
-        bench_view: BenchView::Cpu,
-        tool_view: ToolView::Compare,
-        core: 0,
-        slot: 0,
-        gpu: 0,
-        status: String::new(),
-        shot: None,
-        auto: shots.map(|dir| {
-            let _ = std::fs::create_dir_all(&dir);
-            MASK_PRIVATE.store(true, std::sync::atomic::Ordering::Relaxed);
-            let now = std::time::Instant::now();
-            AutoShots { dir, step: 0, wait: 0, started: now, prepared: None, since: now }
-        }),
-        bench: bench_tab::State::default(),
-        devices: devices::State::default(),
-        history: tools::History::default(),
-        compare: tools::Compare::default(),
-        update: Arc::new(Mutex::new(None)),
-        update_dismissed: false,
-        installer: None,
-        logo: None,
-        update_manual: Arc::new(Mutex::new(None)),
-        title: String::new(),
-        mon,
-        palette: Default::default(),
-        overview: Default::default(),
-        cores_table: Default::default(),
-        pcie_table: Default::default(),
-        latency: Default::default(),
-        cpusuite: Default::default(),
-        memplus: Default::default(),
-        drivehealth: Default::default(),
-        gpubench: Default::default(),
-        diskbench: Default::default(),
-        system: Default::default(),
-        live: Default::default(),
-        instance,
-        show_asked,
-        update_failed_seen: false,
-        #[cfg(feature = "soak")]
-        soak: None,
-    };
+    let mut app = App::new(ctx, report, mon, instance, show_asked);
+    app.welcome = (shots.is_none() && app.mon.settings.privacy_seen < welcome::PRIVACY_VERSION).then(Default::default);
+    app.page = if shots.is_some() { Page::Overview } else { start_page };
+    app.auto = shots.map(|dir| {
+        let _ = std::fs::create_dir_all(&dir);
+        MASK_PRIVATE.store(true, std::sync::atomic::Ordering::Relaxed);
+        let now = std::time::Instant::now();
+        AutoShots { dir, step: 0, wait: 0, started: now, prepared: None, since: now }
+    });
     if app.auto.is_none() {
         crate::data::expire_logs(app.mon.settings.log_retention_days);
         if app.welcome.is_none() {

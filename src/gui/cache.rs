@@ -40,6 +40,29 @@ impl<T: Send + Sync + 'static> Cached<T> {
         }
         s.value.clone()
     }
+
+    /// A fixed value that is never refreshed (page tests read no OS).
+    #[cfg(test)]
+    pub fn seed(&'static self, v: T) {
+        let mut s = self.slot.lock().unwrap_or_else(|e| e.into_inner());
+        (s.value, s.at, s.busy) = (Some(Arc::new(v)), Some(Instant::now()), true);
+    }
+}
+
+/// Fixed values for every probe here, so a page drawn in a test reads no OS.
+#[cfg(test)]
+pub fn seed_fixtures(drives: Vec<crate::storage::Drive>) {
+    DRIVES.seed(drives);
+    BATTERIES.seed(Vec::new());
+    FIRMWARE.seed(Default::default());
+    CPU_OS.seed(CpuOs {
+        vulnerabilities: vec![("Spectre v2".into(), "Mitigated".into())],
+        virtualization: Default::default(),
+        power: Default::default(),
+    });
+    GPUS.seed(vec!["Test GPU".into()]);
+    MEMORY.seed(Default::default());
+    NPUS.seed(Vec::new());
 }
 
 static DRIVES: Cached<Vec<crate::storage::Drive>> = Cached::new(Duration::from_secs(60));
