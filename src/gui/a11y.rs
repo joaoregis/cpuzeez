@@ -239,9 +239,27 @@ fn at_every_zoom<S: 'static>(name: &str, state: impl Fn() -> S, draw: impl Fn(&m
         );
         h.run();
         h.run();
-        let c = collisions(&h);
+        let mut c = collisions(&h);
+        c.extend(beyond(&h, size.x));
         assert!(c.is_empty(), "{name} at {:.0} %: {}", z * 100.0, c.join("; "));
     }
+}
+
+/// Text that ends past the window's right edge: the page is wider than the
+/// window (10.1). A node about as wide as the window is a table row or
+/// header, which scrolls sideways on purpose (egui does not expose scroll
+/// areas to accessibility, so the width is the tell).
+fn beyond<State>(h: &Harness<'_, State>, width: f32) -> Vec<String> {
+    use egui_kittest::kittest::NodeT;
+    h.root()
+        .children_recursive()
+        .filter(|n| n.accesskit_node().children().count() == 0 && !n.accesskit_node().is_hidden())
+        .filter_map(|n| {
+            let label = n.accesskit_node().label().or_else(|| n.accesskit_node().value())?;
+            let r = n.rect();
+            (!label.trim().is_empty() && r.max.x > width + 1.0 && r.width() < 0.8 * width).then(|| format!("{label:?} ends at x {:.0} of {width:.0}", r.max.x))
+        })
+        .collect()
 }
 
 fn bottleneck_sample() -> super::bottleneck_ui::Detector {
@@ -397,4 +415,48 @@ fn the_startup_tab_holds_together_at_every_scale() {
         || (super::system_startup::State::default(), summary()),
         |ui, (s, sum)| s.show_with_summary(ui, sum),
     );
+}
+
+// ------------------------------------------------------------ every page (M2-04)
+
+/// Every page and tab from the fixtures, at every zoom.
+fn page_at_every_zoom(page: super::Page, prepare: fn(&mut super::App)) {
+    at_every_zoom(
+        &format!("{page:?}"),
+        move || {
+            let mut app = super::fixture::app(page);
+            prepare(&mut app);
+            app
+        },
+        |ui, app| {
+            let r = super::fixture::report();
+            egui::ScrollArea::vertical().show(ui, |ui| app.page_body(ui, &r));
+        },
+    );
+}
+
+#[test]
+fn every_page_holds_together_at_every_scale() {
+    for p in super::NAV.iter().chain(super::NAV_BOTTOM.iter()).map(|n| n.0) {
+        page_at_every_zoom(p, |_| {});
+    }
+}
+
+#[test]
+fn every_live_tab_holds_together_at_every_scale() {
+    use super::live::Tab;
+    page_at_every_zoom(super::Page::Live, |a| a.live.tab = Tab::Overlay);
+    page_at_every_zoom(super::Page::Live, |a| {
+        a.live.tab = Tab::Sessions;
+        a.live.sessions = super::live_sessions::Sessions::fixture();
+    });
+}
+
+#[test]
+fn every_tools_tab_holds_together_at_every_scale() {
+    use super::ToolView;
+    page_at_every_zoom(super::Page::Tools, |a| a.tool_view = ToolView::Clocks);
+    page_at_every_zoom(super::Page::Tools, |a| a.tool_view = ToolView::Timers);
+    page_at_every_zoom(super::Page::Tools, |a| a.tool_view = ToolView::Drives);
+    page_at_every_zoom(super::Page::Tools, |a| a.tool_view = ToolView::Reports);
 }
