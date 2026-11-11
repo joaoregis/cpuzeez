@@ -351,10 +351,10 @@ impl State {
         let p = theme::palette(ui);
         widgets::card(ui, icon::GAME_CONTROLLER, tr("Metal Performance HUD (experimental)"), |ui| {
             ui.label(RichText::new(tr("macOS gives no app another app's frame times. Apple's own HUD shows FPS inside Metal games: open the game with it from here.")).color(p.text_secondary));
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.add(
                     egui::TextEdit::singleline(&mut self.metal_app)
-                        .desired_width(280.0)
+                        .desired_width(ui.available_width().min(280.0))
                         .hint_text("/Applications/Game.app"),
                 );
                 let args = metal_hud_args(&self.metal_app);
@@ -410,6 +410,17 @@ impl State {
             let last = crate::live_frames::target()
                 .map_or_else(String::new, |t| format!(" · {} {}", tr("last game seen:"), t.1));
             ui.label(RichText::new(format!("MangoHud: {installed} · {all}{last}")).color(p.text));
+            // On its own line: a wrapping label inside the row below would cover its buttons.
+            if st.installed.is_empty() {
+                ui.label(
+                    RichText::new(super::i18n::trf(
+                        "Flatpak Steam: install {}",
+                        &[&cpuzeez_core::mangohud::FLATPAK_ID],
+                    ))
+                    .small()
+                    .color(p.text_muted),
+                );
+            }
             ui.horizontal_wrapped(|ui| {
                 let busy = self.mh_job.is_some();
                 if st.installed.is_empty() {
@@ -449,14 +460,6 @@ impl State {
                             );
                         }
                     }
-                    ui.label(
-                        RichText::new(super::i18n::trf(
-                            "Flatpak Steam: install {}",
-                            &[&cpuzeez_core::mangohud::FLATPAK_ID],
-                        ))
-                        .small()
-                        .color(p.text_muted),
-                    );
                 }
                 let (layout, anchor) = (mon.settings.overlay.layout.clone(), mon.settings.overlay.anchor);
                 let mut all = st.enabled_all;
