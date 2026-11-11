@@ -155,6 +155,34 @@ pub fn prefixes(widgets: &[Widget]) -> Vec<String> {
     v
 }
 
+/// The same, in a page: a horizontal strip that does not fit the page's
+/// width is drawn as a column instead of running past it. The overlay and
+/// the mini monitor size their windows from the strip, so they use `show`.
+pub fn preview(
+    ui: &mut Ui,
+    layout: &Layout,
+    series: &[Series],
+    points: &dyn Fn(&str) -> Vec<(f64, f64)>,
+) -> egui::Response {
+    if layout.direction != Direction::Horizontal {
+        return show(ui, layout, series, points);
+    }
+    // The strip's width from the last frame it was drawn as a strip.
+    let id = ui.id().with("strip-width");
+    let fits = ui.data(|d| d.get_temp::<f32>(id)).is_none_or(|w| w <= ui.available_width());
+    if fits {
+        let r = show(ui, layout, series, points);
+        ui.data_mut(|d| d.insert_temp(id, r.rect.width()));
+        if r.rect.width() > ui.available_width() {
+            ui.ctx().request_repaint();
+        }
+        r
+    } else {
+        let column = Layout { direction: Direction::Vertical, ..layout.clone() };
+        show(ui, &column, series, points)
+    }
+}
+
 /// Draw `layout`. `series` has current values; `points(id)` returns history,
 /// asked only for the sparkline widgets.
 pub fn show(

@@ -875,19 +875,40 @@ impl State {
             }
             let v = |id: &str| series.iter().find(|s| s.id == id).map(|s| s.current);
             ui.add_space(6.0);
-            ui.horizontal_wrapped(|ui| {
-                for (id, label, tip) in [
-                    ("frames/fps", "FPS", "Frames per second over the last second."),
-                    ("frames/low1", "1% low", "How smooth the worst moments feel: the 99th-percentile frame time as FPS, last 30 s. Higher is better."),
-                    ("frames/low01", "0.1% low", "The rare worst hitches: the 99.9th-percentile frame time as FPS, last 30 s."),
-                    ("frames/gpu_busy", "GPU Busy", "How long the GPU actually worked on a frame. Close to the frame time: the GPU limits the frame rate."),
-                ] {
-                    let text = v(id).map_or_else(|| "–".to_string(), |x| if id == "frames/gpu_busy" { format!("{x:.1} ms") } else { format!("{x:.0}") });
-                    widgets::card(ui, "", tr(label), |ui| {
-                        ui.label(RichText::new(text).size(26.0).strong().color(p.text)).on_hover_text(tr(tip));
-                    });
-                }
-            });
+            let tiles = [
+                ("frames/fps", "FPS", "Frames per second over the last second."),
+                (
+                    "frames/low1",
+                    "1% low",
+                    "How smooth the worst moments feel: the 99th-percentile frame time as FPS, last 30 s. Higher is better.",
+                ),
+                (
+                    "frames/low01",
+                    "0.1% low",
+                    "The rare worst hitches: the 99.9th-percentile frame time as FPS, last 30 s.",
+                ),
+                (
+                    "frames/gpu_busy",
+                    "GPU Busy",
+                    "How long the GPU actually worked on a frame. Close to the frame time: the GPU limits the frame rate.",
+                ),
+            ];
+            // As many equal columns as fit (a card fills its column), so the
+            // four tiles never run past the window (10.1).
+            let n = ((ui.available_width() / 150.0).floor() as usize).clamp(1, tiles.len());
+            for row in tiles.chunks(n) {
+                ui.columns(n, |cols| {
+                    for (ui, (id, label, tip)) in cols.iter_mut().zip(row) {
+                        let text = v(id).map_or_else(
+                            || "–".to_string(),
+                            |x| if *id == "frames/gpu_busy" { format!("{x:.1} ms") } else { format!("{x:.0}") },
+                        );
+                        widgets::card(ui, "", tr(label), |ui| {
+                            ui.label(RichText::new(text).size(26.0).strong().color(p.text)).on_hover_text(tr(tip));
+                        });
+                    }
+                });
+            }
             if let Some(ms) = series.iter().find(|s| s.id == "frames/ms") {
                 let now = ms.points.last().map_or(0.0, |p| p.0);
                 ui.label(RichText::new(tr("Frame time")).small().color(p.text_secondary));
@@ -922,7 +943,7 @@ impl State {
             let series = tel.series_with(|_| false);
             ui.add_space(6.0);
             super::layout_view::publish_throttling(ui.ctx(), &tel);
-            super::layout_view::show(ui, &o.layout, &series, &|id| tel.points(id));
+            super::layout_view::preview(ui, &o.layout, &series, &|id| tel.points(id));
         });
     }
 
@@ -948,7 +969,7 @@ impl State {
                         let lease = super::layout_view::prefixes(&l.widgets);
                         tel.want("live-styles", &lease.iter().map(String::as_str).collect::<Vec<_>>());
                         let series = tel.series_with(|_| false);
-                        super::layout_view::show(ui, &l, &series, &|id| tel.points(id));
+                        super::layout_view::preview(ui, &l, &series, &|id| tel.points(id));
                         if ui.button(tr("Use this style")).clicked() {
                             let name = l.name.clone();
                             mon.set_setting(move |s| {
