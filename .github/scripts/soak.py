@@ -110,6 +110,11 @@ def selftest():
     short = series(lambda m: dict(private_mb=100, handles=300, threads=40, cpu_pct=1.0), 12)
     assert not analyze(short, 12)[0]
     assert abs(slope([0, 1, 2], [0, 2, 4]) - 2) < 1e-9
+    lines = ["noise"] + [f"soak-frame overlay_ms={0.5 + i * 0.01:.4f} frames=240" for i in range(8)]
+    t = frame_trend(lines)
+    assert t["overlay_frame_ms_first_quarter"] < t["overlay_frame_ms_last_quarter"], t
+    assert abs(t["overlay_frame_ms_per_hour"] - 0.6) < 1e-6, t
+    assert frame_trend(["soak-frame overlay_ms=1 frames=1"]) == {}, "too few minutes: no trend"
     print("soak selftest: ok")
 
 
@@ -239,6 +244,30 @@ def profile(root, overlay_only=False):
     return env, data
 
 
+def frame_trend(log_lines):
+    """The overlay's drawing time from the soak build's stderr
+    (`soak-frame overlay_ms=… frames=…`, once a minute): first and last
+    quarter averages and the slope per hour. Reported, not judged: drawing
+    time depends on the machine; a steady climb is what to look for."""
+    ms = []
+    for line in log_lines:
+        if line.startswith("soak-frame "):
+            fields = dict(f.split("=", 1) for f in line.split()[1:] if "=" in f)
+            try:
+                ms.append(float(fields["overlay_ms"]))
+            except (KeyError, ValueError):
+                pass
+    if len(ms) < 4:
+        return {}
+    q = max(1, len(ms) // 4)
+    avg = lambda v: round(sum(v) / len(v), 4)
+    return {
+        "overlay_frame_ms_first_quarter": avg(ms[:q]),
+        "overlay_frame_ms_last_quarter": avg(ms[-q:]),
+        "overlay_frame_ms_per_hour": round(slope(list(range(len(ms))), ms) * 60, 4),
+    }
+
+
 def report(path, mode, minutes, problems, sm, extra):
     lines = [f"# Soak: {mode}, {minutes} min", "", f"Result: **{'FAILED' if problems else 'ok'}**", ""]
     lines += [f"- {k}: {v}" for k, v in {**sm, **extra}.items()]
@@ -305,7 +334,9 @@ def run_gui(exe, minutes, interval, out, max_cpu, max_mem, overlay_only=False):
         problems.append("no capture was recorded: the tour didn't run")
     if not overlay_only and minutes >= 5 and rows < 1:
         problems.append("app history recorded nothing")
-    report(out, "overlay" if overlay_only else "gui", minutes, problems, sm, {"captures_recorded": sessions, "history_rows": rows})
+    log.close()
+    trend = frame_trend(open(os.path.join(root, "stderr.log"), errors="replace").read().splitlines())
+    report(out, "overlay" if overlay_only else "gui", minutes, problems, sm, {"captures_recorded": sessions, "history_rows": rows, **trend})
     if problems and os.path.exists(os.path.join(root, "stderr.log")):
         print("--- last log lines ---")
         print("".join(open(os.path.join(root, "stderr.log")).readlines()[-15:]))

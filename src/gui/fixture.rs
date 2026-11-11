@@ -150,6 +150,16 @@ pub fn readings() -> Vec<Reading> {
         r("gpu0/load/core", "GPU · NVIDIA GeForce RTX 4070", "Core load", Unit::Percent, 22.0),
         r("board/fan/sys1", "Mainboard", "System fan 1", Unit::Rpm, 1150.0),
         r("mem/used", "Memory", "Used", Unit::Megabytes, 14_200.0),
+        r("mem/load/used", "Memory", "Memory load", Unit::Percent, 44.0),
+        r("cpu/load/max", "CPU", "Busiest core", Unit::Percent, 81.0),
+        r("cpu/volt/vid", "CPU", "VID", Unit::Volt, 1.21),
+        r("gpu0/power/board", "GPU · NVIDIA GeForce RTX 4070", "Board power", Unit::Watt, 142.0),
+        r("gpu0/clock/core", "GPU · NVIDIA GeForce RTX 4070", "Core clock", Unit::Mhz, 2475.0),
+        r("frames/fps", "Frames · game.exe", "FPS", Unit::Count, 144.0),
+        r("frames/ms", "Frames · game.exe", "Frame time", Unit::Millis, 6.9),
+        r("frames/low1", "Frames · game.exe", "1% low", Unit::Count, 101.0),
+        r("frames/low01", "Frames · game.exe", "0.1% low", Unit::Count, 88.0),
+        r("frames/gpu_busy", "Frames · game.exe", "GPU Busy", Unit::Millis, 6.4),
     ];
     for i in 0..8 {
         v.push(r(
@@ -247,4 +257,65 @@ fn every_hardware_page_draws_from_the_fixtures() {
         let h = harness(page, egui::vec2(1120.0, 2400.0));
         assert!(h.query_all_by_label_contains(expect).count() > 0, "{page:?} does not show {expect:?}");
     }
+}
+
+/// The overlay's work per frame, counted (M2-09): shapes and text layouts
+/// each built-in style paints with the fixed readings, against a ceiling
+/// kept here, about a third above what it paints today. A change that makes
+/// a style draw far more fails; lower a ceiling when a style gets cheaper.
+#[test]
+fn every_overlay_style_stays_within_its_drawing_budget() {
+    use cpuzeez_core::layout::presets;
+    // (style, shapes, text layouts)
+    // Measured 2026-11-11: Minimal 3/1, Compact 19/17, Detailed 34/24,
+    // Benchmark 17/14, Overclocker 19/17.
+    const CEILING: &[(&str, usize, usize)] =
+        &[("Minimal", 5, 2), ("Compact", 26, 23), ("Detailed", 46, 33), ("Benchmark", 23, 19), ("Overclocker", 26, 23)];
+    let tel = Telemetry::fixture(readings());
+    let t0 = std::time::Instant::now();
+    while tel.snapshot().stats.len() < readings().len() {
+        tel.want("budget", &[""]);
+        assert!(t0.elapsed() < std::time::Duration::from_secs(10), "the fixture engine never ticked");
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let series = tel.series_with(|_| true);
+    let mut seen = Vec::new();
+    for l in presets::live::all(89.0) {
+        let (layout, s2, t2) = (l.clone(), series.clone(), tel.clone());
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(800.0, 600.0)).build_ui(move |ui| {
+            if !ui.style().text_styles.contains_key(&egui::TextStyle::Name("title".into())) {
+                theme::install(ui.ctx());
+                ui.ctx().request_repaint();
+                return;
+            }
+            layout_view::show(ui, &layout, &s2, &|id| t2.points(id));
+        });
+        h.run_steps(3);
+        let (mut shapes, mut texts) = (0, 0);
+        fn count(s: &egui::Shape, shapes: &mut usize, texts: &mut usize) {
+            match s {
+                egui::Shape::Vec(v) => v.iter().for_each(|s| count(s, shapes, texts)),
+                egui::Shape::Noop => {}
+                egui::Shape::Text(_) => {
+                    *shapes += 1;
+                    *texts += 1;
+                }
+                _ => *shapes += 1,
+            }
+        }
+        for c in &h.output().shapes {
+            count(&c.shape, &mut shapes, &mut texts);
+        }
+        seen.push(format!("(\"{}\", {shapes}, {texts})", l.name));
+        if let Some(&(_, max_shapes, max_texts)) = CEILING.iter().find(|c| c.0 == l.name) {
+            assert!(
+                shapes <= max_shapes && texts <= max_texts,
+                "{}: {shapes} shapes and {texts} text layouts, over its budget of {max_shapes} and {max_texts}",
+                l.name
+            );
+        }
+    }
+    let names: Vec<String> = presets::live::all(89.0).iter().map(|l| l.name.clone()).collect();
+    let missing: Vec<&String> = names.iter().filter(|n| !CEILING.iter().any(|c| &c.0 == n)).collect();
+    assert!(missing.is_empty(), "styles without a budget: {missing:?}; measured now: {}", seen.join(", "));
 }

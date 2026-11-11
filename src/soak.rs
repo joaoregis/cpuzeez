@@ -77,6 +77,22 @@ pub fn start() {
         .ok();
 }
 
+/// The overlay's own drawing time, averaged per minute on stderr
+/// (`soak-frame overlay_ms=… frames=…`), which `soak.py` turns into the
+/// frame-time trend of its report (M2-09).
+pub fn overlay_frame(took: Duration) {
+    use std::sync::Mutex;
+    static ACC: Mutex<Option<(f64, u32, Instant)>> = Mutex::new(None);
+    let mut a = ACC.lock().unwrap_or_else(|e| e.into_inner());
+    let (sum, n, since) = a.get_or_insert((0.0, 0, Instant::now()));
+    *sum += took.as_secs_f64() * 1e3;
+    *n += 1;
+    if since.elapsed() >= Duration::from_secs(60) {
+        eprintln!("soak-frame overlay_ms={:.4} frames={n}", *sum / f64::from(*n));
+        *a = None;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
