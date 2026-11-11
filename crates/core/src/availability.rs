@@ -155,6 +155,128 @@ fn need(os: Os, f: &Facts, cap: Capability) -> Option<Need> {
     }
 }
 
+// ------------------------------------------------------------ the README's map
+
+/// What a feature needs, at most, on one OS (S0-B04).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Req {
+    /// Nothing beyond a normal user.
+    Nothing,
+    /// One elevation prompt for that action only.
+    PerAction,
+    /// Run the app as administrator or root.
+    Elevated,
+    /// A driver (PawnIO) plus administrator.
+    Driver,
+    /// Not possible on that OS.
+    NotPossible,
+}
+
+/// One row of the README's "What else needs administrator or root" table:
+/// the feature and, for Windows, Linux and macOS, what it needs and the
+/// cell's text, in English and Portuguese.
+pub struct MapRow {
+    pub feature: [&'static str; 2],
+    pub cells: [(Req, [&'static str; 2]); 3],
+}
+
+pub const MAP: &[MapRow] = &[
+    MapRow {
+        feature: ["**FPS and GPU Busy** (ZeeZ Live)", "**FPS e GPU Busy** (ZeeZ Live)"],
+        cells: [
+            (
+                Req::Elevated,
+                [
+                    "administrator (PresentMon reads the graphics kernel's events); the Live tab offers the restart",
+                    "administrador (o PresentMon lê os eventos do kernel gráfico); a aba Ao vivo oferece o reinício",
+                ],
+            ),
+            (Req::Nothing, ["MangoHud, no root", "MangoHud, sem root"]),
+            (
+                Req::Nothing,
+                [
+                    "Metal HUD, no root; no frame times from other apps",
+                    "Metal HUD, sem root; sem tempos de quadro de outros apps",
+                ],
+            ),
+        ],
+    },
+    MapRow {
+        feature: ["**Network per process**", "**Rede por processo**"],
+        cells: [
+            (Req::Elevated, ["administrator", "administrador"]),
+            (
+                Req::Elevated,
+                ["TCP only; other users' processes need root", "só TCP; processos de outros usuários exigem root"],
+            ),
+            (Req::Nothing, ["`nettop`, no root", "`nettop`, sem root"]),
+        ],
+    },
+    MapRow {
+        feature: [
+            "**Ending, suspending or changing a process or service**",
+            "**Encerrar, suspender ou alterar um processo ou serviço**",
+        ],
+        cells: [
+            (Req::PerAction, ["one UAC prompt for that action", "um pedido do UAC para aquela ação"]),
+            (Req::PerAction, ["`pkexec` for that action", "`pkexec` para aquela ação"]),
+            (Req::PerAction, ["authorization for that action", "autorização para aquela ação"]),
+        ],
+    },
+    MapRow {
+        feature: [
+            "**Startup entries, service recovery and accounts**",
+            "**Itens de inicialização, recuperação e contas de serviços**",
+        ],
+        cells: [
+            (Req::PerAction, ["one UAC prompt for that action", "um pedido do UAC para aquela ação"]),
+            (
+                Req::PerAction,
+                [
+                    "`pkexec`; recovery is a systemd drop-in you can delete",
+                    "`pkexec`; a recuperação é um drop-in do systemd que você pode apagar",
+                ],
+            ),
+            (Req::PerAction, ["authorization for that action", "autorização para aquela ação"]),
+        ],
+    },
+    MapRow {
+        feature: ["**Hardware registers** (see above)", "**Registradores de hardware** (veja acima)"],
+        cells: [
+            (Req::Driver, ["PawnIO + administrator", "PawnIO + administrador"]),
+            (Req::Elevated, ["root", "root"]),
+            (Req::NotPossible, ["not possible", "impossível"]),
+        ],
+    },
+];
+
+/// The most any capability needs on `os`, from the same rules as the banner:
+/// what `need` asks for on a machine with nothing installed and no rights.
+pub fn registers(os: Os) -> Req {
+    let bare = Facts { intel: true, ..Default::default() };
+    Capability::ALL
+        .iter()
+        .filter_map(|&c| need(os, &bare, c))
+        .map(|n| match n {
+            Need::Driver => Req::Driver,
+            Need::Elevation | Need::KernelModule(_) => Req::Elevated,
+            Need::Unsupported(_) => Req::NotPossible,
+        })
+        .max()
+        .unwrap_or(Req::Nothing)
+}
+
+/// The README table, `lang` 0 = English, 1 = Portuguese.
+pub fn map_markdown(lang: usize) -> String {
+    let head = [["Feature", "Windows", "Linux", "macOS"], ["Recurso", "Windows", "Linux", "macOS"]][lang];
+    let mut out = format!("| {} |\n|---|---|---|---|\n", head.join(" | "));
+    for r in MAP {
+        let cells: Vec<&str> = r.cells.iter().map(|c| c.1[lang]).collect();
+        out += &format!("| {} | {} |\n", r.feature[lang], cells.join(" | "));
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -208,6 +330,41 @@ mod tests {
     fn every_capability_is_described() {
         for c in Capability::ALL {
             assert!(!c.label().is_empty());
+        }
+    }
+
+    /// The hardware row says what the banner's rules say.
+    #[test]
+    fn the_hardware_row_matches_the_banner() {
+        let row = MAP.iter().find(|r| r.feature[0].contains("Hardware registers")).unwrap();
+        for (i, os) in [Os::Windows, Os::Linux, Os::MacOs].into_iter().enumerate() {
+            assert_eq!(row.cells[i].0, registers(os), "{os:?}");
+        }
+    }
+
+    /// Each README's marked block is this table (S0-B04). With
+    /// `CZ_WRITE_PERMISSIONS=1` (`.github/scripts/permissions_map.py --write`)
+    /// the blocks are rewritten instead.
+    #[test]
+    fn the_readmes_show_this_map() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let write = std::env::var("CZ_WRITE_PERMISSIONS").is_ok_and(|v| v == "1");
+        let (start, end) = ("<!-- permissions:start -->\n", "<!-- permissions:end -->");
+        for (lang, file) in [(0, "README.md"), (1, "README.pt-BR.md")] {
+            let path = root.join(file);
+            let text = std::fs::read_to_string(&path).unwrap().replace("\r\n", "\n");
+            let a = text.find(start).unwrap_or_else(|| panic!("{file}: no {start:?}")) + start.len();
+            let b = a + text[a..].find(end).unwrap_or_else(|| panic!("{file}: no {end:?}"));
+            let want = map_markdown(lang);
+            if write {
+                std::fs::write(&path, format!("{}{want}{}", &text[..a], &text[b..])).unwrap();
+            } else {
+                assert_eq!(
+                    text[a..b],
+                    want,
+                    "{file}'s permissions table differs from core::availability::MAP: run python .github/scripts/permissions_map.py --write"
+                );
+            }
         }
     }
 }
