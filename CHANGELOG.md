@@ -7,6 +7,10 @@ generated from its section below.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Windows: the taskbar icon after an update.** A pinned CPU ZeeZ turned into a blank page after an update and a restart. The shortcut's icon was a copy kept by Windows Installer for that one version, which the update deletes; it now comes from `cpuzeez.exe` itself. A pin made before this version needs to be pinned again once.
+
 ## [1.0.2] - 2026-11-10
 
 ### Changed
