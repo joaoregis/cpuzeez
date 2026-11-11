@@ -628,17 +628,17 @@ impl State {
                     self.problem_filter = if self.problem_filter == Some(prob) { None } else { Some(prob) };
                 }
             }
-            let net_shown = !self.table.hidden.contains("net");
-            if net_shown && snap.net != cpuzeez_platform::proc_net::Status::Running {
-                let why = if snap.net == cpuzeez_platform::proc_net::Status::NeedsAdmin {
-                    tr("Network per process needs administrator rights.")
-                } else {
-                    tr("This system gives no network counters per process.")
-                };
-                ui.separator();
-                ui.label(RichText::new(format!("{} {why}", icon::INFO)).small().color(theme::palette(ui).text_muted));
-            }
         });
+        // On its own line: a wrapping label inside the row above would cover the pills.
+        let net_shown = !self.table.hidden.contains("net");
+        if net_shown && snap.net != cpuzeez_platform::proc_net::Status::Running {
+            let why = if snap.net == cpuzeez_platform::proc_net::Status::NeedsAdmin {
+                tr("Network per process needs administrator rights.")
+            } else {
+                tr("This system gives no network counters per process.")
+            };
+            ui.label(RichText::new(format!("{} {why}", icon::INFO)).small().color(theme::palette(ui).text_muted));
+        }
 
         if self.show_diff
             && let Some(base) = &self.baseline
