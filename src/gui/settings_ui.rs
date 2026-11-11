@@ -290,12 +290,11 @@ fn privacy(ui: &mut egui::Ui, s: &mut Settings, dir: &std::path::Path, report: O
         RichText::new(tr("Everything CPU ZeeZ keeps is on this computer, in this folder. Nothing is uploaded."))
             .color(p.text_secondary),
     );
-    ui.horizontal(|ui| {
-        ui.label(RichText::new(dir.display().to_string()).monospace().small());
-        if ui.small_button(format!("{} {}", icon::FOLDER_OPEN, tr("Open data folder"))).clicked() {
-            crate::update::open_path(dir);
-        }
-    });
+    // The path on its own line (it wraps; paths differ in length per OS), the button below.
+    ui.label(RichText::new(dir.display().to_string()).monospace().small());
+    if ui.small_button(format!("{} {}", icon::FOLDER_OPEN, tr("Open data folder"))).clicked() {
+        crate::update::open_path(dir);
+    }
     ui.add_space(4.0);
     // A delete needs a second click; which button is armed lives in egui's memory.
     let armed_id = egui::Id::new("privacy-delete-armed");
