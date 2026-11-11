@@ -176,7 +176,10 @@ fn apply(style: &mut egui::Style, p: &Palette, dark: bool) {
 /// Phosphor icons as fallback in both families.
 fn fonts() -> FontDefinitions {
     let mut f = FontDefinitions::default();
-    let (regular, bold) = system_ui_fonts();
+    // Tests lay text out with egui's own font, the same on every OS: the
+    // system's UI font differs in width (Segoe UI, Cantarell, SF…), and the
+    // scale tests compare positions.
+    let (regular, bold) = if cfg!(test) { (None, None) } else { system_ui_fonts() };
     if let Some(bytes) = regular {
         f.font_data.insert("ui".into(), Arc::new(FontData::from_owned(bytes)));
         f.families.entry(FontFamily::Proportional).or_default().insert(0, "ui".into());
