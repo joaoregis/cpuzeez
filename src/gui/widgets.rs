@@ -272,8 +272,9 @@ pub fn segmented<T: PartialEq + Copy>(ui: &mut Ui, current: &mut T, items: &[(T,
         .corner_radius(CornerRadius::same(theme::RADIUS_CONTROL + 2))
         .inner_margin(Margin::same(3))
         .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 2.0;
+            // Wraps onto a second line when the tabs do not fit (large zoom, long translations).
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = egui::vec2(2.0, 2.0);
                 for (v, icon, label) in items {
                     let on = *current == *v;
                     let text =
