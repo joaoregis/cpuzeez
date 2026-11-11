@@ -168,7 +168,6 @@ impl State {
             self.selected_name = Some(r.name.clone());
         }
 
-        let avail_w = ui.available_width();
         let inspected = self.selected_name.clone().and_then(|n| all_rows.iter().find(|r| r.name == n));
         let mut context_act: Option<(ServiceRow, &'static str)> = None;
         let mut draw_table = |ui: &mut Ui, table_state: &mut table::State| {
@@ -245,7 +244,7 @@ impl State {
             }
         };
         match inspected {
-            Some(row) if avail_w > 700.0 => super::split::show(ui, "services", 345.0, |ui, side| match side {
+            Some(row) => super::split::show(ui, "services", 345.0, |ui, side| match side {
                 super::split::Side::Left => draw_table(ui, &mut self.table),
                 super::split::Side::Right => self.render_inspector(ui, row, all_rows),
             }),
@@ -295,12 +294,16 @@ impl State {
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(&row.name).strong().color(p.text));
+                    // Close first (right to left), then the name in what is left, cut with a tooltip.
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.small_button(icon::X).clicked() {
                             self.selected_name = None;
                             self.table.selected.clear();
                         }
+                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                            ui.add(egui::Label::new(RichText::new(&row.name).strong().color(p.text)).truncate())
+                                .on_hover_text(&row.name);
+                        });
                     });
                 });
                 if !row.display_name.is_empty() {
@@ -308,7 +311,7 @@ impl State {
                 }
                 ui.add_space(6.0);
 
-                ScrollArea::vertical().id_salt("svc_inspector_scroll").show(ui, |ui| {
+                ScrollArea::vertical().id_salt("svc_inspector_scroll").auto_shrink([false, true]).show(ui, |ui| {
                     if row.protected {
                         Frame::default()
                             .fill(p.warning_soft)
@@ -411,9 +414,10 @@ impl State {
                         Some((n, st)) if n == &row.name => *st,
                         _ => row.startup,
                     };
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new(tr("Startup type")).small().color(p.text_secondary));
-                        egui::ComboBox::from_id_salt("svc_startup_combo")
+                    // The label on its own line: in a wrapping row the space left is not known.
+                    ui.label(RichText::new(tr("Startup type")).small().color(p.text_secondary));
+                    ui.horizontal_wrapped(|ui| {
+                        combo(ui, "svc_startup_combo")
                             .selected_text(tr(cur_edit.label()))
                             .show_ui(ui, |ui| {
                                 for st in StartupType::EDITABLE {
@@ -484,7 +488,7 @@ impl State {
                         ui.label(RichText::new(tr("None")).small().color(p.text_muted));
                     } else {
                         for dep in &row.dependencies {
-                            if ui.small_button(format!("{} {dep}", icon::ARROW_ELBOW_DOWN_RIGHT)).clicked() {
+                            if link_button(ui, &format!("{} {dep}", icon::ARROW_ELBOW_DOWN_RIGHT)).clicked() {
                                 self.selected_name = Some(dep.clone());
                                 self.table.selected.clear();
                             }
@@ -497,7 +501,7 @@ impl State {
                         ui.label(RichText::new(tr("No other services depend on this")).small().color(p.text_muted));
                     } else {
                         for dep in &trans {
-                            if ui.small_button(format!("{} {dep}", icon::ARROW_RIGHT)).clicked() {
+                            if link_button(ui, &format!("{} {dep}", icon::ARROW_RIGHT)).clicked() {
                                 self.selected_name = Some(dep.clone());
                                 self.table.selected.clear();
                             }
@@ -506,7 +510,7 @@ impl State {
 
                     // Service logs
                     ui.add_space(10.0);
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.label(RichText::new(tr("Recent service logs")).strong().color(p.text));
                         if ui.button(tr("Load logs")).clicked()
                             && !self.busy_logs.swap(true, Ordering::SeqCst)
@@ -537,6 +541,15 @@ impl State {
     }
 
     /// Details read on demand: triggers, SID type, privileges, recovery.
+    /// The inspector open on `name` with these details, none read (tests).
+    #[cfg(test)]
+    pub fn inspecting(name: &str, d: ServiceDetails) -> State {
+        let s =
+            State { selected_name: Some(name.to_string()), details_for: Some(name.to_string()), ..Default::default() };
+        *s.details.lock().unwrap() = Some((name.to_string(), d));
+        s
+    }
+
     fn details_of(&mut self, name: &str) -> Option<ServiceDetails> {
         if self.details_for.as_deref() != Some(name) {
             self.details_for = Some(name.to_string());
@@ -561,9 +574,14 @@ impl State {
         if windows && row.state == ServiceState::Stopped && editable {
             ui.add_space(8.0);
             ui.label(RichText::new(tr("Start parameters")).small().color(p.text_secondary));
-            ui.horizontal(|ui| {
-                ui.add(egui::TextEdit::singleline(&mut self.start_params).desired_width(200.0).hint_text("-v /debug"));
-                if ui.button(tr("Start with parameters")).clicked() {
+            ui.horizontal_wrapped(|ui| {
+                // The box takes what the button leaves (the button wraps below when that is too little).
+                let label = tr("Start with parameters");
+                let button_w =
+                    widgets::text_width(ui, label) + 2.0 * ui.spacing().button_padding.x + ui.spacing().item_spacing.x;
+                let box_w = (ui.available_width() - button_w).max(120.0);
+                ui.add(egui::TextEdit::singleline(&mut self.start_params).desired_width(box_w).hint_text("-v /debug"));
+                if ui.button(label).clicked() {
                     let params: Vec<String> = self.start_params.split_whitespace().map(str::to_string).collect();
                     self.dispatch(
                         Action::Service {
@@ -583,11 +601,11 @@ impl State {
                 Some((n, a)) if n == &row.name => Some(*a),
                 _ => current,
             };
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(tr("Log on as")).small().color(p.text_secondary));
+            ui.label(RichText::new(tr("Log on as")).small().color(p.text_secondary));
+            ui.horizontal_wrapped(|ui| {
                 let shown = picked.map_or_else(|| row.account.clone(), |a| a.windows_name().to_string());
                 ui.add_enabled_ui(editable, |ui| {
-                    egui::ComboBox::from_id_salt("svc_account_combo").selected_text(shown).show_ui(ui, |ui| {
+                    combo(ui, "svc_account_combo").selected_text(shown).show_ui(ui, |ui| {
                         for a in ServiceAccount::ALL {
                             if ui.selectable_label(picked == Some(a), a.windows_name()).clicked() {
                                 self.edit_account = Some((row.name.clone(), a));
@@ -651,18 +669,21 @@ impl State {
             } else {
                 vec![(tr("On failure"), &mut r.first)]
             };
+            // A grid cell has no width limit: size the combo boxes from the panel.
+            let combo_w = (ui.available_width() * 0.55).clamp(80.0, 240.0);
             egui::Grid::new(("svc_recovery", &row.name)).num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
                 for (i, (label, act)) in steps.into_iter().enumerate() {
                     ui.label(RichText::new(label).small().color(p.text_secondary));
                     ui.add_enabled_ui(editable && !program, |ui| {
-                        egui::ComboBox::from_id_salt(("svc_recovery_step", i)).selected_text(tr(act.label())).show_ui(
-                            ui,
-                            |ui| {
+                        egui::ComboBox::from_id_salt(("svc_recovery_step", i))
+                            .width(combo_w)
+                            .truncate()
+                            .selected_text(tr(act.label()))
+                            .show_ui(ui, |ui| {
                                 for a in RecoveryAction::EDITABLE {
                                     ui.selectable_value(act, a, tr(a.label()));
                                 }
-                            },
-                        );
+                            });
                     });
                     ui.end_row();
                 }
@@ -775,6 +796,18 @@ fn hash_name(s: &str) -> u64 {
         h = h.wrapping_mul(0x100000001b3);
     }
     h
+}
+
+/// A small button whose text is cut to the panel's width, the full text on hover.
+fn link_button(ui: &mut Ui, text: &str) -> egui::Response {
+    ui.add(egui::Button::new(RichText::new(text).small()).truncate()).on_hover_text(text)
+}
+
+/// A combo box no wider than the space left (at most 240 points), its text
+/// truncated with the full text on hover: long values must not widen the
+/// inspector past its panel (M2-06).
+fn combo(ui: &Ui, id: impl egui::AsIdSalt) -> egui::ComboBox {
+    egui::ComboBox::from_id_salt(id).width(ui.available_width().clamp(80.0, 240.0)).truncate()
 }
 
 pub const PT_BR: &[(&str, &str)] = &[

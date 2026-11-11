@@ -14,6 +14,8 @@ generated from its section below.
 
 ### Fixed
 
+- **System ▸ Services and Processes on a narrow window.** The inspector and the details panel open over the table when both do not fit side by side; the inspector used to disappear below 700 points.
+- **System ▸ Services: the inspector fits its panel** in every language and zoom: long values wrap or are cut with the full text on hover, and the combo boxes no longer push it past the window.
 - **ZeeZ Live ▸ Live fits the window.** The frame tiles (FPS, 1% low, 0.1% low, GPU Busy) ran past the right edge of a 1120-pixel window; they now take as many columns as fit. The overlay preview turns into a column when its one-line strip is wider than the page.
 - **Tabs wrap** onto a second line when they do not fit (Tools and System at a large zoom or in a long translation).
 - **System ▸ Processes:** at 200 % the network note covered the *Problems* filters; it now has its own line.
