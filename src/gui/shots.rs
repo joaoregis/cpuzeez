@@ -27,6 +27,15 @@ impl App {
                 self.page = pg;
                 match pg {
                     Page::Devices => self.devices.loaded(&self.ctx),
+                    // No game runs on a CI runner: replay a recorded one (10.4),
+                    // and give it a few seconds for the 1% lows.
+                    Page::Live => {
+                        if first {
+                            let csv = include_str!("../../crates/core/tests/fixtures/presentmon-2.6-deadlock.csv");
+                            crate::live_frames::demo(cpuzeez_core::frames::parse_presentmon(csv).unwrap_or_default());
+                        }
+                        !first && self.auto.as_ref().is_some_and(|a| a.since.elapsed() > Duration::from_secs(4))
+                    }
                     // Graphs need some history.
                     Page::Sensors | Page::Overview => {
                         self.auto.as_ref().is_some_and(|a| a.started.elapsed() > Duration::from_secs(9))

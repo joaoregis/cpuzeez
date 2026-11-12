@@ -67,6 +67,16 @@ struct Hub {
     child: Option<u32>,
     /// When the target last presented a frame.
     last_frame: Option<Instant>,
+    /// `-screenshots`: a recorded capture replayed in a loop instead of a
+    /// frame source, and how far it has been played.
+    demo: Option<Demo>,
+}
+
+struct Demo {
+    frames: Vec<Frame>,
+    started: Instant,
+    /// Frames already pushed, counting every loop.
+    played: usize,
 }
 
 /// At most this many frames per capture (about 2.3 h at 240 FPS).
@@ -103,11 +113,56 @@ pub fn want() {
     let start = {
         let mut h = lock();
         h.wanted_at = Some(Instant::now());
-        !h.running
+        h.demo.is_none() && !h.running
     };
     if start {
         imp::start();
     }
+    replay();
+}
+
+/// `-screenshots`: replay `frames` (a recorded capture) in a loop, as if a
+/// game presented them now, and never start the real frame source (10.4).
+pub fn demo(frames: Vec<Frame>) {
+    let mut h = lock();
+    if frames.len() < 2 {
+        return;
+    }
+    h.demo = Some(Demo { frames, started: Instant::now(), played: 0 });
+    h.status = Status::Running;
+}
+
+/// Push the demo frames due by now.
+fn replay() {
+    let batch = {
+        let mut h = lock();
+        let Some(d) = h.demo.as_mut() else { return };
+        let now = d.started.elapsed().as_secs_f64();
+        due(d, now)
+    };
+    if !batch.is_empty() {
+        push(batch, None);
+    }
+}
+
+/// The demo frames with a time up to `now` (seconds since it started) not
+/// pushed yet, looping over the capture with times that keep growing.
+fn due(d: &mut Demo, now: f64) -> Vec<Frame> {
+    let n = d.frames.len();
+    let t0 = d.frames[0].t_s;
+    let period = d.frames[n - 1].t_s - t0 + d.frames[n - 1].ms / 1e3;
+    let mut batch = Vec::new();
+    loop {
+        let (lap, i) = (d.played / n, d.played % n);
+        let t = lap as f64 * period + d.frames[i].t_s - t0;
+        // At most a few seconds per call, if the UI stalled for a long time.
+        if t > now || batch.len() > 10_000 {
+            break;
+        }
+        batch.push(Frame { t_s: t, ..d.frames[i].clone() });
+        d.played += 1;
+    }
+    batch
 }
 
 #[cfg_attr(target_os = "macos", allow(dead_code))] // no frame source on macOS yet
@@ -612,5 +667,18 @@ mod tests {
         assert!(!apps.is_empty(), "something presented frames");
         assert!(!left, "the ETW session was ended");
         eprintln!("apps presenting: {apps:?}");
+    }
+
+    /// The screenshot demo plays a capture in a loop, in time order.
+    #[test]
+    fn the_demo_replays_in_a_loop() {
+        let frames: Vec<Frame> = (0..10).map(|i| f(7, "game.exe", 5.0 + i as f64 * 0.01)).collect();
+        let mut d = Demo { frames, started: Instant::now(), played: 0 };
+        let first = due(&mut d, 0.045);
+        assert_eq!(first.len(), 5, "frames at 0, 10 … 40 ms");
+        assert!(due(&mut d, 0.045).is_empty(), "nothing twice");
+        let more = due(&mut d, 0.25);
+        assert_eq!(first.len() + more.len(), 26, "two and a half laps of 100 ms");
+        assert!(more.windows(2).all(|w| w[1].t_s > w[0].t_s), "times keep growing across laps");
     }
 }
