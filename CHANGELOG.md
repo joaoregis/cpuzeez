@@ -12,6 +12,7 @@ generated from its section below.
 - **System ▸ Services and Processes: the side panel can be resized.** Drag the line between the table and the inspector (or the details panel), or focus it with Tab and use ← and →; a double-click puts it back. The width is kept per panel, between 280 points and 60 % of the window.
 - **Docs:** the README's table of what needs administrator or root is generated from the code, in English and Portuguese, and a test fails when they differ (`python .github/scripts/permissions_map.py --write` regenerates it).
 - **Screenshots:** `-screenshots` shows ZeeZ Live with a recorded game's frames (FPS, lows, GPU Busy) instead of whatever app was in front, and never starts PresentMon.
+- **Tests:** each overlay style has a drawing budget (shapes and text per frame) that CI checks, and the soak report shows the overlay's drawing time as a trend.
 - **Tests:** every page and tab is drawn and driven in a test, from fixed data that reads no hardware: controls have names, and copy, pin, the detail level and the tabs work. A new page or tab without a test fails CI.
 
 ### Fixed

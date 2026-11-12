@@ -213,7 +213,11 @@ pub fn overlay(
                     .rect
             });
             super::layout_view::publish_throttling(ui.ctx(), &tel);
+            #[cfg(feature = "soak")]
+            let t0 = Instant::now();
             let mut drawn = super::layout_view::show(ui, &layout, &series, &|id| tel.points(id)).rect;
+            #[cfg(feature = "soak")]
+            crate::soak::overlay_frame(t0.elapsed());
             for r in [rec_rect, pill_rect].into_iter().flatten() {
                 drawn = drawn.union(r);
             }

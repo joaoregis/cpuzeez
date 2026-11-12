@@ -69,7 +69,7 @@ impl App {
             let on = !self.mon.settings.overlay.shown;
             self.mon.set_setting(move |s| s.overlay.shown = on);
         }
-        if tour.started.elapsed().as_secs() % 600 == 0 {
+        if tour.started.elapsed().as_secs().is_multiple_of(600) {
             ectx.request_repaint();
         }
     }
