@@ -1,7 +1,7 @@
 # Graph Report - cpuzeez  (2026-11-12)
 
 ## Corpus Check
-- 286 files · ~408,109 words
+- 286 files · ~408,146 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 38 file(s) not represented in the graph (top: (none) 22, .csv 5, .toml 4)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `19f1bf56`
+- Built from commit: `a06cd7dc`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -288,11 +288,11 @@
 - 1-file cycle: `src/gui/system_history.rs -> src/gui/system_history.rs`
 - 1-file cycle: `src/battery.rs -> src/battery.rs`
 - 1-file cycle: `src/usb.rs -> src/usb.rs`
-- 1-file cycle: `crates/platform/src/elevation.rs -> crates/platform/src/elevation.rs`
-- 1-file cycle: `crates/platform/src/large_pages.rs -> crates/platform/src/large_pages.rs`
 - 1-file cycle: `src/npu.rs -> src/npu.rs`
 - 1-file cycle: `src/software.rs -> src/software.rs`
 - 1-file cycle: `src/live_frames.rs -> src/live_frames.rs`
+- 1-file cycle: `crates/platform/src/elevation.rs -> crates/platform/src/elevation.rs`
+- 1-file cycle: `crates/platform/src/large_pages.rs -> crates/platform/src/large_pages.rs`
 - 1-file cycle: `crates/platform/src/procs.rs -> crates/platform/src/procs.rs`
 - 1-file cycle: `src/gpu/dl.rs -> src/gpu/dl.rs`
 - 1-file cycle: `src/peripherals.rs -> src/peripherals.rs`
@@ -1218,7 +1218,7 @@ Nodes (4): cpuzeez, cpuzeez-core, cpuzeez-fuzz, cpuzeez-platform
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Ctx` connect `Ctx` to `egui`, `x86.rs`, `tr`, `System Performance Charts`, `layout_view.rs`, `history.rs`, `CPU Benchmark Runner`, `Memory Benchmark`, `Storage Drives Probe`, `gui/mod.rs`, `Network Adapters`, `cache.rs`, `CPU Sensors and Power Limits`, `Monitor`, `sensors.rs`, `Batteries`, `mod.rs`, `timers.rs`, `peripherals.rs`, `main.rs`, `adapters`, `diff.rs`, `overview.rs`, `src/pci/mod.rs`, `mod.rs (2)`, `telemetry.rs`, `software.rs`, `mod.rs (3)`, `bottleneck_ui.rs`, `mod.rs (4)`, `soak.rs`, `chipset.rs`, `telemetry.rs (3)`, `telemetry.rs (2)`, `devices.rs`, `battery.rs`, `usb.rs`, `npu.rs`, `system_users.rs`, `availability.rs`, `clocks.rs`?**
-  _High betweenness centrality (0.122) - this node is a cross-community bridge._
+  _High betweenness centrality (0.119) - this node is a cross-community bridge._
 - **Are the 7 inferred relationships involving `Ctx` (e.g. with `cli()` and `.page()`) actually correct?**
   _`Ctx` has 7 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `Cpu`, `Memory`, `Live` to the rest of the system?**
@@ -1226,7 +1226,7 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `Series` be split into smaller, more focused modules?**
   _Cohesion score 0.09343200740055504 - nodes in this community are weakly interconnected._
 - **Why does `tr()` connect `tr` to `Series`, `egui`, `table.rs`, `System Performance Charts`, `Community 5`, `tr`, `table.rs (2)`, `gui/tools.rs`, `system_history.rs`, `gui/mod.rs`, `.render_table`, `system.rs`, `Monitor`, `system_startup.rs`, `sensors.rs`, `data.rs`, `palette.rs`, `tray.rs`, `system_services.rs`, `overview.rs`, `welcome.rs`, `layout_view.rs`, `intel.rs`, `.show_ui`, `tray.rs (2)`, `live_sessions.rs`, `bottleneck_ui.rs`, `.stage_shot`, `live.rs`, `devices.rs`, `pins.rs`, `tr`, `system_users.rs`?**
-  _High betweenness centrality (0.060) - this node is a cross-community bridge._
+  _High betweenness centrality (0.063) - this node is a cross-community bridge._
 - **Are the 148 inferred relationships involving `tr()` (e.g. with `.banner()` and `.frame()`) actually correct?**
   _`tr()` has 148 INFERRED edges - model-reasoned connections that need verification._
 - **Should `egui` be split into smaller, more focused modules?**

@@ -107,8 +107,11 @@ impl App {
                     };
                     self.system.services.selected_name = Some(name.into());
                 }
-                // Let the sampler and the background queries (services, startup) answer.
-                !first && self.auto.as_ref().is_some_and(|a| a.since.elapsed() > Duration::from_secs(3))
+                // Let the sampler and the background queries (services, startup) answer;
+                // the service list can take longer on a busy runner.
+                let waited = self.auto.as_ref().map_or(Duration::ZERO, |a| a.since.elapsed());
+                let listed = tab != system::SysTab::Services || self.system.services.loaded();
+                !first && waited > Duration::from_secs(3) && (listed || waited > Duration::from_secs(15))
             }
             Step::Bottleneck => {
                 self.page = Page::Live;

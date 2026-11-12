@@ -74,6 +74,11 @@ impl Default for State {
 }
 
 impl State {
+    /// The list has been read at least once (the screenshot run waits for it).
+    pub(super) fn loaded(&self) -> bool {
+        self.rows.lock().is_ok_and(|r| !r.is_empty())
+    }
+
     pub fn show(&mut self, ui: &mut Ui) {
         let pending = self.pending_op.lock().unwrap().take();
         if let Some(f) = pending {
