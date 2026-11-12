@@ -8,3 +8,13 @@
 /.claude
 /pawnio-modules
 __pycache__/
+
+# graphify: the cache and these files are local to each machine
+graphify-out/cache/
+graphify-out/.graphify_python
+graphify-out/.graphify_root
+graphify-out/cost.json
+graphify-out/20*/
+graphify-out/.graphify_build_state.json
+graphify-out/.graphify_labels.pending.json
+graphify-out/.graphify_labels.json.sig
