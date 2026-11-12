@@ -9,6 +9,7 @@ generated from its section below.
 
 ### Changed
 
+- **System ▸ Services and Processes: the side panel can be resized.** Drag the line between the table and the inspector (or the details panel), or focus it with Tab and use ← and →; a double-click puts it back. The width is kept per panel, between 280 points and 60 % of the window.
 - **Tests:** every page and tab is drawn and driven in a test, from fixed data that reads no hardware: controls have names, and copy, pin, the detail level and the tabs work. A new page or tab without a test fails CI.
 
 ### Fixed

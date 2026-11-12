@@ -24,6 +24,7 @@ use std::sync::Arc;
 pub const PT_BR: &[(&str, &str)] = &[
     ("Filter… e.g. name:chrome cpu>10 mem>1GB", "Filtrar… ex.: name:chrome cpu>10 mem>1GB"),
     ("Columns", "Colunas"),
+    ("Panel width", "Largura do painel"),
     ("{} of {} rows", "{} de {} linhas"),
     ("Reset column widths", "Restaurar larguras das colunas"),
     ("Reset column order", "Restaurar ordem das colunas"),
@@ -33,6 +34,7 @@ pub const PT_BR: &[(&str, &str)] = &[
 pub const ES: &[(&str, &str)] = &[
     ("Filter… e.g. name:chrome cpu>10 mem>1GB", "Filtrar… p. ej. name:chrome cpu>10 mem>1GB"),
     ("Columns", "Columnas"),
+    ("Panel width", "Ancho del panel"),
     ("{} of {} rows", "{} de {} filas"),
     ("Reset column widths", "Restablecer anchos de columna"),
     ("Reset column order", "Restablecer orden de columnas"),
