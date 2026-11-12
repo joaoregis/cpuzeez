@@ -41,7 +41,7 @@ pub fn chart(
             })
             .collect();
         let what = if parts.is_empty() { "no data yet".to_string() } else { parts.join("; ") };
-        egui::WidgetInfo::labeled(egui::WidgetType::Other, true, format!("Chart, last {span:.0} s. {what}"))
+        egui::WidgetInfo::labeled(egui::Role::Unknown, true, format!("Chart, last {span:.0} s. {what}"))
     });
     let p = super::theme::palette(ui);
     let (grid, cursor, text) = (p.border, p.text_muted, p.text_secondary);

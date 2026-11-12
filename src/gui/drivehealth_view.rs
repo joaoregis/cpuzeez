@@ -9,6 +9,7 @@ use super::widgets;
 use crate::Ctx;
 use crate::benchkit::Job;
 use crate::drivetest::{self, BUCKETS, Scan, Status};
+use crate::gui::widgets::Control;
 use crate::storage::Drive;
 use eframe::egui::{self, RichText};
 use std::time::{Duration, Instant};
@@ -134,7 +135,7 @@ impl State {
         let before = self.pick;
         ui.add_enabled_ui(self.scan.is_none(), |ui| {
             ui.horizontal(|ui| {
-                ui.label(tr("Drive"));
+                let l = ui.label(tr("Drive")).id;
                 egui::ComboBox::from_id_salt("health-drive")
                     .selected_text(&drives[self.pick].name)
                     .width(360.0)
@@ -142,7 +143,8 @@ impl State {
                         for (i, d) in drives.iter().enumerate() {
                             ui.selectable_value(&mut self.pick, i, &d.name);
                         }
-                    });
+                    })
+                    .name_by(l);
             });
         });
         if self.pick != before {
@@ -197,8 +199,9 @@ impl State {
             let key = d.serial.clone().unwrap_or_else(|| d.name.clone());
             let mut tbw = mon.settings.tbw.get(&key).copied().unwrap_or(0.0);
             ui.horizontal(|ui| {
-                ui.label(tr("Rated endurance (TBW)"));
-                if ui.add(egui::DragValue::new(&mut tbw).range(0.0..=100_000.0).suffix(" TB")).changed() {
+                let l = ui.label(tr("Rated endurance (TBW)")).id;
+                if ui.add(egui::DragValue::new(&mut tbw).range(0.0..=100_000.0).suffix(" TB")).labelled_by(l).changed()
+                {
                     let k = key.clone();
                     mon.set_setting(move |st| {
                         if tbw > 0.0 {

@@ -6,7 +6,7 @@
 use super::i18n::tr;
 use super::table::{self, Cell, Column, Table};
 use super::theme::{self, icon};
-use super::widgets::{self, Tone};
+use super::widgets::{self, Control, Tone};
 use cpuzeez_core::actions::{Action, ServiceOp};
 use cpuzeez_core::services::{
     Recovery, RecoveryAction, Refusal, ServiceAccount, ServiceDetails, ServiceFilter, ServiceRow, ServiceState,
@@ -415,7 +415,7 @@ impl State {
                         _ => row.startup,
                     };
                     // The label on its own line: in a wrapping row the space left is not known.
-                    ui.label(RichText::new(tr("Startup type")).small().color(p.text_secondary));
+                    let l = ui.label(RichText::new(tr("Startup type")).small().color(p.text_secondary)).id;
                     ui.horizontal_wrapped(|ui| {
                         combo(ui, "svc_startup_combo")
                             .selected_text(tr(cur_edit.label()))
@@ -425,7 +425,8 @@ impl State {
                                         self.edit_startup = Some((row.name.clone(), st));
                                     }
                                 }
-                            });
+                            })
+                            .name_by(l);
                         if !row.protected
                             && !refusal.change
                             && cur_edit != row.startup
@@ -573,14 +574,15 @@ impl State {
 
         if windows && row.state == ServiceState::Stopped && editable {
             ui.add_space(8.0);
-            ui.label(RichText::new(tr("Start parameters")).small().color(p.text_secondary));
+            let l = ui.label(RichText::new(tr("Start parameters")).small().color(p.text_secondary)).id;
             ui.horizontal_wrapped(|ui| {
                 // The box takes what the button leaves (the button wraps below when that is too little).
                 let label = tr("Start with parameters");
                 let button_w =
                     widgets::text_width(ui, label) + 2.0 * ui.spacing().button_padding.x + ui.spacing().item_spacing.x;
                 let box_w = (ui.available_width() - button_w).max(120.0);
-                ui.add(egui::TextEdit::singleline(&mut self.start_params).desired_width(box_w).hint_text("-v /debug"));
+                ui.add(egui::TextEdit::singleline(&mut self.start_params).desired_width(box_w).hint_text("-v /debug"))
+                    .name_by(l);
                 if ui.button(label).clicked() {
                     let params: Vec<String> = self.start_params.split_whitespace().map(str::to_string).collect();
                     self.dispatch(
@@ -601,17 +603,20 @@ impl State {
                 Some((n, a)) if n == &row.name => Some(*a),
                 _ => current,
             };
-            ui.label(RichText::new(tr("Log on as")).small().color(p.text_secondary));
+            let l = ui.label(RichText::new(tr("Log on as")).small().color(p.text_secondary)).id;
             ui.horizontal_wrapped(|ui| {
                 let shown = picked.map_or_else(|| row.account.clone(), |a| a.windows_name().to_string());
                 ui.add_enabled_ui(editable, |ui| {
-                    combo(ui, "svc_account_combo").selected_text(shown).show_ui(ui, |ui| {
-                        for a in ServiceAccount::ALL {
-                            if ui.selectable_label(picked == Some(a), a.windows_name()).clicked() {
-                                self.edit_account = Some((row.name.clone(), a));
+                    combo(ui, "svc_account_combo")
+                        .selected_text(shown)
+                        .show_ui(ui, |ui| {
+                            for a in ServiceAccount::ALL {
+                                if ui.selectable_label(picked == Some(a), a.windows_name()).clicked() {
+                                    self.edit_account = Some((row.name.clone(), a));
+                                }
                             }
-                        }
-                    });
+                        })
+                        .name_by(l);
                 });
                 if editable
                     && let Some(a) = picked
@@ -673,7 +678,7 @@ impl State {
             let combo_w = (ui.available_width() * 0.55).clamp(80.0, 240.0);
             egui::Grid::new(("svc_recovery", &row.name)).num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
                 for (i, (label, act)) in steps.into_iter().enumerate() {
-                    ui.label(RichText::new(label).small().color(p.text_secondary));
+                    let l = ui.label(RichText::new(label).small().color(p.text_secondary)).id;
                     ui.add_enabled_ui(editable && !program, |ui| {
                         egui::ComboBox::from_id_salt(("svc_recovery_step", i))
                             .width(combo_w)
@@ -683,16 +688,19 @@ impl State {
                                 for a in RecoveryAction::EDITABLE {
                                     ui.selectable_value(act, a, tr(a.label()));
                                 }
-                            });
+                            })
+                            .name_by(l);
                     });
                     ui.end_row();
                 }
-                ui.label(RichText::new(tr("Restart after (s)")).small().color(p.text_secondary));
-                ui.add_enabled(editable && !program, egui::DragValue::new(&mut r.restart_delay_s).range(0..=86_400));
+                let l = ui.label(RichText::new(tr("Restart after (s)")).small().color(p.text_secondary)).id;
+                ui.add_enabled(editable && !program, egui::DragValue::new(&mut r.restart_delay_s).range(0..=86_400))
+                    .name_by(l);
                 ui.end_row();
                 if windows {
-                    ui.label(RichText::new(tr("Reset count after (days)")).small().color(p.text_secondary));
-                    ui.add_enabled(editable && !program, egui::DragValue::new(&mut r.reset_days).range(0..=3650));
+                    let l = ui.label(RichText::new(tr("Reset count after (days)")).small().color(p.text_secondary)).id;
+                    ui.add_enabled(editable && !program, egui::DragValue::new(&mut r.reset_days).range(0..=3650))
+                        .name_by(l);
                     ui.end_row();
                 }
             });
@@ -806,7 +814,7 @@ fn link_button(ui: &mut Ui, text: &str) -> egui::Response {
 /// A combo box no wider than the space left (at most 240 points), its text
 /// truncated with the full text on hover: long values must not widen the
 /// inspector past its panel (M2-06).
-fn combo(ui: &Ui, id: impl egui::AsIdSalt) -> egui::ComboBox {
+fn combo(ui: &Ui, id: impl egui::AsIdSalt) -> egui::ComboBox<'static> {
     egui::ComboBox::from_id_salt(id).width(ui.available_width().clamp(80.0, 240.0)).truncate()
 }
 

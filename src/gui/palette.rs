@@ -166,7 +166,7 @@ impl Palette {
             return None;
         }
         let mut picked = None;
-        let modal = egui::Modal::new(egui::Id::new("cz-palette")).show(ctx, |ui| {
+        let modal = egui::Modal::new(egui::Id::unique("cz-palette")).show(ctx, |ui| {
             ui.set_width(520.0);
             let edit = ui.add(
                 egui::TextEdit::singleline(&mut self.query)

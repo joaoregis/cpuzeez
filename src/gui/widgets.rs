@@ -39,7 +39,7 @@ pub fn sidebar_item(ui: &mut Ui, icon: &str, label: &str, selected: bool) -> Res
     };
     ui.painter().rect_filled(rect, CornerRadius::same(theme::RADIUS_CONTROL), fill);
     // Painted text is invisible to screen readers: name the item and say if it is the current one.
-    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, label));
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, label));
     // Keyboard focus is shown, not only felt.
     if resp.has_focus() {
         ui.painter().rect_stroke(
@@ -158,6 +158,26 @@ pub fn wrap_before(ui: &mut Ui, w: f32) {
 }
 
 /// The width of `text` in the button font, without wrapping.
+/// A control named after the visible label beside it, for screen readers
+/// (egui_kittest 0.37 fails a test on any unnamed control). Rows return their
+/// control; `()` for rows that hold no control or name their own.
+pub trait Control {
+    fn name_by(self, label: egui::Id);
+}
+impl Control for () {
+    fn name_by(self, _: egui::Id) {}
+}
+impl Control for Response {
+    fn name_by(self, label: egui::Id) {
+        let _ = self.labelled_by(label);
+    }
+}
+impl<T> Control for egui::InnerResponse<T> {
+    fn name_by(self, label: egui::Id) {
+        let _ = self.response.labelled_by(label);
+    }
+}
+
 pub fn text_width(ui: &Ui, text: &str) -> f32 {
     let font = egui::TextStyle::Button.resolve(ui.style());
     ui.fonts_mut(|f| f.layout_no_wrap(text.to_string(), font, Color32::WHITE).size().x)
@@ -173,6 +193,14 @@ pub fn pill(ui: &mut Ui, text: &str, tone: Tone) -> Response {
         .inner_margin(Margin::symmetric(8, 3))
         .show(ui, |ui| ui.label(RichText::new(text).size(12.5).color(fg)))
         .response
+}
+
+/// A pill that acts as a button, named by its own text (otherwise a screen
+/// reader, and egui 0.37, name it after its tooltip).
+pub fn pill_button(ui: &mut Ui, text: &str, tone: Tone) -> Response {
+    let r = pill(ui, text, tone).interact(Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), text));
+    r
 }
 
 /// Summary tile: label, big value, optional sparkline.
@@ -263,7 +291,7 @@ pub fn progress(ui: &mut Ui, frac: f32, text: &str) -> Response {
     ui.painter().rect_filled(rect, r, p.sidebar);
     resp.widget_info(|| {
         egui::WidgetInfo::labeled(
-            egui::WidgetType::ProgressIndicator,
+            egui::Role::ProgressIndicator,
             true,
             format!("{text} ({:.0} %)", frac.clamp(0.0, 1.0) * 100.0),
         )
@@ -298,7 +326,7 @@ pub fn segmented<T: PartialEq + Copy>(ui: &mut Ui, current: &mut T, items: &[(T,
                         .stroke(if on { Stroke::new(1.0, p.border) } else { Stroke::NONE })
                         .corner_radius(CornerRadius::same(theme::RADIUS_CONTROL));
                     let resp = ui.add(b);
-                    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, label));
+                    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, on, label));
                     if resp.clicked() {
                         *current = *v;
                     }

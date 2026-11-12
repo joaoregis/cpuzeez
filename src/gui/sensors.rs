@@ -10,6 +10,7 @@ use super::units;
 use super::widgets::{self, Tone};
 use super::{plot, stress, tray};
 use crate::Ctx;
+use crate::gui::widgets::Control;
 use crate::settings::Settings;
 use crate::telemetry::{Series, Telemetry, Unit};
 use eframe::egui::{self, RichText};
@@ -675,8 +676,8 @@ pub fn page(ui: &mut egui::Ui, mon: &mut Monitor) {
     let plotted = v.plotted.clone();
     let num = |f: fn(&Series) -> f64| move |s: &Series| Cell::num(f(s), fmt(f(s), s.unit));
     let table = Table::new("sensors", |s: &Series| hash(&s.id))
-        .col(Column::new("plot", "●", 26.0, move |s: &Series| {
-            Cell::Text(if plotted.contains(&s.id) { "●" } else { "" }.into())
+        .col(Column::new("plot", "•", 26.0, move |s: &Series| {
+            Cell::Text(if plotted.contains(&s.id) { "•" } else { "" }.into())
         }))
         .col(Column::new("sensor", tr("Sensor"), 260.0, |s: &Series| Cell::Text(s.label.clone())))
         .col(Column::new("cur", tr("Current"), 110.0, num(|s| s.current)).right().colored(move |s| hot(s, s.current)))
@@ -858,19 +859,19 @@ fn toolbar_actions(ui: &mut egui::Ui, mon: &mut Monitor, tel: &Telemetry) {
 
 fn toolbar(ui: &mut egui::Ui, mon: &mut Monitor, tel: &Telemetry) {
     ui.horizontal_wrapped(|ui| {
-        ui.label(tr("Sampling"));
+        let l = ui.label(tr("Sampling")).id;
         let cur = mon.settings.sample_ms;
-        egui::ComboBox::from_id_salt("sample-period").selected_text(format!("{} s", cur as f64 / 1000.0)).show_ui(
-            ui,
-            |ui| {
+        egui::ComboBox::from_id_salt("sample-period")
+            .selected_text(format!("{} s", cur as f64 / 1000.0))
+            .show_ui(ui, |ui| {
                 for ms in PERIODS_MS {
                     if ui.selectable_label(cur == ms, format!("{} s", ms as f64 / 1000.0)).clicked() {
                         tel.set_period(Duration::from_millis(ms));
                         mon.set_setting(|s| s.sample_ms = ms);
                     }
                 }
-            },
-        );
+            })
+            .name_by(l);
         if let Some(p) = tel.csv_path() {
             widgets::pill(ui, &format!("{}  {} {}", icon::RECORD, tr("Logging to"), p.display()), Tone::Danger);
             if ui.small_button(format!("{}  {}", icon::FOLDER_OPEN, tr("Open folder"))).clicked() {
@@ -916,7 +917,7 @@ fn charts(ui: &mut egui::Ui, series: &[Series], plotted: &BTreeSet<String>, span
             ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new(u.suffix()).strong());
                 for l in &lines {
-                    ui.colored_label(l.color, format!("● {}", l.label));
+                    ui.colored_label(l.color, format!("• {}", l.label));
                 }
             });
             plot::chart(ui, &lines, now, span, h, &|v| fmt(v, u));

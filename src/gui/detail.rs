@@ -28,7 +28,7 @@ pub const ES: &[(&str, &str)] = &[
 ];
 
 fn id() -> egui::Id {
-    egui::Id::new("cz-detail-level")
+    egui::Id::unique("cz-detail-level")
 }
 
 /// The level the current page draws at.

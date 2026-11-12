@@ -9,7 +9,14 @@ generated from its section below.
 
 ### Changed
 
+- **Build:** eframe, egui and egui_kittest 0.37.
+- **Accessibility:** every combo box, number field, slider and checkbox has a name a screen reader reads: the label beside it, or a short one where nothing visible names it. egui_kittest 0.37 fails a test on any control without one.
 - **Build:** the Phosphor icon font ships in the repository (`assets/fonts/Phosphor.ttf`, MIT) with the 104 icons the app uses; the `egui-phosphor` crate is gone, so the next egui release no longer waits for it. Nothing looks different.
+
+### Fixed
+
+- Icons in monospace text and the ● in *REC* and the sensor legend drew as empty boxes where the font lacked them; *REC* now uses the record icon and the sensor marks a bullet that every font has.
+- **Settings at 200 %:** a row's controls move below its label when they do not fit beside it.
 
 ## [1.1.0-beta.1] - 2026-11-12
 

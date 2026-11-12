@@ -1,6 +1,7 @@
 //! Processor page (CPU + caches).
 
 #[allow(unused_imports)]
+use crate::gui::widgets::Control;
 use crate::gui::*;
 
 impl App {
@@ -64,13 +65,16 @@ impl App {
             );
         });
         ui.horizontal(|ui| {
-            ui.label(tr("Selection"));
+            let l = ui.label(tr("Selection")).id;
             let n = c.cores.max(1);
-            egui::ComboBox::from_id_salt("core").selected_text(trf("Core #{}", &[&self.core])).show_ui(ui, |ui| {
-                for i in 0..n {
-                    ui.selectable_value(&mut self.core, i, trf("Core #{}", &[&i]));
-                }
-            });
+            egui::ComboBox::from_id_salt("core")
+                .selected_text(trf("Core #{}", &[&self.core]))
+                .show_ui(ui, |ui| {
+                    for i in 0..n {
+                        ui.selectable_value(&mut self.core, i, trf("Core #{}", &[&i]));
+                    }
+                })
+                .name_by(l);
             ui.label(trf("Cores {}   Threads {}", &[&c.cores, &c.threads]));
         });
         for cl in &c.clusters {

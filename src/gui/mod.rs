@@ -651,9 +651,9 @@ impl App {
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
             ui.label(RichText::new(format!("v{}", crate::VERSION)).small().color(p.text_muted));
             if self.mon.recording() {
-                let rec =
-                    widgets::pill(ui, "● REC", widgets::Tone::Danger).on_hover_text(tr("Recording · click to stop"));
-                if rec.interact(egui::Sense::click()).clicked() {
+                let rec = widgets::pill_button(ui, &format!("{} REC", icon::RECORD), widgets::Tone::Danger)
+                    .on_hover_text(tr("Recording · click to stop"));
+                if rec.clicked() {
                     self.mon.stop_recording();
                 }
             }
@@ -752,7 +752,7 @@ impl App {
                 self.live.page(ui, &mut self.mon, &mut self.access);
                 if let Some(path) = self.live.sessions.png_request.take() {
                     self.shot = Some(Shot::Png(path));
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
+                    shots::request(ui.ctx());
                 }
             }
             Page::Processor => {
@@ -898,7 +898,7 @@ impl App {
             ectx.input(|i| (i.key_pressed(egui::Key::F5), i.key_pressed(egui::Key::F6), i.key_pressed(egui::Key::F7)));
         if f5 || f6 {
             self.shot = Some(if f6 { Shot::Clipboard } else { Shot::Bmp });
-            ectx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
+            shots::request(ectx);
         }
         if f7 {
             let r = self.report.lock().unwrap().clone();

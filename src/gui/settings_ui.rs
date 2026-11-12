@@ -3,7 +3,7 @@
 
 use super::i18n::{self, tr};
 use super::theme::{self, icon};
-use super::widgets;
+use super::widgets::{self, Control};
 use crate::report::Section;
 use crate::settings::{Settings, Theme};
 use eframe::egui::{self, RichText};
@@ -297,7 +297,7 @@ fn privacy(ui: &mut egui::Ui, s: &mut Settings, dir: &std::path::Path, report: O
     }
     ui.add_space(4.0);
     // A delete needs a second click; which button is armed lives in egui's memory.
-    let armed_id = egui::Id::new("privacy-delete-armed");
+    let armed_id = egui::Id::unique("privacy-delete-armed");
     let armed: Option<usize> = ui.data(|d| d.get_temp(armed_id)).flatten();
     let mut arm = armed;
     for (i, u) in data::usage().iter().enumerate() {
@@ -327,7 +327,7 @@ fn privacy(ui: &mut egui::Ui, s: &mut Settings, dir: &std::path::Path, report: O
             egui::DragValue::new(&mut s.log_retention_days)
                 .range(0..=3650)
                 .suffix(format!(" {}", tr("days (0 = keep)"))),
-        );
+        )
     });
     let all = usize::MAX;
     let label = if armed == Some(all) { tr("Confirm") } else { tr("Delete everything") };
@@ -393,11 +393,16 @@ pub(super) fn tray_items(ui: &mut egui::Ui, s: &mut Settings) {
                 .iter()
                 .find(|a| a.0 == metric)
                 .map_or(metric.clone(), |a| tr(a.1).to_string());
-            egui::ComboBox::from_id_salt(("tray-metric", i)).selected_text(shown).width(220.0).show_ui(ui, |ui| {
-                for (alias, what) in super::layout_view::ALIASES {
-                    ui.selectable_value(&mut it.widget.metric, Some(alias.to_string()), tr(what));
-                }
-            });
+            egui::ComboBox::from_id_salt(("tray-metric", i))
+                .selected_text(shown)
+                .width(220.0)
+                .show_ui(ui, |ui| {
+                    for (alias, what) in super::layout_view::ALIASES {
+                        ui.selectable_value(&mut it.widget.metric, Some(alias.to_string()), tr(what));
+                    }
+                })
+                .response
+                .accessible_name(tr("Reading"));
             for st in Style::ALL {
                 ui.selectable_value(&mut it.style, st, tr(st.label()));
             }
@@ -433,15 +438,19 @@ pub(super) fn tray_items(ui: &mut egui::Ui, s: &mut Settings) {
     ui.label(RichText::new(tr(limit)).small().color(p.text_muted));
 }
 
-fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
-    ui.horizontal(|ui| {
+/// A label and its control; the control is named after the label.
+fn row<C: widgets::Control>(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui) -> C) {
+    // Wraps: at 200 % the controls may not fit beside the label.
+    ui.horizontal_wrapped(|ui| {
         let p = theme::palette(ui);
         let w = 220.0_f32.min(ui.available_width() * 0.5);
-        ui.allocate_ui_with_layout(egui::vec2(w, 24.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-            ui.set_width(w);
-            ui.label(RichText::new(label).color(p.text_secondary));
-        });
-        add(ui);
+        let l = ui
+            .allocate_ui_with_layout(egui::vec2(w, 24.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.set_width(w);
+                ui.label(RichText::new(label).color(p.text_secondary)).id
+            })
+            .inner;
+        add(ui).name_by(l);
     });
 }
 
@@ -452,17 +461,18 @@ fn alerts(ui: &mut egui::Ui, s: &mut Settings) {
     ui.add_enabled_ui(s.alerts_on, |ui| {
         for (i, r) in s.alerts.iter_mut().enumerate() {
             ui.horizontal(|ui| {
-                ui.checkbox(&mut r.enabled, tr(&r.label));
+                let l = ui.checkbox(&mut r.enabled, tr(&r.label)).id;
                 egui::ComboBox::from_id_salt(("alert-op", i))
                     .width(90.0)
                     .selected_text(tr(if r.above { "above" } else { "below" }))
                     .show_ui(ui, |ui| {
                         ui.selectable_value(&mut r.above, true, tr("above"));
                         ui.selectable_value(&mut r.above, false, tr("below"));
-                    });
-                ui.add(egui::DragValue::new(&mut r.threshold).speed(0.5));
-                ui.label(tr("for"));
-                ui.add(egui::DragValue::new(&mut r.secs).range(1..=3600).suffix(" s"));
+                    })
+                    .name_by(l);
+                ui.add(egui::DragValue::new(&mut r.threshold).speed(0.5)).name_by(l);
+                let f = ui.label(tr("for")).id;
+                ui.add(egui::DragValue::new(&mut r.secs).range(1..=3600).suffix(" s")).name_by(f);
             });
         }
     });
@@ -496,7 +506,7 @@ fn units(ui: &mut egui::Ui, u: &mut cpuzeez_core::units::Units) {
             for s in [Size::Windows, Size::Iec, Size::Decimal] {
                 ui.selectable_value(&mut u.size, s, label(s));
             }
-        });
+        })
     });
     row(ui, tr("Decimal places"), |ui| {
         let label = |d: Option<u8>| d.map_or_else(|| tr("As each page shows it").to_string(), |d| d.to_string());
@@ -504,7 +514,7 @@ fn units(ui: &mut egui::Ui, u: &mut cpuzeez_core::units::Units) {
             for d in [None, Some(0), Some(1), Some(2), Some(3)] {
                 ui.selectable_value(&mut u.decimals, d, label(d));
             }
-        });
+        })
     });
     let p = theme::palette(ui);
     ui.label(
@@ -534,32 +544,20 @@ pub(super) fn system_settings(ui: &mut egui::Ui, s: &mut Settings) {
             for &p in PAGES {
                 ui.selectable_value(&mut s.default_start_page, p.to_string(), tr(p));
             }
-        });
+        })
     });
-    row(ui, tr("Always on top"), |ui| {
-        ui.checkbox(&mut s.always_on_top, "");
-    });
-    row(ui, tr("Minimize on use (Switch to / Run task)"), |ui| {
-        ui.checkbox(&mut s.minimize_on_use, "");
-    });
-    row(ui, tr("Hide when minimized"), |ui| {
-        ui.checkbox(&mut s.hide_when_minimized, "");
-    });
-    row(ui, tr("Show full account name"), |ui| {
-        ui.checkbox(&mut s.show_full_account_name, "");
-    });
-    row(ui, tr("Confirm before enabling Efficiency mode"), |ui| {
-        ui.checkbox(&mut s.confirm_eco_mode, "");
-    });
-    row(ui, tr("Record app resource history"), |ui| {
-        ui.checkbox(&mut s.app_history_enabled, "");
-    });
+    row(ui, tr("Always on top"), |ui| ui.checkbox(&mut s.always_on_top, ""));
+    row(ui, tr("Minimize on use (Switch to / Run task)"), |ui| ui.checkbox(&mut s.minimize_on_use, ""));
+    row(ui, tr("Hide when minimized"), |ui| ui.checkbox(&mut s.hide_when_minimized, ""));
+    row(ui, tr("Show full account name"), |ui| ui.checkbox(&mut s.show_full_account_name, ""));
+    row(ui, tr("Confirm before enabling Efficiency mode"), |ui| ui.checkbox(&mut s.confirm_eco_mode, ""));
+    row(ui, tr("Record app resource history"), |ui| ui.checkbox(&mut s.app_history_enabled, ""));
     row(ui, tr("App history retention"), |ui| {
         ui.add(
             egui::DragValue::new(&mut s.app_history_retention_days)
                 .range(1..=365)
                 .suffix(format!(" {}", tr("days (0 = keep)"))),
-        );
+        )
     });
 }
 
@@ -589,7 +587,7 @@ pub fn page(ui: &mut egui::Ui, s: &mut Settings, updates_allowed: bool, persist:
                 for (_, code, label) in i18n::LANGS {
                     ui.selectable_value(&mut s.language, Some(code.to_string()), label);
                 }
-            });
+            })
         });
         row(ui, tr("Theme"), |ui| {
             for (t, label) in [(Theme::System, "System"), (Theme::Light, "Light"), (Theme::Dark, "Dark")] {
@@ -606,25 +604,21 @@ pub fn page(ui: &mut egui::Ui, s: &mut Settings, updates_allowed: bool, persist:
     ui.add_space(theme::GAP);
 
     widgets::card(ui, icon::GAUGE, tr("Monitoring"), |ui| {
-        row(ui, tr("Show tray / menu-bar monitor"), |ui| {
-            ui.checkbox(&mut s.tray, "");
-        });
-        row(ui, tr("Close to tray"), |ui| {
-            ui.add_enabled(s.tray, egui::Checkbox::without_text(&mut s.close_to_tray));
-        });
+        row(ui, tr("Show tray / menu-bar monitor"), |ui| ui.checkbox(&mut s.tray, ""));
+        row(ui, tr("Close to tray"), |ui| ui.add_enabled(s.tray, egui::Checkbox::without_text(&mut s.close_to_tray)));
         row(ui, tr("Sensor sampling period"), |ui| {
             ui.add(
                 egui::DragValue::new(&mut s.sample_ms).range(100..=10_000).speed(10).suffix(format!(" {}", tr("ms"))),
-            );
+            )
         });
         row(ui, tr("Graph history"), |ui| {
             ui.add(
                 egui::DragValue::new(&mut s.graph_seconds).range(30..=86_400).speed(5).suffix(format!(" {}", tr("s"))),
-            );
+            )
         });
         row(ui, tr("Warning temperature"), |ui| {
             ui.add(egui::DragValue::new(&mut s.warn_temp_c).range(40.0..=125.0).speed(0.5).suffix(" °C"))
-                .on_hover_text(tr("Used by the stress monitor when the CPU's Tjmax is unknown."));
+                .on_hover_text(tr("Used by the stress monitor when the CPU's Tjmax is unknown."))
         });
     });
     ui.add_space(theme::GAP);
@@ -640,9 +634,11 @@ pub fn page(ui: &mut egui::Ui, s: &mut Settings, updates_allowed: bool, persist:
     widgets::card(ui, icon::ARROW_CIRCLE_UP, tr("Updates"), |ui| {
         row(ui, tr("Check for updates at startup"), |ui| {
             let mut on = s.update_check == Some(true) && updates_allowed;
-            if ui.add_enabled(updates_allowed, egui::Checkbox::without_text(&mut on)).changed() {
+            let r = ui.add_enabled(updates_allowed, egui::Checkbox::without_text(&mut on));
+            if r.changed() {
                 s.update_check = Some(on);
             }
+            r
         });
         row(ui, tr("Update channel"), |ui| {
             let cur = s.channel();
@@ -652,7 +648,7 @@ pub fn page(ui: &mut egui::Ui, s: &mut Settings, updates_allowed: bool, persist:
                         s.update_channel = Some(c);
                     }
                 }
-            });
+            })
         });
         let p = theme::palette(ui);
         ui.label(RichText::new(tr(

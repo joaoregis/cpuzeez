@@ -198,10 +198,10 @@ fn fonts() -> FontDefinitions {
         sb.insert(0, semibold_key.into());
     }
     f.families.insert(semibold(), sb);
-    // The icons come second in both families: after the text font, so they
+    // The icons come second in every family: after the text font, so they
     // never shadow it, and before egui's emoji fonts.
     f.font_data.insert("phosphor".into(), Arc::new(FontData::from_static(icon::FONT)));
-    for fam in [FontFamily::Proportional, semibold()] {
+    for fam in [FontFamily::Proportional, semibold(), FontFamily::Monospace] {
         if let Some(keys) = f.families.get_mut(&fam) {
             keys.insert(keys.len().min(1), "phosphor".into());
         }

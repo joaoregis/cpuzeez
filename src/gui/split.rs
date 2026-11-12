@@ -18,11 +18,11 @@ const HANDLE: f32 = 8.0;
 const STEP: f32 = 16.0;
 
 fn widths_id() -> egui::Id {
-    egui::Id::new("split-widths")
+    egui::Id::unique("split-widths")
 }
 
 fn changed_id() -> egui::Id {
-    egui::Id::new("split-changed")
+    egui::Id::unique("split-changed")
 }
 
 /// The saved widths, published by the app each frame (not while a change
@@ -89,7 +89,7 @@ pub fn show(ui: &mut Ui, key: &str, default: f32, mut body: impl FnMut(&mut Ui, 
     let h_left = side(ui, top.x, top.x + avail - w - HANDLE, Side::Left, &mut body);
     let rect =
         egui::Rect::from_min_size(egui::pos2(top.x + avail - w - HANDLE, top.y), egui::vec2(HANDLE, h_left.max(40.0)));
-    let resp = ui.interact(rect, ui.id().with(("split", key)), egui::Sense::click_and_drag());
+    let resp = ui.interact(rect, ui.scope_id().with(("split", key)), egui::Sense::click_and_drag());
     resp.widget_info(|| egui::WidgetInfo::slider(true, f64::from(w.round()), crate::gui::i18n::tr("Panel width")));
     let mut next = w;
     if resp.dragged() {
@@ -142,7 +142,7 @@ fn drawer(ui: &mut Ui, key: &str, w: f32, height: f32, body: &mut dyn FnMut(&mut
     let h = left_h.max(height.min(clip.bottom() - top.y)).max(40.0);
     let r = egui::Rect::from_min_size(egui::pos2(right - w, top.y), egui::vec2(w, h));
     let p = theme::palette(ui);
-    let layer = egui::LayerId::new(egui::Order::Middle, ui.id().with(("drawer", key)));
+    let layer = egui::LayerId::new(egui::Order::Middle, ui.scope_id().with(("drawer", key)));
     ui.scope_builder(
         egui::UiBuilder::new().layer_id(layer).max_rect(r).layout(egui::Layout::top_down(egui::Align::Min)),
         |ui| {

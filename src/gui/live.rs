@@ -10,6 +10,7 @@ use super::i18n::tr;
 use super::sensors::Monitor;
 use super::theme::{self, icon};
 use super::widgets::{self, Tone};
+use crate::gui::widgets::Control;
 use cpuzeez_core::layout::presets;
 use cpuzeez_core::live::{self as model, Anchor, HotkeyAction};
 use cpuzeez_core::session::{self, Band, Marker, Mode, Session};
@@ -229,7 +230,7 @@ pub fn overlay(
                     egui::Stroke::new(2.0, p.accent),
                     egui::StrokeKind::Inside,
                 );
-                let bg = ui.interact(ui.max_rect(), ui.id().with("drag"), egui::Sense::click_and_drag());
+                let bg = ui.interact(ui.max_rect(), ui.scope_id().with("drag"), egui::Sense::click_and_drag());
                 if bg.drag_started() {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
                 }
@@ -722,7 +723,8 @@ impl State {
                         self.start_capture(mon, Mode::Manual);
                     }
                     ui.separator();
-                    ui.add(egui::DragValue::new(&mut self.timed_secs).range(5..=3600).suffix(" s"));
+                    ui.add(egui::DragValue::new(&mut self.timed_secs).range(5..=3600).suffix(" s"))
+                        .accessible_name(tr("Timed capture"));
                     if ui.button(format!("{} {}", icon::TIMER, tr("Timed capture"))).clicked() {
                         self.start_capture(mon, Mode::Timed);
                     }
@@ -847,25 +849,28 @@ impl State {
             let apps = crate::live_frames::apps();
             let target = crate::live_frames::target();
             ui.horizontal(|ui| {
-                ui.label(RichText::new(tr("Measuring")).color(p.text_secondary));
+                let l = ui.label(RichText::new(tr("Measuring")).color(p.text_secondary)).id;
                 let shown =
                     target.as_ref().map_or_else(|| tr("nothing yet").to_string(), |t| format!("{} ({})", t.1, t.0));
-                egui::ComboBox::from_id_salt("live-target").selected_text(shown).show_ui(ui, |ui| {
-                    if ui.selectable_label(false, tr("Automatic: the app in front")).clicked() {
-                        crate::live_frames::pin_target(None);
-                    }
-                    for a in &apps {
-                        if ui
-                            .selectable_label(
-                                target.as_ref().is_some_and(|t| t.0 == a.pid),
-                                format!("{} ({}) · {:.0} FPS", a.name, a.pid, a.fps),
-                            )
-                            .clicked()
-                        {
-                            crate::live_frames::pin_target(Some(a.pid));
+                egui::ComboBox::from_id_salt("live-target")
+                    .selected_text(shown)
+                    .show_ui(ui, |ui| {
+                        if ui.selectable_label(false, tr("Automatic: the app in front")).clicked() {
+                            crate::live_frames::pin_target(None);
                         }
-                    }
-                });
+                        for a in &apps {
+                            if ui
+                                .selectable_label(
+                                    target.as_ref().is_some_and(|t| t.0 == a.pid),
+                                    format!("{} ({}) · {:.0} FPS", a.name, a.pid, a.fps),
+                                )
+                                .clicked()
+                            {
+                                crate::live_frames::pin_target(Some(a.pid));
+                            }
+                        }
+                    })
+                    .name_by(l);
             });
             if cpuzeez_core::frames::exclusive_fullscreen(&crate::live_frames::present_mode()) {
                 widgets::pill(
@@ -1059,7 +1064,7 @@ impl State {
             if screens.len() > 1 {
                 use cpuzeez_core::screens::Which;
                 ui.horizontal(|ui| {
-                    ui.label(tr("Monitor"));
+                    let l = ui.label(tr("Monitor")).id;
                     let shown = match o.screen {
                         Which::Auto => tr("Where the game is").to_string(),
                         Which::Primary => tr("Primary monitor").to_string(),
@@ -1068,13 +1073,20 @@ impl State {
                             |s| super::screens::label(i + 1, s, ppp),
                         ),
                     };
-                    egui::ComboBox::from_id_salt("overlay-monitor").selected_text(shown).show_ui(ui, |ui| {
-                        ui.selectable_value(&mut o.screen, Which::Auto, tr("Where the game is"));
-                        ui.selectable_value(&mut o.screen, Which::Primary, tr("Primary monitor"));
-                        for (i, s) in screens.iter().enumerate() {
-                            ui.selectable_value(&mut o.screen, Which::Index(i), super::screens::label(i + 1, s, ppp));
-                        }
-                    });
+                    egui::ComboBox::from_id_salt("overlay-monitor")
+                        .selected_text(shown)
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut o.screen, Which::Auto, tr("Where the game is"));
+                            ui.selectable_value(&mut o.screen, Which::Primary, tr("Primary monitor"));
+                            for (i, s) in screens.iter().enumerate() {
+                                ui.selectable_value(
+                                    &mut o.screen,
+                                    Which::Index(i),
+                                    super::screens::label(i + 1, s, ppp),
+                                );
+                            }
+                        })
+                        .name_by(l);
                 });
             }
             egui::Grid::new("overlay-anchors").spacing([4.0, 4.0]).show(ui, |ui| {
@@ -1089,9 +1101,9 @@ impl State {
                 }
             });
             ui.horizontal(|ui| {
-                ui.label(tr("Offset"));
-                ui.add(egui::DragValue::new(&mut o.offset[0]).range(-4000.0..=4000.0).suffix(" px"));
-                ui.add(egui::DragValue::new(&mut o.offset[1]).range(-4000.0..=4000.0).suffix(" px"));
+                let l = ui.label(tr("Offset")).id;
+                ui.add(egui::DragValue::new(&mut o.offset[0]).range(-4000.0..=4000.0).suffix(" px")).name_by(l);
+                ui.add(egui::DragValue::new(&mut o.offset[1]).range(-4000.0..=4000.0).suffix(" px")).name_by(l);
             });
             ui.horizontal(|ui| {
                 let label = if self.edit_mode { tr("Done") } else { tr("Move with the mouse") };
@@ -1113,10 +1125,10 @@ impl State {
             }
             ui.checkbox(&mut o.bottleneck_pill, tr("Show what limits the frame rate (GPU, CPU…) on the overlay"));
             ui.horizontal(|ui| {
-                ui.label(tr("Text refresh"));
-                ui.add(egui::DragValue::new(&mut o.text_hz).range(1.0..=30.0).suffix(" Hz"));
-                ui.label(tr("Graph refresh"));
-                ui.add(egui::DragValue::new(&mut o.graph_hz).range(1.0..=60.0).suffix(" Hz"));
+                let l = ui.label(tr("Text refresh")).id;
+                ui.add(egui::DragValue::new(&mut o.text_hz).range(1.0..=30.0).suffix(" Hz")).name_by(l);
+                let l = ui.label(tr("Graph refresh")).id;
+                ui.add(egui::DragValue::new(&mut o.graph_hz).range(1.0..=60.0).suffix(" Hz")).name_by(l);
             });
             for note in limits() {
                 ui.label(RichText::new(note).small().color(p.text_muted));
@@ -1177,7 +1189,7 @@ fn profiles_card(ui: &mut Ui, o: &mut model::Overlay) {
                         .on_hover_text(tr("While this game runs, CPU ZeeZ reads nothing through the PawnIO driver: temperatures and clocks that need it go blank, GPU and OS readings stay. The driver stays loaded; if an anti-cheat refuses the driver itself, uninstall PawnIO."));
                 });
                 if pr.auto_capture {
-                    ui.label(RichText::new(tr("Records every session of this game; ● REC shows while it does.")).small().color(p.warning));
+                    ui.label(RichText::new(tr("Records every session of this game; REC shows while it does.")).small().color(p.warning));
                 }
             });
         }
@@ -1279,8 +1291,8 @@ pub const PT_BR: &[(&str, &str)] = &[
         "Enquanto este jogo roda, o CPU ZeeZ não lê nada pelo driver PawnIO: temperaturas e clocks que dependem dele ficam em branco; leituras da GPU e do sistema continuam. O driver continua carregado; se um anti-cheat recusar o próprio driver, desinstale o PawnIO.",
     ),
     (
-        "Records every session of this game; ● REC shows while it does.",
-        "Grava todas as sessões deste jogo; ● REC aparece enquanto grava.",
+        "Records every session of this game; REC shows while it does.",
+        "Grava todas as sessões deste jogo; REC aparece enquanto grava.",
     ),
     ("Add a game", "Adicionar um jogo"),
     ("Add {}", "Adicionar {}"),
@@ -1507,8 +1519,8 @@ pub const ES: &[(&str, &str)] = &[
         "Mientras este juego se ejecuta, CPU ZeeZ no lee nada a través del controlador PawnIO: las temperaturas y relojes que lo necesitan quedan en blanco; las lecturas de la GPU y del sistema siguen. El controlador sigue cargado; si un anti-trampas rechaza el controlador, desinstala PawnIO.",
     ),
     (
-        "Records every session of this game; ● REC shows while it does.",
-        "Graba cada sesión de este juego; ● REC se muestra mientras graba.",
+        "Records every session of this game; REC shows while it does.",
+        "Graba cada sesión de este juego; REC se muestra mientras graba.",
     ),
     ("Add a game", "Añadir un juego"),
     ("Add {}", "Añadir {}"),
