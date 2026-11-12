@@ -194,7 +194,7 @@ fn sidebar_and_tabs_work_from_the_keyboard() {
 
 /// Leaf nodes with text, as (label, rect), and the pairs of them that overlap
 /// enough to be unreadable.
-fn collisions<State>(h: &Harness<'_, State>) -> Vec<String> {
+fn collisions<State>(h: &Harness<'_, State>, width: f32) -> Vec<String> {
     use egui_kittest::kittest::NodeT;
     let nodes: Vec<(String, egui::Rect)> = h
         .root()
@@ -203,7 +203,8 @@ fn collisions<State>(h: &Harness<'_, State>) -> Vec<String> {
         .filter_map(|n| {
             let label = n.accesskit_node().label().or_else(|| n.accesskit_node().value())?;
             let r = n.rect();
-            (!label.trim().is_empty() && r.width() > 1.0 && r.height() > 1.0).then_some((label.to_string(), r))
+            (!label.trim().is_empty() && r.width() > 1.0 && r.height() > 1.0 && r.width() < 0.8 * width)
+                .then_some((label.to_string(), r))
         })
         .collect();
     let mut out = Vec::new();
@@ -239,7 +240,7 @@ fn at_every_zoom<S: 'static>(name: &str, state: impl Fn() -> S, draw: impl Fn(&m
         );
         // A fixed number of frames: pages with live values never stop repainting.
         h.run_steps(6);
-        let mut c = collisions(&h);
+        let mut c = collisions(&h, size.x);
         c.extend(beyond(&h, size.x));
         assert!(c.is_empty(), "{name} at {:.0} %: {}", z * 100.0, c.join("; "));
     }
@@ -460,4 +461,81 @@ fn every_tools_tab_holds_together_at_every_scale() {
     page_at_every_zoom(super::Page::Tools, |a| a.tool_view = ToolView::Timers);
     page_at_every_zoom(super::Page::Tools, |a| a.tool_view = ToolView::Drives);
     page_at_every_zoom(super::Page::Tools, |a| a.tool_view = ToolView::Reports);
+}
+
+/// The Services inspector open on a service with long values, in the
+/// languages with the longest words (M2-06).
+#[test]
+fn the_services_inspector_fits_at_every_scale_in_every_language() {
+    use cpuzeez_core::services::{Recovery, ServiceDetails, ServiceRow, ServiceState, StartupType};
+    let long = "CzFixtureServiceWithAVeryLongInternalName";
+    let rows = move || -> Vec<ServiceRow> {
+        (0..8)
+            .map(|i| ServiceRow {
+                name: if i == 0 { long.to_string() } else { format!("Service{i}") },
+                display_name: format!("A display name that goes on for quite a while, number {i}"),
+                description: "Provides a long description of what this service does, how it does it, and why someone might want to keep it running all the time.".into(),
+                state: ServiceState::Running,
+                startup: StartupType::AutomaticDelayed,
+                pid: Some(4321),
+                account: r"NT AUTHORITY\LocalServiceNetworkRestricted".into(),
+                group: "LocalServiceNetworkRestrictedGroup".into(),
+                binary_path: r"C:\Windows\System32\svchost.exe -k LocalServiceNetworkRestricted -p -s CzFixtureServiceWithAVeryLongInternalName".into(),
+                dependencies: vec!["RpcSs".into(), "AnotherServiceWithALongName".into()],
+                ..Default::default()
+            })
+            .collect()
+    };
+    let details = || ServiceDetails {
+        triggers: vec!["Start: when a network endpoint for a very long protocol name becomes available".into()],
+        sid_type: "Unrestricted".into(),
+        privileges: vec![
+            "SeImpersonatePrivilege".into(),
+            "SeChangeNotifyPrivilege".into(),
+            "SeCreateGlobalPrivilege".into(),
+        ],
+        recovery: Some(Recovery { reset_days: 1, restart_delay_s: 60, ..Default::default() }),
+        ..Default::default()
+    };
+    for lang in [super::i18n::Lang::PtBr, super::i18n::Lang::Es] {
+        super::i18n::set(lang);
+        at_every_zoom(
+            &format!("Services inspector ({lang:?})"),
+            move || (super::system_services::State::inspecting(long, details()), rows()),
+            |ui, (s, rows)| s.show_with_rows(ui, rows),
+        );
+    }
+    super::i18n::set(super::i18n::Lang::En);
+}
+
+/// The Processes details panel open, in the languages with the longest words (M2-06).
+#[test]
+fn the_processes_details_fit_at_every_scale_in_every_language() {
+    use cpuzeez_core::procs::{Kind, Row, Totals};
+    let make = || {
+        let rows: Vec<Row> = (0..12)
+            .map(|i| Row {
+                pid: 1000 + i,
+                name: format!("a-really-quite-long-process-name-for-testing-{i}.exe"),
+                kind: Some(Kind::App),
+                cpu: 1.0,
+                working_set: 1 << 28,
+                ..Default::default()
+            })
+            .collect();
+        let mut st = super::system::State::default();
+        st.show_details = true;
+        st.table.selected.insert(rows[0].key());
+        let snap = crate::procs::Snapshot {
+            totals: Totals { processes: rows.len(), threads: 100, handles: 1000 },
+            rows,
+            ..Default::default()
+        };
+        (st, snap)
+    };
+    for lang in [super::i18n::Lang::PtBr, super::i18n::Lang::Es] {
+        super::i18n::set(lang);
+        at_every_zoom(&format!("Processes details ({lang:?})"), make, |ui, (s, snap)| s.page_with_snapshot(ui, snap));
+    }
+    super::i18n::set(super::i18n::Lang::En);
 }

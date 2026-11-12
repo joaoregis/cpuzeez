@@ -547,15 +547,15 @@ impl State {
                 }
             }
             ui.separator();
-            egui::ComboBox::from_id_salt("proc_preset")
-                .selected_text(format!("{}: {}", tr("Preset"), tr(self.preset.label())))
-                .show_ui(ui, |ui| {
-                    for p in Preset::ALL {
-                        if ui.selectable_value(&mut self.preset, p, tr(p.label())).changed() {
-                            self.table.hidden = p.hidden();
-                        }
+            let text = format!("{}: {}", tr("Preset"), tr(self.preset.label()));
+            widgets::wrap_before(ui, widgets::text_width(ui, &text) + 3.0 * ui.spacing().icon_width);
+            egui::ComboBox::from_id_salt("proc_preset").selected_text(text).show_ui(ui, |ui| {
+                for p in Preset::ALL {
+                    if ui.selectable_value(&mut self.preset, p, tr(p.label())).changed() {
+                        self.table.hidden = p.hidden();
                     }
-                });
+                }
+            });
             ui.separator();
             if ui
                 .selectable_label(self.show_details, format!("{} {}", icon::SIDEBAR_SIMPLE, tr("Details panel")))
@@ -1182,12 +1182,11 @@ impl State {
                 }
             }
 
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(format!("{} (PID {})", r.name, r.pid)).strong());
-                if procs::critical(&r.name, r.pid) {
-                    widgets::pill(ui, tr("Critical OS process"), Tone::Warning);
-                }
-            });
+            // The name wraps (a long one would widen the panel past its split).
+            ui.add(egui::Label::new(RichText::new(format!("{} (PID {})", r.name, r.pid)).strong()).wrap());
+            if procs::critical(&r.name, r.pid) {
+                widgets::pill(ui, tr("Critical OS process"), Tone::Warning);
+            }
             ui.add_space(4.0);
 
             ui.horizontal_wrapped(|ui| {

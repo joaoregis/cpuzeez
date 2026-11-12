@@ -149,6 +149,20 @@ pub fn kv_list(ui: &mut Ui, rows: &[(&str, String)]) {
     }
 }
 
+/// In a wrapping row, start a new line when less than `w` is left on this
+/// one. egui wraps single widgets, not composite ones like a combo box.
+pub fn wrap_before(ui: &mut Ui, w: f32) {
+    if ui.available_size_before_wrap().x < w {
+        ui.end_row();
+    }
+}
+
+/// The width of `text` in the button font, without wrapping.
+pub fn text_width(ui: &Ui, text: &str) -> f32 {
+    let font = egui::TextStyle::Button.resolve(ui.style());
+    ui.fonts_mut(|f| f.layout_no_wrap(text.to_string(), font, Color32::WHITE).size().x)
+}
+
 /// Small rounded status label.
 pub fn pill(ui: &mut Ui, text: &str, tone: Tone) -> Response {
     let p = theme::palette(ui);
