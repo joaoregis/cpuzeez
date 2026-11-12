@@ -18,3 +18,4 @@ graphify-out/20*/
 graphify-out/.graphify_build_state.json
 graphify-out/.graphify_labels.pending.json
 graphify-out/.graphify_labels.json.sig
+graphify-out/.rebuild.lock
