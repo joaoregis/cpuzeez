@@ -2,7 +2,7 @@
   ".github/ISSUE_TEMPLATE/beta-report.yml": {
     "mtime": 1794232498.7722502,
     "seen": 1794497085.3582788,
-    "ast_hash": "602ebe0700dd0510c7cd1001bc4a2e09",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   ".github/ISSUE_TEMPLATE/board-sensors.yml": {
@@ -12,10 +12,10 @@
     "semantic_hash": "57b56fef3ff58bed13097d890ad038bb"
   },
   ".github/dependabot.yml": {
-    "mtime": 1794240139.401553,
-    "seen": 1794489545.878667,
-    "ast_hash": "3424bd5037053b866b4d138e91dee6a9",
-    "semantic_hash": "3424bd5037053b866b4d138e91dee6a9"
+    "mtime": 1794507015.558424,
+    "seen": 1794507038.7097344,
+    "ast_hash": "b3c8104d073855bdccff5e92d9195b14",
+    "semantic_hash": ""
   },
   ".github/scripts/check_no_crt.py": {
     "mtime": 1794232498.7722502,
@@ -36,8 +36,8 @@
     "semantic_hash": "e2b582853b14862f49954d6a65606209"
   },
   ".github/scripts/pkgver.py": {
-    "mtime": 1794496908.3299098,
-    "seen": 1794496966.59972,
+    "mtime": 1794498610.7895243,
+    "seen": 1794498616.705624,
     "ast_hash": "0baefe0af5a4ecd1cc01306422996e29",
     "semantic_hash": ""
   },
@@ -54,8 +54,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1794496959.373972,
-    "seen": 1794496966.5998397,
+    "mtime": 1794498610.7895243,
+    "seen": 1794498616.705858,
     "ast_hash": "ae97c31c4875f71f181cf607bc45ae87",
     "semantic_hash": ""
   },
@@ -78,9 +78,9 @@
     "semantic_hash": "2b86f1ad5aa96a658dd746fdd65d61fc"
   },
   "Cargo.toml": {
-    "mtime": 1794496941.1977944,
-    "seen": 1794496966.6000931,
-    "ast_hash": "c99161da21457d78a72fec89472d30b1",
+    "mtime": 1794506908.3361533,
+    "seen": 1794507038.7112544,
+    "ast_hash": "fb131158f3c3a40e56a759765159c3d9",
     "semantic_hash": ""
   },
   "build.rs": {
@@ -90,8 +90,8 @@
     "semantic_hash": "879f7c369f70029042e2a87efe802dd6"
   },
   "crates/core/Cargo.toml": {
-    "mtime": 1794496941.1977944,
-    "seen": 1794496966.6002767,
+    "mtime": 1794498610.7935534,
+    "seen": 1794498616.7063494,
     "ast_hash": "6a9ae4c1f3161b1b4e0d1abc5b26764b",
     "semantic_hash": ""
   },
@@ -336,8 +336,8 @@
     "semantic_hash": "c6c85db6b0a0d4b8992626cdf9c78706"
   },
   "crates/platform/Cargo.toml": {
-    "mtime": 1794496941.1977944,
-    "seen": 1794496966.605443,
+    "mtime": 1794498610.7945535,
+    "seen": 1794498616.7109258,
     "ast_hash": "7eb71556bd30f9af0192b1c01089ba03",
     "semantic_hash": ""
   },
@@ -1146,9 +1146,9 @@
     "semantic_hash": ""
   },
   "src/gui/theme.rs": {
-    "mtime": 1794496845.3870695,
-    "seen": 1794496966.6204066,
-    "ast_hash": "c9a8b1609376b5b0653b965924ec3bbb",
+    "mtime": 1794506908.3361533,
+    "seen": 1794507038.7365592,
+    "ast_hash": "4fd781a92b9ae0e6482f833a0579782b",
     "semantic_hash": ""
   },
   "src/gui/tools.rs": {
@@ -1404,9 +1404,9 @@
     "semantic_hash": "54308fe455dd423c7c4bf63850af3527"
   },
   "CHANGELOG.md": {
-    "mtime": 1794496941.207816,
-    "seen": 1794496966.6248782,
-    "ast_hash": "9ab1b5ecc739160df48d9fc4bc2e8d67",
+    "mtime": 1794507015.5502748,
+    "seen": 1794507038.7421854,
+    "ast_hash": "9c560f93a309fb7d9b279460c5dfeff4",
     "semantic_hash": ""
   },
   "FEATURES.md": {
@@ -1434,10 +1434,10 @@
     "semantic_hash": "037ccf196b4077917bae1f33fe95d13a"
   },
   "THIRD_PARTY.md": {
-    "mtime": 1794232498.7787588,
-    "seen": 1794489545.8789113,
-    "ast_hash": "3a8defebf781f8c16edb01a7001b53e2",
-    "semantic_hash": "3a8defebf781f8c16edb01a7001b53e2"
+    "mtime": 1794507015.558424,
+    "seen": 1794507038.742906,
+    "ast_hash": "2612188f2326cf9f8dd9dd690c7e4f1e",
+    "semantic_hash": ""
   },
   "crates/core/fixtures/README.md": {
     "mtime": 1794232498.7894988,
@@ -1614,9 +1614,9 @@
     "semantic_hash": "36d0bfc66092621b054d601f80b46b79"
   },
   "docs/v1.1/ROADMAP.md": {
-    "mtime": 1794496941.207816,
-    "seen": 1794496966.629789,
-    "ast_hash": "ecef5e8ca869d3efb15085d4e36f95dc",
+    "mtime": 1794507015.557301,
+    "seen": 1794507038.747109,
+    "ast_hash": "ac6a76cf0e5964fb6d5382ba3f49192b",
     "semantic_hash": ""
   },
   "docs/v1/README.md": {
@@ -1650,16 +1650,16 @@
     "semantic_hash": "cfb2bdba9b5e4c33e09767a9e318a747"
   },
   "docs/v1/dependencies.md": {
-    "mtime": 1794232498.8194063,
-    "seen": 1794489545.8789477,
-    "ast_hash": "588aa6c75ca21ff02b10e3c7e9d5a9b9",
-    "semantic_hash": "588aa6c75ca21ff02b10e3c7e9d5a9b9"
+    "mtime": 1794507015.557301,
+    "seen": 1794507038.7482045,
+    "ast_hash": "cb769a73b41e13fa6be28045c7b2e864",
+    "semantic_hash": ""
   },
   "docs/v1/engineering.md": {
-    "mtime": 1794232498.8194063,
-    "seen": 1794489545.8789492,
-    "ast_hash": "c4b940378ce66ab4e8581c8cd2478ceb",
-    "semantic_hash": "c4b940378ce66ab4e8581c8cd2478ceb"
+    "mtime": 1794507015.558424,
+    "seen": 1794507038.7482066,
+    "ast_hash": "d7522443b670e36a4c5275eeca608bec",
+    "semantic_hash": ""
   },
   "docs/v1/task-manager.md": {
     "mtime": 1794232498.8204095,
@@ -2229,6 +2229,18 @@
     "mtime": 1794496845.385069,
     "seen": 1794496966.6198003,
     "ast_hash": "435b5e48111b9ac53ffb99f0c48c31aa",
+    "semantic_hash": ""
+  },
+  "src/gui/theme/icon.rs": {
+    "mtime": 1794506985.5869007,
+    "seen": 1794507038.736561,
+    "ast_hash": "6116404b834115f8fb2a405bbcb01e96",
+    "semantic_hash": ""
+  },
+  "assets/fonts/Phosphor-LICENSE.txt": {
+    "mtime": 1794506908.3963475,
+    "seen": 1794507038.7429082,
+    "ast_hash": "474756c59f1c05d3cc5c25b65a18cdb1",
     "semantic_hash": ""
   }
 }
