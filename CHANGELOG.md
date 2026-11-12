@@ -7,8 +7,13 @@ generated from its section below.
 
 ## [Unreleased]
 
+## [1.1.0-beta.1] - 2026-11-12
+
+The first 1.1 beta (M2 of the [1.1 roadmap](docs/v1.1/ROADMAP.md)): every page tested, side panels that fit and resize, ZeeZ Live that fits the window.
+
 ### Changed
 
+- **Packages:** a pre-release of a minor version (`1.1.0-beta.1`) gets package versions that upgrade in order: MSI and macOS `1.0.60001`, between `1.0.2` and `1.1.0`.
 - **System ▸ Services and Processes: the side panel can be resized.** Drag the line between the table and the inspector (or the details panel), or focus it with Tab and use ← and →; a double-click puts it back. The width is kept per panel, between 280 points and 60 % of the window.
 - **Docs:** the README's table of what needs administrator or root is generated from the code, in English and Portuguese, and a test fails when they differ (`python .github/scripts/permissions_map.py --write` regenerates it).
 - **Screenshots:** `-screenshots` shows ZeeZ Live with a recorded game's frames (FPS, lows, GPU Busy) instead of whatever app was in front, and never starts PresentMon.
@@ -657,7 +662,8 @@ features.
 - GUI with CPU-Z's tabs.
 - Installers for Windows (MSI), macOS (DMG/PKG), Debian/Ubuntu (DEB) and Arch.
 
-[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.1.0-beta.1...HEAD
+[1.1.0-beta.1]: https://github.com/joaoregis/cpuzeez/compare/v1.0.2...v1.1.0-beta.1
 [1.0.2]: https://github.com/joaoregis/cpuzeez/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/joaoregis/cpuzeez/compare/v0.3.0...v1.0.0

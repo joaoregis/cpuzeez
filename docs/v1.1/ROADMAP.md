@@ -87,6 +87,8 @@ Total: about 23–30 work days, plus waiting on soaks and CI.
 
 **Gate `1.1.0-beta.1`:** CI green. The visual-regression differences are reviewed one by one. The screenshot artifacts from CI show *Services* and *Processes* in pt-BR and es with nothing clipped (no window on the owner's machine).
 
+✅ **Passed 2026-11-12.** CI green on every pull request (#28–#36). Two visual differences, both intended and reviewed: `system-services.png` (the inspector beside the table, labels above the combo boxes, M2-05–07) and `live.png` (the recorded capture, M2-10). The pt-BR and es check is met by tests rather than screenshots: the CI screenshot run is English, and `the_services_inspector_fits_…` and `the_processes_details_fit_…` draw both panels in pt-BR and es at 75–200 % and fail on any clipping.
+
 ## M3. `1.1.0-beta.2`: egui 0.37, then the overlay's CPU
 
 13 comes first, so the CPU work is measured on the final stack.
