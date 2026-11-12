@@ -19,6 +19,7 @@ generated from its section below.
 - **ZeeZ Live ▸ Live fits the window.** The frame tiles (FPS, 1% low, 0.1% low, GPU Busy) ran past the right edge of a 1120-pixel window; they now take as many columns as fit. The overlay preview turns into a column when its one-line strip is wider than the page.
 - **Tabs wrap** onto a second line when they do not fit (Tools and System at a large zoom or in a long translation).
 - **System ▸ Processes:** at 200 % the network note covered the *Problems* filters; it now has its own line.
+- **CI: the fuzz workflow runs again.** Its job timeout used arithmetic, which workflow expressions do not have, so GitHub rejected the file and the nightly fuzzing had not run since 2026-11-10.
 - **Windows: the taskbar icon after an update.** A pinned CPU ZeeZ turned into a blank page after an update and a restart. The shortcut's icon was a copy kept by Windows Installer for that one version, which the update deletes; it now comes from `cpuzeez.exe` itself. A pin made before this version needs to be pinned again once.
 
 ## [1.0.2] - 2026-11-10
