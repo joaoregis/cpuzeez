@@ -225,6 +225,7 @@ Como no CPU-Z, algumas informações só vêm de registradores do hardware: MSRs
 
 Quase tudo no CPU ZeeZ roda como usuário comum. Estas são as exceções, e cada tela avisa quando se aplicam:
 
+<!-- permissions:start -->
 | Recurso | Windows | Linux | macOS |
 |---|---|---|---|
 | **FPS e GPU Busy** (ZeeZ Live) | administrador (o PresentMon lê os eventos do kernel gráfico); a aba Ao vivo oferece o reinício | MangoHud, sem root | Metal HUD, sem root; sem tempos de quadro de outros apps |
@@ -232,6 +233,7 @@ Quase tudo no CPU ZeeZ roda como usuário comum. Estas são as exceções, e cad
 | **Encerrar, suspender ou alterar um processo ou serviço** | um pedido do UAC para aquela ação | `pkexec` para aquela ação | autorização para aquela ação |
 | **Itens de inicialização, recuperação e contas de serviços** | um pedido do UAC para aquela ação | `pkexec`; a recuperação é um drop-in do systemd que você pode apagar | autorização para aquela ação |
 | **Registradores de hardware** (veja acima) | PawnIO + administrador | root | impossível |
+<!-- permissions:end -->
 
 Uma ação que exige direitos roda numa cópia elevada e descartável do CPU ZeeZ, que só aceita uma lista fixa de operações ([modelo de ameaças](docs/security/threat-model.md)). Tudo o que ela faz vai para o registro de auditoria local.
 
