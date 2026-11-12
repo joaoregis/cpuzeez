@@ -38,7 +38,7 @@ cpuzeez (bin) ──► gui ──► core ◄── platform
 |---|---|---|---|
 | `core` | `std`, `serde` | `egui`, `platform`, any OS API | Models (`Reading`, `Process`, `Service`, `Frame`, `Session`), pure decoders (CPUID, SMBIOS, SPD, PCI, EDID, SMART), the Metric Engine, bottleneck rules, frame statistics, file formats (CSV, sessions), **the source traits** |
 | `platform` | `core`, `libc`, `windows-sys`, `objc2`… | `egui` | One implementation of the `core` traits per OS, in `platform/{windows,linux,macos}/`. All `unsafe` sits in `sys/` behind safe wrappers |
-| `gui` | `core`, `eframe`, `egui-phosphor` | `platform`, OS APIs | Pages, widgets, the Widget Engine, theme, i18n |
+| `gui` | `core`, `eframe` | `platform`, OS APIs | Pages, widgets, the Widget Engine, theme, i18n |
 | `cpuzeez` | all | — | `main`: picks the platform, builds the services, opens the GUI or the CLI |
 
 **Why a workspace now (and not earlier):**

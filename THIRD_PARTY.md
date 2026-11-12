@@ -21,6 +21,8 @@ this with `cargo deny` ([`deny.toml`](deny.toml)). Scoped exceptions:
 egui's bundled fonts (Ubuntu Font Licence 1.0) and `ksni`, the Linux tray
 (Unlicense, public domain). The full list: `cargo deny list`.
 
+**Phosphor icons** ([phosphoricons.com](https://phosphoricons.com), Copyright (c) 2023 Phosphor Icons, MIT; text in [`assets/fonts/Phosphor-LICENSE.txt`](assets/fonts/Phosphor-LICENSE.txt)): the *Regular* icon font, compiled in.
+
 **SQLite** ([sqlite.org](https://sqlite.org), public domain) is compiled in
 through `rusqlite`'s `bundled` feature for the App history store; no system
 SQLite is used.

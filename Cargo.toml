@@ -22,7 +22,6 @@ exclude = ["fuzz"]
 cpuzeez-core = { path = "crates/core" }
 cpuzeez-platform = { path = "crates/platform" }
 eframe = { version = "0.36", default-features = false, features = ["default_fonts", "glow", "wgpu", "wayland", "x11", "links"], optional = true }
-egui-phosphor = { version = "0.14", optional = true }
 png = { version = "0.18", optional = true }
 # App history (docs/v1/dependencies.md §2.2, Q6a): SQLite compiled in, no system library.
 rusqlite = { version = "0.41", features = ["bundled"], optional = true }
@@ -50,7 +49,7 @@ default = ["gui"]
 # Test hooks for the long-running soak (docs/testing/soak.md): a synthetic game
 # and an automatic tour of every page. Never in a release.
 soak = []
-gui = ["dep:eframe", "dep:png", "dep:rusqlite", "dep:global-hotkey", "dep:egui-phosphor", "dep:tray-icon", "dep:ksni", "dep:zbus"]
+gui = ["dep:eframe", "dep:png", "dep:rusqlite", "dep:global-hotkey", "dep:tray-icon", "dep:ksni", "dep:zbus"]
 
 
 [package.metadata.deb]

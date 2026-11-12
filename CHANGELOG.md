@@ -7,6 +7,10 @@ generated from its section below.
 
 ## [Unreleased]
 
+### Changed
+
+- **Build:** the Phosphor icon font ships in the repository (`assets/fonts/Phosphor.ttf`, MIT) with the 104 icons the app uses; the `egui-phosphor` crate is gone, so the next egui release no longer waits for it. Nothing looks different.
+
 ## [1.1.0-beta.1] - 2026-11-12
 
 The first 1.1 beta (M2 of the [1.1 roadmap](docs/v1.1/ROADMAP.md)): every page tested, side panels that fit and resize, ZeeZ Live that fits the window.

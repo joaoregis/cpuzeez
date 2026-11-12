@@ -8,7 +8,7 @@ use eframe::egui::{
 };
 use std::sync::Arc;
 
-pub use egui_phosphor::regular as icon;
+pub mod icon;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Palette {
@@ -198,10 +198,13 @@ fn fonts() -> FontDefinitions {
         sb.insert(0, semibold_key.into());
     }
     f.families.insert(semibold(), sb);
-    egui_phosphor::add_to_fonts(&mut f, egui_phosphor::Variant::Regular);
-    // Icons inside semibold labels too.
-    if let Some(fam) = f.families.get_mut(&semibold()) {
-        fam.insert(fam.len().min(1), "phosphor".into());
+    // The icons come second in both families: after the text font, so they
+    // never shadow it, and before egui's emoji fonts.
+    f.font_data.insert("phosphor".into(), Arc::new(FontData::from_static(icon::FONT)));
+    for fam in [FontFamily::Proportional, semibold()] {
+        if let Some(keys) = f.families.get_mut(&fam) {
+            keys.insert(keys.len().min(1), "phosphor".into());
+        }
     }
     f
 }

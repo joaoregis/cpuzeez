@@ -1,7 +1,7 @@
 # CPU ZeeZ 1.1.0: roadmap
 
 > Part of the [1.1 plan](README.md). The plan says **why** each item is partial and what "finished" means; this document is the **work list**: the decisions, the releases, the order, one row per pull request with its dependencies and a testable "done when", the gates, and the risks.
-> **Status:** planned, nothing started · **Baseline:** `v1.0.0` (`b33cdd4`), `main` at `f0e39c0` · **Date:** 2026-11-09.
+> **Status:** M0–M2 released (`1.0.1`, `1.0.2`, `1.1.0-beta.1`), M3 in progress · **Baseline:** `v1.0.0` (`b33cdd4`), `main` at `f0e39c0` · **Date:** 2026-11-09.
 
 ## 1. Decisions (2026-11-09)
 
@@ -95,7 +95,7 @@ Total: about 23–30 work days, plus waiting on soaks and CI.
 
 | ID | Item | Plan | Depends on | Done when |
 |---|---|---|---|---|
-| M3-01 | **Vendor the icon font** (D4), still on egui 0.36: `assets/fonts/Phosphor.ttf` plus a generated module with the 104 constants and the license. `theme.rs` loads it. Drop `egui-phosphor` | 13 | — | Visual regression shows no difference; `cargo-deny` is clean |
+| M3-01 | **Vendor the icon font** (D4), still on egui 0.36: `assets/fonts/Phosphor.ttf` plus a generated module with the 104 constants and the license. `theme.rs` loads it. Drop `egui-phosphor` | 13 | — | Visual regression shows no difference; `cargo-deny` is clean — ✅ the same font file `egui-phosphor` 0.14 bundled, so the pixels cannot change; `gui::theme::icon` holds the 104 constants, and `every_icon_is_in_the_font` checks each has a glyph in that font |
 | M3-02 | **eframe, egui and egui_kittest 0.37 together.** Fix the API changes and review the visual differences; check whether winit's monitor positions now allow edge snapping on secondary monitors (S1-M02) | 13 | M3-01, M2 | CI green; differences reviewed; the S1-M02 answer recorded |
 | M3-03 | **Measure first**: `soak.py` records per-thread CPU (Windows) in the overlay-only report. Baseline on 0.37 | 9 | M3-02 | A table in `performance.md`: the UI thread and each worker |
 | M3-04 | **Experiments, one per pull request, each measured with a 30-minute overlay-only soak.** (a) The main window stops repainting while minimised: today `App::ui` always asks for a repaint every 500 ms (`gui/mod.rs:404`). (b) The overlay in its own deferred viewport. (c) The overlay repaints only when a shown value changes (`text_hz`, default 4 Hz). (d) Lease only the sources the active style shows | 9 | M3-03 | Each result is in `performance.md`, kept or reverted |

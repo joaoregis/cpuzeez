@@ -25,7 +25,7 @@ So "behind a feature flag" never means "the user has to install something".
 | `serde`, `serde_json` | Reports, settings, history | MIT/Apache-2.0 | |
 | `libc` (unix) | POSIX/Linux/macOS syscalls | MIT/Apache-2.0 | |
 | `eframe`/`egui` 0.36 (glow) | GUI | MIT/Apache-2.0 | Renders through **OpenGL** (see §3, CRT and OpenGL) |
-| `egui-phosphor` | Icons | MIT (icons and crate) | |
+| Phosphor icon font (vendored, `assets/fonts/`) | Icons | MIT | Was the `egui-phosphor` crate until 1.1 (D4 of the [1.1 roadmap](../v1.1/ROADMAP.md)) |
 | `png` | F5 screenshots, icons | MIT/Apache-2.0 | |
 | `tray-icon` (Win/mac), `ksni` (Linux) | Tray | MIT/Apache-2.0 | `ksni` is pure Rust D-Bus, with no system libraries |
 | `winresource` (build only) | Exe icon and version info | MIT | Not shipped |
