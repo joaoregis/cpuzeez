@@ -64,7 +64,7 @@ impl Array {
                 }
                 std::slice::from_raw_parts(items, count as usize)
                     .iter()
-                    .filter(|i| i.FmtValue.CStatus == 0 && !i.szName.is_null())
+                    .filter(|i| i.FmtValue.CStatus <= 1 && !i.szName.is_null()) // VALID_DATA / NEW_DATA
                     .map(|i| {
                         let n = (0..).take_while(|&k| *i.szName.add(k) != 0).count();
                         (
