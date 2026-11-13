@@ -9,6 +9,7 @@ generated from its section below.
 
 ### Changed
 
+- **CI:** a ratchet on `unsafe` outside `crates/platform` (`.github/scripts/unsafe_ratchet.py`): a new `unsafe` block, or more in a file, fails the build until it moves to `platform`.
 - **Build:** the Phosphor icon font ships in the repository (`assets/fonts/Phosphor.ttf`, MIT) with the 104 icons the app uses; the `egui-phosphor` crate is gone, so the next egui release no longer waits for it. Nothing looks different.
 
 ## [1.1.0-beta.1] - 2026-11-12

@@ -136,6 +136,7 @@ Together with the **Metric Engine** and the **Widget Engine** ([README §4](READ
 
 - All `unsafe` lives in `platform/*/sys/` behind safe functions. `#![deny(unsafe_op_in_unsafe_fn)]` everywhere, and `#![forbid(unsafe_code)]` in `core` and `gui`.
 - Every `unsafe` block has a `// SAFETY:` comment stating its invariant.
+- **A ratchet holds the line outside `platform`.** `.github/scripts/unsafe_ratchet.py` counts `unsafe` per file against `.github/unsafe-allowlist.txt` and fails CI when a count rises or a new file appears; lower counts are kept with `--update`. The list shrinks as modules move to `platform` (v1.1 M4-02 to M4-04).
 - `windows-sys` replaces hand-written Win32 declarations ([dependencies.md §2.2](dependencies.md)). It's used only in `platform/windows`, and existing `extern`s migrate when touched, not in a big bang.
 
 ## 8. Testing strategy and quality gates

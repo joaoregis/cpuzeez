@@ -53,6 +53,10 @@ jobs:
         run: |
           python -m pip install --quiet pyyaml
           python .github/scripts/lint_workflows.py
+      - name: No new unsafe outside platform (the ratchet only goes down)
+        run: |
+          python .github/scripts/unsafe_ratchet.py --selftest
+          python .github/scripts/unsafe_ratchet.py
       - name: Soak hooks (the synthetic game) and the soak analysis itself
         run: |
           cargo test --bin cpuzeez --features soak soak
