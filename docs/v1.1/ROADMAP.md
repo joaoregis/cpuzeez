@@ -1,7 +1,7 @@
 # CPU ZeeZ 1.1.0: roadmap
 
 > Part of the [1.1 plan](README.md). The plan says **why** each item is partial and what "finished" means; this document is the **work list**: the decisions, the releases, the order, one row per pull request with its dependencies and a testable "done when", the gates, and the risks.
-> **Status:** M0–M2 released (`1.0.1`, `1.0.2`, `1.1.0-beta.1`), M3 released (`1.1.0-beta.2`, no soak, owner's decision), M4 done · **Baseline:** `v1.0.0` (`b33cdd4`), `main` at `f0e39c0` · **Date:** 2026-11-09.
+> **Status:** M0–M2 released (`1.0.1`, `1.0.2`, `1.1.0-beta.1`), M3 released (`1.1.0-beta.2`, no soak, owner's decision), M4 released (`1.1.0-beta.3`) · **Baseline:** `v1.0.0` (`b33cdd4`), `main` at `f0e39c0` · **Date:** 2026-11-09.
 
 ## 1. Decisions (2026-11-09)
 
