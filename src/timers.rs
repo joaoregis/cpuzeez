@@ -108,18 +108,7 @@ fn measure_pm(ctx: &Ctx, port: u16, ext32: bool) -> Option<f64> {
 
 #[cfg(windows)]
 fn read_fadt() -> Option<Vec<u8>> {
-    use crate::os::win::GetSystemFirmwareTable;
-    let (prov, id) = (u32::from_be_bytes(*b"ACPI"), u32::from_le_bytes(*b"FACP"));
-    // SAFETY: two-call pattern; the second call gets a buffer of the reported size.
-    unsafe {
-        let n = GetSystemFirmwareTable(prov, id, std::ptr::null_mut(), 0);
-        if n == 0 {
-            return None;
-        }
-        let mut b = vec![0u8; n as usize];
-        let got = GetSystemFirmwareTable(prov, id, b.as_mut_ptr(), n);
-        (got == n).then_some(b)
-    }
+    cpuzeez_platform::firmware::table(u32::from_be_bytes(*b"ACPI"), u32::from_le_bytes(*b"FACP"))
 }
 
 #[cfg(target_os = "linux")]
@@ -136,9 +125,7 @@ fn read_fadt() -> Option<Vec<u8>> {
 
 #[cfg(windows)]
 fn perf_timer() -> Option<f64> {
-    let mut f = 0i64;
-    // SAFETY: plain out-parameter.
-    (unsafe { crate::os::win::QueryPerformanceFrequency(&mut f) } != 0 && f > 0).then_some(f as f64)
+    cpuzeez_platform::clock::qpc_hz()
 }
 
 #[cfg(target_os = "linux")]
@@ -159,19 +146,12 @@ fn perf_timer() -> Option<f64> {
         }
         _ => {}
     }
-    let mut ts = libc::timespec { tv_sec: 0, tv_nsec: 0 };
-    // SAFETY: plain out-parameter.
-    let ok = unsafe { libc::clock_getres(libc::CLOCK_MONOTONIC, &mut ts) } == 0;
-    let ns = ts.tv_sec as f64 * 1e9 + ts.tv_nsec as f64;
-    (ok && ns > 0.0).then(|| 1e9 / ns)
+    cpuzeez_platform::clock::monotonic_res_ns().map(|ns| 1e9 / ns)
 }
 
 #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
 fn arm_cntfrq() -> Option<f64> {
-    let f: u64;
-    // SAFETY: CNTFRQ_EL0 is readable from EL0 on Linux.
-    unsafe { std::arch::asm!("mrs {}, cntfrq_el0", out(reg) f, options(nomem, nostack)) };
-    (f > 0).then_some(f as f64)
+    cpuzeez_platform::clock::cntfrq()
 }
 #[cfg(all(target_os = "linux", not(target_arch = "aarch64")))]
 fn arm_cntfrq() -> Option<f64> {
@@ -180,17 +160,8 @@ fn arm_cntfrq() -> Option<f64> {
 
 #[cfg(target_os = "macos")]
 fn perf_timer() -> Option<f64> {
-    #[repr(C)]
-    struct Timebase {
-        numer: u32,
-        denom: u32,
-    }
-    unsafe extern "C" {
-        fn mach_timebase_info(info: *mut Timebase) -> i32;
-    }
-    let mut t = Timebase { numer: 0, denom: 0 };
-    // SAFETY: plain out-parameter. ticks * numer / denom = ns.
-    (unsafe { mach_timebase_info(&mut t) } == 0 && t.numer > 0).then(|| 1e9 * t.denom as f64 / t.numer as f64)
+    // ticks * numer / denom = ns.
+    cpuzeez_platform::clock::mach_timebase().map(|(numer, denom)| 1e9 * denom as f64 / numer as f64)
 }
 
 #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
@@ -202,21 +173,8 @@ fn perf_timer() -> Option<f64> {
 
 #[cfg(windows)]
 fn sys_timer() -> Option<f64> {
-    #[link(name = "ntdll", kind = "raw-dylib")]
-    unsafe extern "system" {
-        fn NtQueryTimerResolution(coarsest: *mut u32, finest: *mut u32, current: *mut u32) -> i32;
-    }
-    #[link(name = "kernel32")]
-    unsafe extern "system" {
-        fn GetSystemTimeAdjustment(adj: *mut u32, inc: *mut u32, disabled: *mut i32) -> i32;
-    }
-    let (mut a, mut b, mut cur) = (0u32, 0u32, 0u32);
-    // SAFETY: plain out-parameters; units are 100 ns.
-    if unsafe { NtQueryTimerResolution(&mut a, &mut b, &mut cur) } >= 0 && cur > 0 {
-        return Some(1e7 / cur as f64);
-    }
-    let (mut adj, mut inc, mut dis) = (0u32, 0u32, 0i32);
-    (unsafe { GetSystemTimeAdjustment(&mut adj, &mut inc, &mut dis) } != 0 && inc > 0).then(|| 1e7 / inc as f64)
+    // The period is in 100 ns units.
+    cpuzeez_platform::clock::timer_period_100ns().map(|p| 1e7 / p as f64)
 }
 
 #[cfg(target_os = "linux")]
@@ -248,21 +206,12 @@ fn sys_timer() -> Option<f64> {
             );
         }
     }
-    // SAFETY: sysconf has no preconditions.
-    let t = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
-    (t > 0).then_some(t as f64)
+    cpuzeez_platform::clock::clk_tck()
 }
 
 #[cfg(target_os = "macos")]
 fn sys_timer() -> Option<f64> {
-    // struct clockinfo { int hz, tick, tickadj, stathz, profhz; }
-    let mut ci = [0i32; 5];
-    let mut len = std::mem::size_of_val(&ci);
-    // SAFETY: fixed-size out buffer of the struct's size.
-    let r = unsafe {
-        libc::sysctlbyname(c"kern.clockrate".as_ptr(), ci.as_mut_ptr().cast(), &mut len, std::ptr::null_mut(), 0)
-    };
-    (r == 0 && ci[0] > 0).then_some(ci[0] as f64)
+    cpuzeez_platform::clock::clockrate_hz()
 }
 
 #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]

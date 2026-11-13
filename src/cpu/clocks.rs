@@ -33,15 +33,11 @@ pub fn tsc_hz() -> Option<f64> {
     use std::sync::OnceLock;
     static HZ: OnceLock<f64> = OnceLock::new();
     Some(*HZ.get_or_init(|| {
-        #[cfg(target_arch = "x86")]
-        use core::arch::x86::_rdtsc;
-        #[cfg(target_arch = "x86_64")]
-        use core::arch::x86_64::_rdtsc;
+        use cpuzeez_platform::clock::rdtsc;
         let t0 = Instant::now();
-        // SAFETY: rdtsc is unprivileged on every OS we target.
-        let c0 = unsafe { _rdtsc() };
+        let c0 = rdtsc();
         while t0.elapsed() < Duration::from_millis(60) {}
-        let c1 = unsafe { _rdtsc() };
+        let c1 = rdtsc();
         (c1 - c0) as f64 / t0.elapsed().as_secs_f64()
     }))
 }
@@ -173,56 +169,10 @@ fn chain(span: Duration) -> f64 {
     let t = Instant::now();
     let mut n = 0u64;
     while t.elapsed() < span {
-        adds(ITERS);
+        cpuzeez_platform::clock::add_chain(ITERS);
         n += ITERS * ADDS;
     }
     n as f64 / t.elapsed().as_secs_f64() / 1e6
-}
-
-#[inline(never)]
-fn adds(iters: u64) {
-    // 16 dependent register+register adds per iteration; the counter/branch
-    // run in parallel. Register operands matter: Intel Golden Cove and later
-    // fold chains of `add reg, imm` at rename, which would read as ~20 GHz.
-    #[cfg(target_arch = "x86_64")]
-    unsafe {
-        std::arch::asm!(
-            "2:",
-            "add {x}, {y}", "add {x}, {y}", "add {x}, {y}", "add {x}, {y}",
-            "add {x}, {y}", "add {x}, {y}", "add {x}, {y}", "add {x}, {y}",
-            "add {x}, {y}", "add {x}, {y}", "add {x}, {y}", "add {x}, {y}",
-            "add {x}, {y}", "add {x}, {y}", "add {x}, {y}", "add {x}, {y}",
-            "dec {n}",
-            "jnz 2b",
-            x = inout(reg) 0u64 => _,
-            y = in(reg) std::hint::black_box(1u64),
-            n = inout(reg) iters => _,
-            options(nomem, nostack),
-        );
-    }
-    #[cfg(target_arch = "aarch64")]
-    unsafe {
-        std::arch::asm!(
-            "2:",
-            "add {x}, {x}, {y}", "add {x}, {x}, {y}", "add {x}, {x}, {y}", "add {x}, {x}, {y}",
-            "add {x}, {x}, {y}", "add {x}, {x}, {y}", "add {x}, {x}, {y}", "add {x}, {x}, {y}",
-            "add {x}, {x}, {y}", "add {x}, {x}, {y}", "add {x}, {x}, {y}", "add {x}, {x}, {y}",
-            "add {x}, {x}, {y}", "add {x}, {x}, {y}", "add {x}, {x}, {y}", "add {x}, {x}, {y}",
-            "subs {n}, {n}, #1",
-            "b.ne 2b",
-            x = inout(reg) 0u64 => _,
-            y = in(reg) std::hint::black_box(1u64),
-            n = inout(reg) iters => _,
-            options(nomem, nostack),
-        );
-    }
-    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-    {
-        let mut x = 0u64;
-        for _ in 0..iters * 16 {
-            x = std::hint::black_box(x + 1);
-        }
-    }
 }
 
 #[cfg(test)]

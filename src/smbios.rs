@@ -13,17 +13,8 @@ pub fn get(ctx: &Ctx) -> Option<&Table> {
 
 #[cfg(windows)]
 fn fetch() -> Option<Table> {
-    use crate::os::win::GetSystemFirmwareTable;
-    let rsmb = u32::from_be_bytes(*b"RSMB");
     // RawSMBIOSData: Used20CallingMethod, Major, Minor, DmiRevision, u32 Length, table.
-    let n = unsafe { GetSystemFirmwareTable(rsmb, 0, std::ptr::null_mut(), 0) };
-    if n < 8 {
-        return None;
-    }
-    let mut b = vec![0u8; n as usize];
-    if unsafe { GetSystemFirmwareTable(rsmb, 0, b.as_mut_ptr(), n) } != n {
-        return None;
-    }
+    let b = cpuzeez_platform::firmware::table(u32::from_be_bytes(*b"RSMB"), 0).filter(|b| b.len() >= 8)?;
     let len = (u32::from_le_bytes([b[4], b[5], b[6], b[7]]) as usize).min(b.len() - 8);
     Some(Table::parse(b[1], b[2], &b[8..8 + len]))
 }

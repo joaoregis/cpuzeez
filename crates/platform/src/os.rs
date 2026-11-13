@@ -246,6 +246,145 @@ fn nul_std_handles() {
     }
 }
 
+/// The effective user id.
+#[cfg(unix)]
+pub fn euid() -> u32 {
+    // SAFETY: geteuid takes no arguments, has no preconditions and cannot fail.
+    unsafe { libc::geteuid() }
+}
+
+/// The path a file handle resolves to now (GetFinalPathNameByHandleW, DOS
+/// volume name, `\\?\` prefix kept).
+#[cfg(windows)]
+pub fn final_path(f: &std::fs::File) -> Option<String> {
+    use std::os::windows::ffi::OsStringExt;
+    use std::os::windows::io::AsRawHandle;
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetFinalPathNameByHandleW(
+            hfile: *mut std::ffi::c_void,
+            lpszfile: *mut u16,
+            cchfile: u32,
+            dwflags: u32,
+        ) -> u32;
+    }
+    const CAP: u32 = 1024;
+    let mut buf = vec![0u16; CAP as usize];
+    // SAFETY: `f` owns a valid file handle; buf/CAP describe a writable
+    // buffer of CAP wide chars; flags 0 = DOS volume name + normalized.
+    let n = unsafe { GetFinalPathNameByHandleW(f.as_raw_handle(), buf.as_mut_ptr(), CAP, 0) };
+    (n > 0 && n < CAP).then(|| std::ffi::OsString::from_wide(&buf[..n as usize]).to_string_lossy().into_owned())
+}
+
+/// A string sysctl (`machdep.cpu.brand_string`, …).
+#[cfg(target_os = "macos")]
+pub fn sysctl_str(name: &str) -> Option<String> {
+    let c = std::ffi::CString::new(name).ok()?;
+    let mut len = 0usize;
+    // SAFETY: standard two-call sysctlbyname pattern with a sized buffer.
+    unsafe {
+        if libc::sysctlbyname(c.as_ptr(), std::ptr::null_mut(), &mut len, std::ptr::null_mut(), 0) != 0 || len == 0 {
+            return None;
+        }
+        let mut buf = vec![0u8; len];
+        if libc::sysctlbyname(c.as_ptr(), buf.as_mut_ptr().cast(), &mut len, std::ptr::null_mut(), 0) != 0 {
+            return None;
+        }
+        buf.truncate(len);
+        let s = String::from_utf8_lossy(&buf).trim_end_matches('\0').trim().to_string();
+        (!s.is_empty()).then_some(s)
+    }
+}
+
+/// An integer sysctl (4 or 8 bytes).
+#[cfg(target_os = "macos")]
+pub fn sysctl_u64(name: &str) -> Option<u64> {
+    let c = std::ffi::CString::new(name).ok()?;
+    let mut v = 0u64;
+    let mut len = 8usize;
+    // SAFETY: integer sysctls are 4 or 8 bytes; the buffer is 8 and zeroed.
+    if unsafe { libc::sysctlbyname(c.as_ptr(), (&mut v as *mut u64).cast(), &mut len, std::ptr::null_mut(), 0) } != 0 {
+        return None;
+    }
+    Some(if len == 4 { v & 0xFFFF_FFFF } else { v })
+}
+
+/// host_processor_info(PROCESSOR_CPU_LOAD_INFO): user, system, idle and nice
+/// ticks per CPU.
+#[cfg(target_os = "macos")]
+pub fn cpu_load_ticks() -> Option<Vec<[u64; 4]>> {
+    unsafe extern "C" {
+        fn mach_host_self() -> u32;
+        static mach_task_self_: u32;
+        fn host_processor_info(host: u32, flavor: i32, count: *mut u32, info: *mut *mut i32, n: *mut u32) -> i32;
+        fn vm_deallocate(task: u32, addr: usize, size: usize) -> i32;
+    }
+    const PROCESSOR_CPU_LOAD_INFO: i32 = 2;
+    let (mut cpus, mut info, mut n) = (0u32, std::ptr::null_mut::<i32>(), 0u32);
+    // SAFETY: out-params per mach/host_info.h; the kernel-allocated array is
+    // copied, then released with vm_deallocate.
+    unsafe {
+        if host_processor_info(mach_host_self(), PROCESSOR_CPU_LOAD_INFO, &mut cpus, &mut info, &mut n) != 0
+            || info.is_null()
+        {
+            return None;
+        }
+        let per = std::slice::from_raw_parts(info, n as usize)
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .take(cpus as usize)
+            .map(|c| c.map(|x| x as u32 as u64))
+            .collect();
+        vm_deallocate(mach_task_self_, info as usize, n as usize * 4);
+        Some(per)
+    }
+}
+
+static CTRL_C: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Set by Ctrl+C (Ctrl+Break on Windows) once `catch_ctrl_c` ran.
+pub fn ctrl_c() -> bool {
+    CTRL_C.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Turn Ctrl+C into a flag (`ctrl_c`) instead of ending the process.
+#[cfg(unix)]
+pub fn catch_ctrl_c() {
+    extern "C" fn on_sigint(_: libc::c_int) {
+        CTRL_C.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+    // SAFETY: the handler only stores to an atomic (async-signal-safe).
+    unsafe {
+        libc::signal(libc::SIGINT, on_sigint as extern "C" fn(libc::c_int) as libc::sighandler_t);
+    }
+}
+
+/// Turn Ctrl+C into a flag (`ctrl_c`) instead of ending the process.
+#[cfg(windows)]
+pub fn catch_ctrl_c() {
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn SetConsoleCtrlHandler(h: Option<unsafe extern "system" fn(u32) -> i32>, add: i32) -> i32;
+    }
+    unsafe extern "system" fn on_ctrl(ty: u32) -> i32 {
+        // CTRL_C_EVENT / CTRL_BREAK_EVENT: handled; anything else: default action.
+        if ty <= 1 {
+            CTRL_C.store(true, std::sync::atomic::Ordering::SeqCst);
+            1
+        } else {
+            0
+        }
+    }
+    // SAFETY: registers a handler that only stores to an atomic.
+    unsafe {
+        SetConsoleCtrlHandler(Some(on_ctrl), 1);
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
+pub fn catch_ctrl_c() {}
+
 #[cfg(windows)]
 pub mod win {
     #![allow(non_snake_case)]

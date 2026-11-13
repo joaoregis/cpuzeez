@@ -29,20 +29,7 @@ pub fn section(ctx: &Ctx) -> Section {
 
 #[cfg(windows)]
 fn uefi() -> Option<&'static str> {
-    #[link(name = "kernel32")]
-    unsafe extern "system" {
-        fn GetFirmwareType(t: *mut u32) -> i32;
-    }
-    let mut t = 0u32;
-    // FirmwareTypeBios = 1, FirmwareTypeUefi = 2.
-    match unsafe { GetFirmwareType(&mut t) } {
-        0 => None,
-        _ => match t {
-            1 => Some("No"),
-            2 => Some("Yes"),
-            _ => None,
-        },
-    }
+    cpuzeez_platform::firmware::uefi().map(|u| if u { "Yes" } else { "No" })
 }
 
 #[cfg(target_os = "linux")]
