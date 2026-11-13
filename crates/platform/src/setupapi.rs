@@ -142,8 +142,8 @@ pub fn pci_devices() -> Vec<PciDevice> {
             inst: d.dev_inst,
             ..Default::default()
         };
-        for pid in 1..=12 {
-            dev.pci[pid] = pci_u32(set, &mut d, pid as u32);
+        for (pid, slot) in dev.pci.iter_mut().enumerate().skip(1) {
+            *slot = pci_u32(set, &mut d, pid as u32);
         }
         // SAFETY: plain out-parameter call.
         let _ = unsafe { CM_Get_Parent(&mut dev.parent, d.dev_inst, 0) };
