@@ -74,6 +74,13 @@ Where it goes (per-thread CPU over 30 s): the interface thread about 1–1.9 %, 
 - **Memory is not flat, on either version.** Private memory grows about 1.5 MB/min (≈ 90 MB/h) from minute 8 to the end, with handles and threads steady, and peaks over the 150 MB budget. The 2026-11-09 run of 1.0.0 on the same machine stayed at 118 → 120 MB. So the growth came in after 1.0.0 and is not from egui 0.37. Not yet bisected; M3-05 cannot pass until it is.
 - The per-thread numbers are means over the run, from samples every 30 s: a thread that lives for the whole run is measured well, one that ends early loses its last stretch.
 
+## Left open in 1.1 (M3-04, M3-05)
+
+No further soak was run: the owner closed M3 without one (2026-11-13). Nothing was changed to lower the overlay's CPU, so the numbers above are the 1.1 numbers: **3.2–3.6 % of one core, over the 2 % goal**, with the memory growth noted above.
+
+- **Repaint only when minimised (a):** read on the code, not built. The overlay is drawn from the main window's `ui()` as an immediate child viewport and asks for its own repaint every `1/text_hz` s, so the main window's 500 ms request does not set the pace while the overlay is up.
+- **Own viewport, repaint on change, lease fewer sources (b, c, d):** not tried. Per thread, the interface thread is about a third of the total and the rest is sampling workers, so no single change gets from 3 % to 2 %; moving the frame source in-process (2.0) is the larger lever.
+
 ## Not measured yet
 
 - **Repeating the overlay run** after work on the 2 % budget:
