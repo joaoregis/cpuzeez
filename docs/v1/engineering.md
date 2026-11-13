@@ -137,6 +137,10 @@ Together with the **Metric Engine** and the **Widget Engine** ([README §4](READ
 - All `unsafe` lives in `platform/*/sys/` behind safe functions. `#![deny(unsafe_op_in_unsafe_fn)]` everywhere, and `#![forbid(unsafe_code)]` in `core` and `gui`.
 - Every `unsafe` block has a `// SAFETY:` comment stating its invariant.
 - **A ratchet holds the line outside `platform`.** `.github/scripts/unsafe_ratchet.py` counts `unsafe` per file against `.github/unsafe-allowlist.txt` and fails CI when a count rises or a new file appears; lower counts are kept with `--update`. The list shrinks as modules move to `platform` (v1.1 M4-02 to M4-04).
+- **What the list still holds, and why** (v1.1 M4-04):
+  - *Benchmark kernels* stay where they are: `bench.rs`, `cpusuite.rs`, `membench.rs` and `memplus.rs` time inline assembly, volatile pointer chases and intrinsics whose placement is the measurement. A wrapper in another crate adds a call the kernel would then time, so they keep their `unsafe` with a `// SAFETY:` comment each.
+  - *Moving in 1.2*: `gpu/win.rs` (D3D/DXGI COM), `gpu/nvml.rs` and `gpu/dl.rs` (the NVML/ADLX loaders), `storage.rs` (IOCTLs and SMART pass-through) and `network.rs` (IP Helper). Each is a large FFI surface with its own tests; they move one per pull request in 1.2.
+  - Nothing else: a new file in the list fails CI.
 - `windows-sys` replaces hand-written Win32 declarations ([dependencies.md §2.2](dependencies.md)). It's used only in `platform/windows`, and existing `extern`s migrate when touched, not in a big bang.
 
 ## 8. Testing strategy and quality gates
