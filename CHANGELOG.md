@@ -9,6 +9,7 @@ generated from its section below.
 
 ### Changed
 
+- **CI:** a ratchet on `unsafe` outside `crates/platform` (`.github/scripts/unsafe_ratchet.py`): a new `unsafe` block, or more in a file, fails the build until it moves to `platform`.
 - **Build:** eframe, egui and egui_kittest 0.37.
 - **Accessibility:** every combo box, number field, slider and checkbox has a name a screen reader reads: the label beside it, or a short one where nothing visible names it. egui_kittest 0.37 fails a test on any control without one.
 - **Build:** the Phosphor icon font ships in the repository (`assets/fonts/Phosphor.ttf`, MIT) with the 104 icons the app uses; the `egui-phosphor` crate is gone, so the next egui release no longer waits for it. Nothing looks different.

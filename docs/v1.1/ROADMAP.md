@@ -109,7 +109,7 @@ Total: about 23–30 work days, plus waiting on soaks and CI.
 
 | ID | Item | Plan | Depends on | Done when |
 |---|---|---|---|---|
-| M4-01 | **The `unsafe` ratchet** (D3): `.github/scripts/unsafe_ratchet.py` counts `unsafe` per file outside `platform` against `.github/unsafe-allowlist.txt`. It fails when a count rises or a new file appears. The CI job and the gate run it | 8 | — | A new `unsafe` block in `src/` fails CI |
+| M4-01 | **The `unsafe` ratchet** (D3): `.github/scripts/unsafe_ratchet.py` counts `unsafe` per file outside `platform` against `.github/unsafe-allowlist.txt`. It fails when a count rises or a new file appears. The CI job and the gate run it | 8 | — | A new `unsafe` block in `src/` fails CI — ✅ `unsafe_ratchet.py` counts the keyword in the 21 files outside `crates/platform` that have it (225 in all, comments and strings ignored) against `.github/unsafe-allowlist.txt`; a higher count or a new file fails, a lower one asks for `--update`. Runs in the `native` job and in the gate; has a `--selftest` |
 | M4-02 | Move the small modules' OS calls to `platform` (safe functions; decoding stays): `timers`, `update` (`geteuid`), `smbios`, `bios`, `cpu/arm`, `cpu/clocks`, `live_frames`, `telemetry/os`. Lower the allowlist | 8 | M4-01 | Their tests pass; their counts are 0 |
 | M4-03 | Same for `sensors/windows`, `sensors/macos`, `pci/windows` and `npu` | 8 | M4-01 | Same |
 | M4-04 | Engineering §7 documents the exception for benchmark kernels and the 1.2 list (`gpu/win`, `gpu/nvml`, `gpu/dl`, `storage`, `network`) | 8 | M4-03 | The allowlist holds only those and the kernels |
