@@ -13,6 +13,8 @@ pub mod direct_io;
 pub mod disk_io;
 pub mod display;
 mod display_drm;
+#[cfg(windows)]
+pub mod dxcore;
 pub mod elevation;
 pub mod encryption;
 pub mod firmware;
@@ -32,6 +34,10 @@ pub mod procs;
 #[cfg(test)]
 mod robustness;
 pub mod services;
+#[cfg(windows)]
+pub mod setupapi;
+#[cfg(target_os = "macos")]
+pub mod smc;
 pub mod startup;
 pub mod tempdir;
 pub mod users;

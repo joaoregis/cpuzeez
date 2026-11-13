@@ -341,6 +341,29 @@ pub fn cpu_load_ticks() -> Option<Vec<[u64; 4]>> {
     }
 }
 
+/// The battery: (on AC power, charge %); None with no battery or no reading.
+#[cfg(windows)]
+pub fn battery() -> Option<(bool, u8)> {
+    #[repr(C)]
+    struct SystemPowerStatus {
+        ac: u8,
+        flag: u8,
+        percent: u8,
+        saver: u8,
+        life: u32,
+        full_life: u32,
+    }
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetSystemPowerStatus(s: *mut SystemPowerStatus) -> i32;
+    }
+    let mut s = SystemPowerStatus { ac: 0, flag: 0, percent: 0, saver: 0, life: 0, full_life: 0 };
+    // SAFETY: plain out-param of the documented layout.
+    // Flag 0x80: no battery; 0xFF: unknown.
+    (unsafe { GetSystemPowerStatus(&mut s) } != 0 && s.flag & 0x80 == 0 && s.flag != 0xFF && s.percent <= 100)
+        .then_some((s.ac == 1, s.percent))
+}
+
 static CTRL_C: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Set by Ctrl+C (Ctrl+Break on Windows) once `catch_ctrl_c` ran.

@@ -7,8 +7,4 @@
 9 src/membench.rs
 3 src/memplus.rs
 16 src/network.rs
-10 src/npu.rs
-9 src/pci/windows.rs
-4 src/sensors/macos.rs
-6 src/sensors/windows.rs
 20 src/storage.rs
