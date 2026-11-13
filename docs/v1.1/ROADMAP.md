@@ -114,7 +114,7 @@ Total: about 23–30 work days, plus waiting on soaks and CI.
 | M4-03 | Same for `sensors/windows`, `sensors/macos`, `pci/windows` and `npu` | 8 | M4-01 | Same  — ✅ `platform::pdh` (the sensors' four counters), `os::battery`, `smc` (macOS), `setupapi::pci_devices`, `dxcore::compute_adapters`; decoding stays in the binary. 29 `unsafe` gone; the list is 164 in 9 files |
 | M4-04 | Engineering §7 documents the exception for benchmark kernels and the 1.2 list (`gpu/win`, `gpu/nvml`, `gpu/dl`, `storage`, `network`) | 8 | M4-03 | The allowlist holds only those and the kernels  — ✅ §7 lists both groups and why; the list is exactly the 4 kernels and the 5 files moving in 1.2 (164 `unsafe`, from 225) |
 | M4-05 | `gui/mod.rs` step 1: page-specific state (of App's 40 fields) moves into each page's `State` | 6 | M2 | Visual regression shows no difference; kittest green  — ✅ `App` keeps 26 fields, from 45: `pages::{Processor, Mainboard, Memory, Graphics, Benches, Tools}`, `update_ui::Updates`, `settings_ui::Minis` |
-| M4-06 | Step 2: the frame loop's tasks (title, shortcuts, update check, persistence) move to `app_tasks.rs` | 6 | M4-05 | Same |
+| M4-06 | Step 2: the frame loop's tasks (title, shortcuts, update check, persistence) move to `app_tasks.rs` | 6 | M4-05 | Same  — ✅ `take_pins`, `take_widths`, `hotkeys`, `check_updates_if_allowed` and `window_title` |
 | M4-07 | Step 3: navigation (sidebar, command palette targets, `NAV`) moves to `nav.rs` | 6 | M4-06 | Same |
 | M4-08 | Step 4: the shared page helpers (`boxed`, `heading`, `sget`, …) move to `pages/common.rs`. `mod.rs` keeps `App`, `ui()` and the page dispatch | 6 | M4-07 | `gui/mod.rs` < 400 lines |
 
