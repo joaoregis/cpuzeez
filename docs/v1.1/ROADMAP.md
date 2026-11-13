@@ -110,7 +110,7 @@ Total: about 23–30 work days, plus waiting on soaks and CI.
 | ID | Item | Plan | Depends on | Done when |
 |---|---|---|---|---|
 | M4-01 | **The `unsafe` ratchet** (D3): `.github/scripts/unsafe_ratchet.py` counts `unsafe` per file outside `platform` against `.github/unsafe-allowlist.txt`. It fails when a count rises or a new file appears. The CI job and the gate run it | 8 | — | A new `unsafe` block in `src/` fails CI — ✅ `unsafe_ratchet.py` counts the keyword in the 21 files outside `crates/platform` that have it (225 in all, comments and strings ignored) against `.github/unsafe-allowlist.txt`; a higher count or a new file fails, a lower one asks for `--update`. Runs in the `native` job and in the gate; has a `--selftest` |
-| M4-02 | Move the small modules' OS calls to `platform` (safe functions; decoding stays): `timers`, `update` (`geteuid`), `smbios`, `bios`, `cpu/arm`, `cpu/clocks`, `live_frames`, `telemetry/os`. Lower the allowlist | 8 | M4-01 | Their tests pass; their counts are 0 |
+| M4-02 | Move the small modules' OS calls to `platform` (safe functions; decoding stays): `timers`, `update` (`geteuid`), `smbios`, `bios`, `cpu/arm`, `cpu/clocks`, `live_frames`, `telemetry/os`. Lower the allowlist | 8 | M4-01 | Their tests pass; their counts are 0 — ✅ the calls are safe functions in `platform`: `clock` (timer rates, `rdtsc`, the add chain), `firmware::{table, uefi}`, `os::{euid, final_path, sysctl_str, sysctl_u64, cpu_load_ticks, catch_ctrl_c}`. 32 `unsafe` gone; the list is 193 in 13 files |
 | M4-03 | Same for `sensors/windows`, `sensors/macos`, `pci/windows` and `npu` | 8 | M4-01 | Same |
 | M4-04 | Engineering §7 documents the exception for benchmark kernels and the 1.2 list (`gpu/win`, `gpu/nvml`, `gpu/dl`, `storage`, `network`) | 8 | M4-03 | The allowlist holds only those and the kernels |
 | M4-05 | `gui/mod.rs` step 1: page-specific state (of App's 40 fields) moves into each page's `State` | 6 | M2 | Visual regression shows no difference; kittest green |
@@ -132,6 +132,7 @@ M4-02 to M4-04 and M4-05 to M4-08 touch different files and can alternate. No ot
 | M5-04 | **Installers on CI** (item 16): the macOS `.pkg` and the Arch package install, start and uninstall | 16 | — | Both jobs green |
 | M5-05 | **Final soaks** on the release candidate build: overlay-only for 30 min, the full tour for 8 h | 9, S3-02 | M4 | Both pass; `performance.md` updated |
 | M5-06 | Docs: the CHANGELOG `1.1.0` section, `audit/README.md` known gaps, the v1 ROADMAP rows, this roadmap ✅ | — | everything | Release go |
+| M5-07 | **Last, at the owner's request: the overlay's memory growth.** Private memory grows about 1.5 MB/min in the overlay-only soak on 0.36 and 0.37 alike; 1.0.0 was flat. Find the change after 1.0.0 that does it, from the code first | — | everything else | The cause is named and fixed, or written down as known in the 1.1.0 notes |
 
 **Gate `1.1.0`:** every row ✅ or explicitly moved, with a reason, to the [carry-over](#4-carry-over-needs-a-person-or-hardware). Both soaks pass. CI is green on the release commit.
 

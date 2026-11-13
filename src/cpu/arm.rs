@@ -78,37 +78,7 @@ pub fn midr_text(midr: u64) -> String {
 }
 
 #[cfg(target_os = "macos")]
-pub fn sysctl_str(name: &str) -> Option<String> {
-    let c = std::ffi::CString::new(name).ok()?;
-    let mut len = 0usize;
-    // SAFETY: standard two-call sysctlbyname pattern with a sized buffer.
-    unsafe {
-        if libc::sysctlbyname(c.as_ptr(), std::ptr::null_mut(), &mut len, std::ptr::null_mut(), 0) != 0 || len == 0 {
-            return None;
-        }
-        let mut buf = vec![0u8; len];
-        if libc::sysctlbyname(c.as_ptr(), buf.as_mut_ptr().cast(), &mut len, std::ptr::null_mut(), 0) != 0 {
-            return None;
-        }
-        buf.truncate(len);
-        let s = String::from_utf8_lossy(&buf).trim_end_matches('\0').trim().to_string();
-        (!s.is_empty()).then_some(s)
-    }
-}
-
-#[cfg(target_os = "macos")]
-pub fn sysctl_u64(name: &str) -> Option<u64> {
-    let c = std::ffi::CString::new(name).ok()?;
-    let mut v = 0u64;
-    let mut len = 8usize;
-    // SAFETY: integer sysctls are 4 or 8 bytes; the buffer is 8 and zeroed.
-    unsafe {
-        if libc::sysctlbyname(c.as_ptr(), (&mut v as *mut u64).cast(), &mut len, std::ptr::null_mut(), 0) != 0 {
-            return None;
-        }
-    }
-    Some(if len == 4 { v & 0xFFFF_FFFF } else { v })
-}
+pub use crate::os::{sysctl_str, sysctl_u64};
 
 /// Apple Silicon. `hw.perflevelN.*` describes each cluster type.
 #[cfg(target_os = "macos")]

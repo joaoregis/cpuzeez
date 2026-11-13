@@ -4,8 +4,6 @@
 //! Linux reads /proc/stat, macOS uses Mach host statistics. RAM is
 //! `cpuzeez_platform::memory`.
 
-use std::sync::atomic::{AtomicBool, Ordering};
-
 /// (whole machine %, per logical CPU %).
 #[cfg(windows)]
 pub fn cpu_load() -> (Option<f64>, Vec<Option<f64>>) {
@@ -66,51 +64,14 @@ pub fn parse_proc_stat(s: &str) -> Vec<(u64, u64)> {
     out
 }
 
-#[cfg(target_os = "macos")]
-mod mach {
-    unsafe extern "C" {
-        pub fn mach_host_self() -> u32;
-        pub static mach_task_self_: u32;
-        pub fn host_processor_info(host: u32, flavor: i32, count: *mut u32, info: *mut *mut i32, n: *mut u32) -> i32;
-        pub fn vm_deallocate(task: u32, addr: usize, size: usize) -> i32;
-    }
-    pub const PROCESSOR_CPU_LOAD_INFO: i32 = 2;
-}
-
-/// host_processor_info(PROCESSOR_CPU_LOAD_INFO): user, system, idle, nice ticks per CPU.
+/// host_processor_info: user, system, idle, nice ticks per CPU; the total first.
 #[cfg(target_os = "macos")]
 fn ticks() -> Option<Vec<(u64, u64)>> {
-    let (mut cpus, mut info, mut n) = (0u32, std::ptr::null_mut::<i32>(), 0u32);
-    // SAFETY: out-params per mach/host_info.h; the kernel-allocated array is
-    // copied, then released with vm_deallocate.
-    unsafe {
-        if mach::host_processor_info(
-            mach::mach_host_self(),
-            mach::PROCESSOR_CPU_LOAD_INFO,
-            &mut cpus,
-            &mut info,
-            &mut n,
-        ) != 0
-            || info.is_null()
-        {
-            return None;
-        }
-        let a = std::slice::from_raw_parts(info, n as usize);
-        let mut per: Vec<(u64, u64)> = a
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .take(cpus as usize)
-            .map(|c| {
-                let [u, s, i, ni] = c.map(|x| x as u32 as u64);
-                (u + s + ni, u + s + i + ni)
-            })
-            .collect();
-        mach::vm_deallocate(mach::mach_task_self_, info as usize, n as usize * 4);
-        let total = per.iter().fold((0, 0), |a, b| (a.0 + b.0, a.1 + b.1));
-        per.insert(0, total);
-        Some(per)
-    }
+    let mut per: Vec<(u64, u64)> =
+        crate::os::cpu_load_ticks()?.into_iter().map(|[u, s, i, ni]| (u + s + ni, u + s + i + ni)).collect();
+    let total = per.iter().fold((0, 0), |a, b| (a.0 + b.0, a.1 + b.1));
+    per.insert(0, total);
+    Some(per)
 }
 
 #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
@@ -145,47 +106,7 @@ pub fn throttle_counts() -> Option<(u64, u64)> {
     None
 }
 
-static STOP: AtomicBool = AtomicBool::new(false);
-
-/// Set by Ctrl+C once `catch_ctrl_c` ran.
-pub fn ctrl_c() -> bool {
-    STOP.load(Ordering::SeqCst)
-}
-
-#[cfg(unix)]
-pub fn catch_ctrl_c() {
-    extern "C" fn on_sigint(_: libc::c_int) {
-        STOP.store(true, Ordering::SeqCst);
-    }
-    // SAFETY: the handler only stores to an atomic (async-signal-safe).
-    unsafe {
-        libc::signal(libc::SIGINT, on_sigint as extern "C" fn(libc::c_int) as libc::sighandler_t);
-    }
-}
-
-#[cfg(windows)]
-pub fn catch_ctrl_c() {
-    #[link(name = "kernel32")]
-    unsafe extern "system" {
-        fn SetConsoleCtrlHandler(h: Option<unsafe extern "system" fn(u32) -> i32>, add: i32) -> i32;
-    }
-    unsafe extern "system" fn on_ctrl(ty: u32) -> i32 {
-        // CTRL_C_EVENT / CTRL_BREAK_EVENT: handled; anything else: default action.
-        if ty <= 1 {
-            STOP.store(true, Ordering::SeqCst);
-            1
-        } else {
-            0
-        }
-    }
-    // SAFETY: registers a handler that only stores to an atomic.
-    unsafe {
-        SetConsoleCtrlHandler(Some(on_ctrl), 1);
-    }
-}
-
-#[cfg(not(any(unix, windows)))]
-pub fn catch_ctrl_c() {}
+pub use crate::os::{catch_ctrl_c, ctrl_c};
 
 #[cfg(test)]
 mod tests {

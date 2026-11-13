@@ -361,31 +361,7 @@ mod imp {
     /// returns the real location it pinned — not whatever the original path
     /// resolves to now.
     fn final_path_of(f: &std::fs::File) -> Option<std::path::PathBuf> {
-        use std::os::windows::ffi::OsStringExt;
-        use std::os::windows::io::AsRawHandle;
-        // SAFETY: kernel32 is always loaded on Windows; the declaration
-        // matches GetFinalPathNameByHandleW (HANDLE, PWSTR buffer, DWORD
-        // length in chars, DWORD flags; returns chars written, or the needed
-        // length when the buffer is too small, or 0 on failure).
-        #[link(name = "kernel32")]
-        unsafe extern "system" {
-            fn GetFinalPathNameByHandleW(
-                hfile: *mut core::ffi::c_void,
-                lpszfile: *mut u16,
-                cchfile: u32,
-                dwflags: u32,
-            ) -> u32;
-        }
-        const CAP: u32 = 1024;
-        let mut buf = vec![0u16; CAP as usize];
-        // SAFETY: `f` owns a valid file handle; buf/CAP describe a writable
-        // buffer of CAP wide chars; flags 0 = DOS volume name + normalized.
-        let n = unsafe { GetFinalPathNameByHandleW(f.as_raw_handle(), buf.as_mut_ptr(), CAP, 0) };
-        if n == 0 || n >= CAP {
-            return None;
-        }
-        let s =
-            std::path::PathBuf::from(std::ffi::OsString::from_wide(&buf[..n as usize])).to_string_lossy().into_owned();
+        let s = crate::os::final_path(f)?;
         // \\?\C:\… → C:\… and \\?\UNC\server\share → \\server\share
         // (CreateProcess prefers the plain drive form).
         let plain = if let Some(p) = s.strip_prefix(r"\\?\UNC\") {

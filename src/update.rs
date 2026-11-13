@@ -776,8 +776,7 @@ mod tests {
         let private = {
             use std::os::unix::fs::{MetadataExt, PermissionsExt};
             std::fs::symlink_metadata(&a).is_ok_and(|md| {
-                // SAFETY: geteuid takes no arguments, has no preconditions and cannot fail.
-                md.is_dir() && md.uid() == unsafe { libc::geteuid() } && md.permissions().mode() & 0o777 == 0o700
+                md.is_dir() && md.uid() == crate::os::euid() && md.permissions().mode() & 0o777 == 0o700
             })
         };
         let (existed, distinct) = (a.is_dir(), a != b);

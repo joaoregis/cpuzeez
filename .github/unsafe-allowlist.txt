@@ -1,13 +1,9 @@
 # unsafe outside crates/platform, per file. Only goes down: python .github/scripts/unsafe_ratchet.py --update
 13 src/bench.rs
-2 src/bios.rs
-2 src/cpu/arm.rs
-4 src/cpu/clocks.rs
 8 src/cpusuite.rs
 8 src/gpu/dl.rs
 33 src/gpu/nvml.rs
 54 src/gpu/win.rs
-2 src/live_frames.rs
 9 src/membench.rs
 3 src/memplus.rs
 16 src/network.rs
@@ -15,8 +11,4 @@
 9 src/pci/windows.rs
 4 src/sensors/macos.rs
 6 src/sensors/windows.rs
-2 src/smbios.rs
 20 src/storage.rs
-7 src/telemetry/os.rs
-12 src/timers.rs
-1 src/update.rs

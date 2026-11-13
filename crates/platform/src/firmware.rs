@@ -19,16 +19,38 @@ pub fn read() -> Firmware {
     imp::read()
 }
 
+/// One firmware table by provider and id (`GetSystemFirmwareTable`):
+/// `RSMB` (SMBIOS), `ACPI` with a table signature, …
+#[cfg(windows)]
+pub fn table(provider: u32, id: u32) -> Option<Vec<u8>> {
+    // SAFETY: size query then fill, as documented.
+    unsafe {
+        let n = crate::os::win::GetSystemFirmwareTable(provider, id, std::ptr::null_mut(), 0);
+        if n == 0 {
+            return None;
+        }
+        let mut b = vec![0u8; n as usize];
+        (crate::os::win::GetSystemFirmwareTable(provider, id, b.as_mut_ptr(), n) == n).then_some(b)
+    }
+}
+
+/// Booted through UEFI (false: legacy BIOS / CSM); None when Windows can't tell.
+#[cfg(windows)]
+pub fn uefi() -> Option<bool> {
+    let mut ft = 0;
+    // SAFETY: plain out-param; FirmwareTypeBios = 1, FirmwareTypeUefi = 2.
+    (unsafe { windows_sys::Win32::System::SystemInformation::GetFirmwareType(&mut ft) } != 0 && (ft == 1 || ft == 2))
+        .then_some(ft == 2)
+}
+
 #[cfg(windows)]
 mod imp {
     use super::{Firmware, Header};
-    use windows_sys::Win32::System::SystemInformation::{EnumSystemFirmwareTables, GetFirmwareType};
+    use windows_sys::Win32::System::SystemInformation::EnumSystemFirmwareTables;
     use windows_sys::Win32::System::TpmBaseServices::{TPM_DEVICE_INFO, Tbsi_GetDeviceInfo};
 
     pub fn read() -> Firmware {
-        let mut ft = 0;
-        // SAFETY: plain out-param; FirmwareTypeUefi = 2.
-        let uefi = (unsafe { GetFirmwareType(&mut ft) } != 0).then_some(ft == 2);
+        let uefi = super::uefi();
         let secure_boot =
             crate::os::win::reg_u64(r"SYSTEM\CurrentControlSet\Control\SecureBoot\State", "UEFISecureBootEnabled")
                 .map(|v| v & 0xFF == 1);
@@ -67,13 +89,7 @@ mod imp {
             })
             .filter_map(|s| {
                 let id = u32::from_le_bytes(*s);
-                // SAFETY: size query then fill, as documented.
-                let b = unsafe {
-                    let n = crate::os::win::GetSystemFirmwareTable(prov, id, std::ptr::null_mut(), 0);
-                    let mut b = vec![0u8; n as usize];
-                    (n > 0 && crate::os::win::GetSystemFirmwareTable(prov, id, b.as_mut_ptr(), n) == n).then_some(b)
-                }?;
-                Header::parse(&b)
+                Header::parse(&super::table(prov, id)?)
             })
             .collect()
     }

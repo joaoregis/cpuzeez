@@ -5,6 +5,7 @@
 //! are written here; existing collection code in the binary moves here as
 //! each page is rebuilt (docs/v1/engineering.md §10).
 
+pub mod clock;
 pub mod cpu_os;
 pub mod cstates;
 pub mod desktop;
