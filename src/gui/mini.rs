@@ -149,7 +149,7 @@ pub fn show_all(mon: &mut Monitor, ectx: &egui::Context) {
             }
             let frame = egui::Frame::NONE.inner_margin(egui::Margin::same(0));
             egui::CentralPanel::default().frame(frame).show(ui, |ui| {
-                let bg = ui.interact(ui.max_rect(), ui.id().with("drag"), egui::Sense::click_and_drag());
+                let bg = ui.interact(ui.max_rect(), ui.scope_id().with("drag"), egui::Sense::click_and_drag());
                 if bg.drag_started() {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
                 }

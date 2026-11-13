@@ -466,7 +466,7 @@ fn meter(ui: &mut Ui, label: &str, value: Option<f64>, max: f64, mark: Option<f6
             let at = mark.map_or(String::new(), |m| {
                 format!(", {}", trf("The rule fires at {} {}", &[&format!("{m:.0}"), &unit]))
             });
-            egui::WidgetInfo::labeled(egui::WidgetType::ProgressIndicator, true, format!("{label}: {v}{at}"))
+            egui::WidgetInfo::labeled(egui::Role::ProgressIndicator, true, format!("{label}: {v}{at}"))
         });
         if let Some(v) = value {
             let w = (v / max).clamp(0.0, 1.0) as f32 * rect.width();
@@ -523,7 +523,7 @@ pub fn draw_analysis(ui: &mut Ui, a: &Analysis) {
         let shares: Vec<String> =
             a.share.iter().map(|(c, f)| format!("{} {:.0} %", tr(c.label()), f * 100.0)).collect();
         egui::WidgetInfo::labeled(
-            egui::WidgetType::ProgressIndicator,
+            egui::Role::ProgressIndicator,
             true,
             format!("{}: {}", tr("Time per cause"), shares.join(", ")),
         )
@@ -563,7 +563,7 @@ pub fn draw_analysis(ui: &mut Ui, a: &Analysis) {
         let longest =
             best.1.map_or(String::new(), |c| trf("Longest stretch: {} for {} s.", &[&tr(c.label()), &best.0]));
         egui::WidgetInfo::labeled(
-            egui::WidgetType::Other,
+            egui::Role::Unknown,
             true,
             format!("{}: {} s. {longest}", tr("Second by second"), a.timeline.len()),
         )

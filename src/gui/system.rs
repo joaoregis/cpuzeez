@@ -461,13 +461,17 @@ impl State {
                 601..=1500 => tr("Normal (1 s)"),
                 _ => tr("Low (4 s)"),
             };
-            egui::ComboBox::from_id_salt("sys_speed").selected_text(speed_label).show_ui(ui, |ui| {
-                for (ms, label) in [(500, "High (0.5 s)"), (1000, "Normal (1 s)"), (4000, "Low (4 s)")] {
-                    if ui.selectable_label(cur_ms == ms, tr(label)).clicked() {
-                        self.sampler.set_period_ms(ms);
+            egui::ComboBox::from_id_salt("sys_speed")
+                .selected_text(speed_label)
+                .show_ui(ui, |ui| {
+                    for (ms, label) in [(500, "High (0.5 s)"), (1000, "Normal (1 s)"), (4000, "Low (4 s)")] {
+                        if ui.selectable_label(cur_ms == ms, tr(label)).clicked() {
+                            self.sampler.set_period_ms(ms);
+                        }
                     }
-                }
-            });
+                })
+                .response
+                .accessible_name(tr("Speed"));
             if ui.button(format!("{} {}", icon::TERMINAL_WINDOW, tr("Run new task"))).clicked() {
                 self.run_task = Some(RunTaskModal { cmd: String::new(), admin: false });
             }
@@ -549,13 +553,17 @@ impl State {
             ui.separator();
             let text = format!("{}: {}", tr("Preset"), tr(self.preset.label()));
             widgets::wrap_before(ui, widgets::text_width(ui, &text) + 3.0 * ui.spacing().icon_width);
-            egui::ComboBox::from_id_salt("proc_preset").selected_text(text).show_ui(ui, |ui| {
-                for p in Preset::ALL {
-                    if ui.selectable_value(&mut self.preset, p, tr(p.label())).changed() {
-                        self.table.hidden = p.hidden();
+            egui::ComboBox::from_id_salt("proc_preset")
+                .selected_text(text)
+                .show_ui(ui, |ui| {
+                    for p in Preset::ALL {
+                        if ui.selectable_value(&mut self.preset, p, tr(p.label())).changed() {
+                            self.table.hidden = p.hidden();
+                        }
                     }
-                }
-            });
+                })
+                .response
+                .accessible_name(tr("Preset"));
             ui.separator();
             if ui
                 .selectable_label(self.show_details, format!("{} {}", icon::SIDEBAR_SIMPLE, tr("Details panel")))
@@ -1325,7 +1333,7 @@ impl State {
         // 1. Confirm End Task modal (with critical process warning).
         if let Some(mut c) = self.confirm_end.take() {
             let mut keep = true;
-            let modal = egui::Modal::new(egui::Id::new("cz_confirm_end")).show(&ctx, |ui| {
+            let modal = egui::Modal::new(egui::Id::unique("cz_confirm_end")).show(&ctx, |ui| {
                 ui.set_width(420.0);
                 let title = if c.tree { tr("End process tree?") } else { tr("End task?") };
                 ui.label(RichText::new(title).text_style(egui::TextStyle::Heading));
@@ -1374,7 +1382,7 @@ impl State {
         if let Some(mut a) = self.affinity.take() {
             let mut keep = true;
             let n_cpus = std::thread::available_parallelism().map_or(1, usize::from).min(64);
-            let modal = egui::Modal::new(egui::Id::new("cz_affinity")).show(&ctx, |ui| {
+            let modal = egui::Modal::new(egui::Id::unique("cz_affinity")).show(&ctx, |ui| {
                 ui.set_width(380.0);
                 ui.label(RichText::new(trf("Processor affinity — {} ({})", &[&a.name, &a.pid])).strong());
                 ui.add_space(6.0);
@@ -1417,7 +1425,7 @@ impl State {
         // 3. Analyze Wait Chain modal.
         if let Some(w) = self.wait_chain.take() {
             let mut keep = true;
-            let modal = egui::Modal::new(egui::Id::new("cz_wait_chain")).show(&ctx, |ui| {
+            let modal = egui::Modal::new(egui::Id::unique("cz_wait_chain")).show(&ctx, |ui| {
                 ui.set_width(440.0);
                 ui.label(RichText::new(trf("Wait chain — {} ({})", &[&w.name, &w.pid])).strong());
                 ui.add_space(6.0);
@@ -1441,7 +1449,7 @@ impl State {
         // 4. Run New Task modal.
         if let Some(mut rt) = self.run_task.take() {
             let mut keep = true;
-            let modal = egui::Modal::new(egui::Id::new("cz_run_task")).show(&ctx, |ui| {
+            let modal = egui::Modal::new(egui::Id::unique("cz_run_task")).show(&ctx, |ui| {
                 ui.set_width(400.0);
                 ui.label(RichText::new(tr("Create new task")).text_style(egui::TextStyle::Heading));
                 ui.label(RichText::new(tr("Type the name of a program, folder, or command to open.")).weak());

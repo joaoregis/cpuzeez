@@ -557,9 +557,7 @@ fn health(ui: &mut Ui, ctx: &std::sync::Arc<Ctx>, r: &[Section], st: &mut State,
         {
             st.health_open = !st.health_open;
         }
-        if widgets::pill(ui, &format!("{}  {}", icon::GAUGE, tr("What limits my FPS?")), Tone::Neutral)
-            .interact(egui::Sense::click())
-            .on_hover_cursor(egui::CursorIcon::PointingHand)
+        if widgets::pill_button(ui, &format!("{}  {}", icon::GAUGE, tr("What limits my FPS?")), Tone::Neutral)
             .on_hover_text(tr("Open the bottleneck detector in ZeeZ Live"))
             .clicked()
         {
@@ -568,10 +566,7 @@ fn health(ui: &mut Ui, ctx: &std::sync::Arc<Ctx>, r: &[Section], st: &mut State,
         match worst {
             Some((d, HealthLevel::Bad | HealthLevel::Caution)) => {
                 let t = super::i18n::trf("Drive needs attention: {}", &[&d.name]);
-                if widgets::pill(ui, &format!("{}  {t}", icon::HARD_DRIVES), Tone::Danger)
-                    .interact(egui::Sense::click())
-                    .clicked()
-                {
+                if widgets::pill_button(ui, &format!("{}  {t}", icon::HARD_DRIVES), Tone::Danger).clicked() {
                     nav.push(Nav::Page(super::Page::Devices));
                 }
             }
@@ -661,7 +656,9 @@ fn editor(
                     for x in series {
                         ui.selectable_value(&mut st.add, Some(x.id.clone()), format!("{} · {}", x.group, x.label));
                     }
-                });
+                })
+                .response
+                .accessible_name(tr("Pick a sensor"));
             if ui.add_enabled(st.add.is_some() && tiles.len() < 8, egui::Button::new(tr("Add tile"))).clicked()
                 && let Some(id) = st.add.take()
             {

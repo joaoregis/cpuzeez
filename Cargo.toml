@@ -21,7 +21,10 @@ exclude = ["fuzz"]
 [dependencies]
 cpuzeez-core = { path = "crates/core" }
 cpuzeez-platform = { path = "crates/platform" }
-eframe = { version = "0.36", default-features = false, features = ["default_fonts", "glow", "wgpu", "wayland", "x11", "links"], optional = true }
+eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "wgpu", "wayland", "x11", "links"], optional = true }
+# Only for the feature: egui 0.37 no longer bundles the emoji fonts by default,
+# and symbols the UI uses (● ▲ …) fall back to them when the OS font lacks them.
+egui = { version = "0.37", default-features = false, features = ["monochrome_emoji_fonts"], optional = true }
 png = { version = "0.18", optional = true }
 # App history (docs/v1/dependencies.md §2.2, Q6a): SQLite compiled in, no system library.
 rusqlite = { version = "0.41", features = ["bundled"], optional = true }
@@ -49,7 +52,7 @@ default = ["gui"]
 # Test hooks for the long-running soak (docs/testing/soak.md): a synthetic game
 # and an automatic tour of every page. Never in a release.
 soak = []
-gui = ["dep:eframe", "dep:png", "dep:rusqlite", "dep:global-hotkey", "dep:tray-icon", "dep:ksni", "dep:zbus"]
+gui = ["dep:eframe", "dep:egui", "dep:png", "dep:rusqlite", "dep:global-hotkey", "dep:tray-icon", "dep:ksni", "dep:zbus"]
 
 
 [package.metadata.deb]
@@ -82,7 +85,7 @@ strip = true
 # GUI interaction tests through the accessibility tree (S0-T05). Tests run on
 # stable Rust; rust-version above is what building the app needs.
 [dev-dependencies]
-egui_kittest = "0.36"
+egui_kittest = "0.37"
 
 [build-dependencies]
 winresource = "0.1"

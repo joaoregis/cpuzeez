@@ -124,7 +124,7 @@ pub fn publish_throttling(ctx: &egui::Context, tel: &crate::telemetry::Telemetry
             on.push("gpu-power");
         }
     }
-    ctx.data_mut(|d| d.insert_temp(egui::Id::new("throttling-now"), on));
+    ctx.data_mut(|d| d.insert_temp(egui::Id::unique("throttling-now"), on));
 }
 
 /// The metric prefixes `widgets` read (aliases included), for a telemetry lease.
@@ -168,7 +168,7 @@ pub fn preview(
         return show(ui, layout, series, points);
     }
     // The strip's width from the last frame it was drawn as a strip.
-    let id = ui.id().with("strip-width");
+    let id = ui.scope_id().with("strip-width");
     let fits = ui.data(|d| d.get_temp::<f32>(id)).is_none_or(|w| w <= ui.available_width());
     if fits {
         let r = show(ui, layout, series, points);
@@ -222,7 +222,7 @@ pub fn show(
                 }
                 Direction::Grid => {
                     let cols = layout.columns.max(1) as usize;
-                    egui::Grid::new(ui.id().with("layout-grid")).spacing([12.0, 4.0]).show(ui, |ui| {
+                    egui::Grid::new(ui.scope_id().with("layout-grid")).spacing([12.0, 4.0]).show(ui, |ui| {
                         for (i, w) in layout.widgets.iter().enumerate() {
                             one(ui, w);
                             if (i + 1) % cols == 0 {
@@ -312,7 +312,7 @@ fn widget(
         }
         Kind::Throttle => {
             let on: Vec<&'static str> =
-                ui.ctx().data(|d| d.get_temp(egui::Id::new("throttling-now"))).unwrap_or_default();
+                ui.ctx().data(|d| d.get_temp(egui::Id::unique("throttling-now"))).unwrap_or_default();
             let shown = cpuzeez_core::layout::throttle_pills(&on, w.metric.as_deref());
             if shown.is_empty() {
                 ui.label(
@@ -353,7 +353,7 @@ fn lbl(ui: &mut Ui, text: RichText, outline: bool) -> egui::Response {
     );
     let (rect, resp) = ui.allocate_exact_size(galley.size() + egui::vec2(2.0, 2.0), egui::Sense::hover());
     let shown = galley.text().to_string();
-    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, shown.clone()));
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, shown.clone()));
     if ui.is_rect_visible(rect) {
         let at = rect.min + egui::vec2(1.0, 1.0);
         let black = Color32::from_black_alpha(230);
@@ -431,7 +431,10 @@ mod tests {
         for (on, wanted) in [(vec![], "No throttling"), (vec!["cpu-thermal", "gpu-power"], "CPU thermal")] {
             let layout = layout.clone();
             let mut h = Harness::new_ui(move |ui| {
-                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("throttling-now"), on.clone()));
+                if !crate::gui::a11y::themed(ui) {
+                    return;
+                }
+                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique("throttling-now"), on.clone()));
                 show(ui, &layout, &[], &|_| vec![]);
             });
             h.run();

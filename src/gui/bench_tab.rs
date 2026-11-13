@@ -9,6 +9,7 @@ use super::tools::{Series, line_chart};
 use super::widgets;
 use crate::Ctx;
 use crate::bench::{self, Bench, Score, Variant};
+use crate::gui::widgets::Control;
 use crate::membench::{MemBench, MemResult};
 use eframe::egui::{self, RichText};
 
@@ -18,6 +19,7 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("CPU Single Thread", "CPU Single Thread"),
     ("CPU Multi Thread ({} threads)", "CPU Multi Thread ({} threads)"),
     ("This Processor", "Este processador"),
+    ("Instruction set", "Conjunto de instruções"),
     ("Threads", "Threads"),
     ("All", "Todos"),
     ("Bench CPU", "Testar CPU"),
@@ -62,6 +64,7 @@ pub const ES: &[(&str, &str)] = &[
     ("Memory", "Memoria"),
     ("CPU Single Thread", "CPU Single Thread"),
     ("CPU Multi Thread ({} threads)", "CPU Multi Thread ({} hilos)"),
+    ("Instruction set", "Conjunto de instrucciones"),
     ("This Processor", "Este procesador"),
     ("Threads", "Hilos"),
     ("All", "Todos"),
@@ -225,25 +228,33 @@ impl State {
         let idle = self.running.is_none();
         ui.horizontal_wrapped(|ui| {
             ui.add_enabled_ui(idle, |ui| {
-                ui.label(tr("Threads"));
+                let l = ui.label(tr("Threads")).id;
                 let max = crate::os::logical_cpus();
-                ui.add(egui::DragValue::new(&mut self.threads).range(1..=max));
-                egui::ComboBox::from_id_salt("variant").selected_text(self.variant.label()).show_ui(ui, |ui| {
-                    for v in Variant::all() {
-                        ui.selectable_value(&mut self.variant, v, v.label());
-                    }
-                });
+                ui.add(egui::DragValue::new(&mut self.threads).range(1..=max)).name_by(l);
+                egui::ComboBox::from_id_salt("variant")
+                    .selected_text(self.variant.label())
+                    .show_ui(ui, |ui| {
+                        for v in Variant::all() {
+                            ui.selectable_value(&mut self.variant, v, v.label());
+                        }
+                    })
+                    .response
+                    .accessible_name(tr("Instruction set"));
                 let sets: Vec<String> = std::iter::once("All".to_string())
                     .chain(crate::cpu::get(ctx).clusters.iter().map(|c| c.kind.clone()))
                     .collect();
                 if sets.len() > 2 {
                     let shown = |s: &str| if s == "All" { tr("All").to_string() } else { s.to_string() };
-                    egui::ComboBox::from_id_salt("cluster").selected_text(shown(&self.cluster)).show_ui(ui, |ui| {
-                        for s in sets {
-                            let t = shown(&s);
-                            ui.selectable_value(&mut self.cluster, s, t);
-                        }
-                    });
+                    egui::ComboBox::from_id_salt("cluster")
+                        .selected_text(shown(&self.cluster))
+                        .show_ui(ui, |ui| {
+                            for s in sets {
+                                let t = shown(&s);
+                                ui.selectable_value(&mut self.cluster, s, t);
+                            }
+                        })
+                        .response
+                        .accessible_name(tr("Cores"));
                 }
             });
         });

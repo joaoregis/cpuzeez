@@ -141,6 +141,8 @@ pub fn adapter_picker(ui: &mut egui::Ui, id: &str, adapters: &[String], pick: &m
                 for (i, a) in adapters.iter().enumerate() {
                     ui.selectable_value(pick, i, a);
                 }
-            });
+            })
+            .response
+            .accessible_name("GPU");
     });
 }

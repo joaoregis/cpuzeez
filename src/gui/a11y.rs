@@ -137,7 +137,9 @@ use super::widgets;
 use eframe::egui;
 use egui_kittest::{Harness, kittest::Queryable};
 
-fn themed(ui: &egui::Ui) -> bool {
+/// Installs the app's fonts and styles on the first frame (and skips it):
+/// the icons and symbols need them.
+pub(super) fn themed(ui: &egui::Ui) -> bool {
     if !ui.style().text_styles.contains_key(&egui::TextStyle::Name("title".into())) {
         super::theme::install(ui.ctx());
         ui.ctx().request_repaint();
@@ -199,7 +201,11 @@ fn collisions<State>(h: &Harness<'_, State>, width: f32) -> Vec<String> {
     let nodes: Vec<(String, egui::Rect)> = h
         .root()
         .children_recursive()
-        .filter(|n| n.accesskit_node().children().count() == 0 && !n.accesskit_node().is_hidden())
+        // Leaves that draw text: a splitter draws none (its name is for screen readers).
+        .filter(|n| {
+            let a = n.accesskit_node();
+            a.children().count() == 0 && !a.is_hidden() && a.role() != egui::accesskit::Role::Splitter
+        })
         .filter_map(|n| {
             let label = n.accesskit_node().label().or_else(|| n.accesskit_node().value())?;
             let r = n.rect();
@@ -210,6 +216,10 @@ fn collisions<State>(h: &Harness<'_, State>, width: f32) -> Vec<String> {
     let mut out = Vec::new();
     for (i, (a, ra)) in nodes.iter().enumerate() {
         for (b, rb) in &nodes[i + 1..] {
+            // A control named by the label it holds (a pill button) is one text.
+            if a == b {
+                continue;
+            }
             let inter = ra.intersect(*rb);
             if inter.width() <= 0.0 || inter.height() <= 0.0 {
                 continue;
@@ -254,7 +264,11 @@ fn beyond<State>(h: &Harness<'_, State>, width: f32) -> Vec<String> {
     use egui_kittest::kittest::NodeT;
     h.root()
         .children_recursive()
-        .filter(|n| n.accesskit_node().children().count() == 0 && !n.accesskit_node().is_hidden())
+        // Leaves that draw text: a splitter draws none (its name is for screen readers).
+        .filter(|n| {
+            let a = n.accesskit_node();
+            a.children().count() == 0 && !a.is_hidden() && a.role() != egui::accesskit::Role::Splitter
+        })
         .filter_map(|n| {
             let label = n.accesskit_node().label().or_else(|| n.accesskit_node().value())?;
             let r = n.rect();

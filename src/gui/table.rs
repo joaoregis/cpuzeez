@@ -308,7 +308,7 @@ impl<'a, R> Table<'a, R> {
                             let state = if *collapsed { "collapsed" } else { "expanded" };
                             let label = format!("{name}, {count}, {state}");
                             resp.widget_info(|| {
-                                egui::WidgetInfo::labeled(egui::WidgetType::CollapsingHeader, true, &label)
+                                egui::WidgetInfo::labeled(egui::Role::DisclosureTriangle, true, &label)
                             });
                             if resp.clicked() {
                                 toggle = Some(name.clone());
@@ -328,9 +328,7 @@ impl<'a, R> Table<'a, R> {
                             // The row as text for screen readers (and the GUI tests).
                             let text: Vec<String> = shown.iter().map(|c| (c.cell)(row).shown().to_string()).collect();
                             let label = text.join(", ");
-                            resp.widget_info(|| {
-                                egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, &label)
-                            });
+                            resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, &label));
                             let mut x = r.left() + 8.0;
                             let hover = resp.hover_pos();
                             for (c, &w) in shown.iter().zip(&widths) {
@@ -392,7 +390,7 @@ impl<'a, R> Table<'a, R> {
                 resp: &resp,
                 shown: &shown,
                 widths: &widths,
-                offset_x: out.state.offset.x,
+                offset_x: out.state.clamped_offset().x,
                 row_h,
                 font: &font,
             },
@@ -448,10 +446,11 @@ impl<'a, R> Table<'a, R> {
                 let hr = ui
                     .interact(
                         edge.intersect(hdr),
-                        egui::Id::new((self.id, "col-resize", c.id)),
+                        egui::Id::unique((self.id, "col-resize", c.id)),
                         Sense::click_and_drag(),
                     )
                     .on_hover_text(tr("Drag to resize, double-click to fit"));
+                hr.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Splitter, true, &c.title));
                 let active = hr.hovered() || hr.dragged();
                 on_edge |= active;
                 if active {
@@ -514,7 +513,7 @@ impl<'a, R> Table<'a, R> {
         }
         // Painted text is invisible to screen readers: describe the header.
         let header: Vec<&str> = h.shown.iter().map(|c| c.title.as_str()).collect();
-        h.resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, header.join(", ")));
+        h.resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Unknown, true, header.join(", ")));
         h.resp.context_menu(|ui| {
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
             ui.label(egui::RichText::new(tr("Columns")).strong());
@@ -777,10 +776,10 @@ mod tests {
         let r = rows();
         let mut h = Harness::new_ui_state(
             |ui, seen: &mut Vec<Vec<u64>>| {
-                let mut st = ui.data_mut(|d| d.get_temp::<State>(egui::Id::new("st")).unwrap_or_default());
+                let mut st = ui.data_mut(|d| d.get_temp::<State>(egui::Id::unique("st")).unwrap_or_default());
                 let t = Table { id: "procs", cols: cols(), key: Box::new(|p: &P| p.pid), group: None };
                 t.show(ui, &r, &mut st, |_, sel| seen.push(sel.iter().map(|p| p.pid).collect()));
-                ui.data_mut(|d| d.insert_temp(egui::Id::new("st"), st));
+                ui.data_mut(|d| d.insert_temp(egui::Id::unique("st"), st));
             },
             Vec::new(),
         );
@@ -803,6 +802,9 @@ mod tests {
         let r = rows();
         let mut h = Harness::builder().with_size(egui::vec2(800.0, 400.0)).build_ui_state(
             |ui, st: &mut State| {
+                if !crate::gui::a11y::themed(ui) {
+                    return;
+                }
                 let t = Table { id: "procs", cols: cols(), key: Box::new(|p: &P| p.pid), group: None };
                 t.show(ui, &r, st, |_, _| {});
             },

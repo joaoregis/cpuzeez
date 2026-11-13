@@ -1,6 +1,7 @@
 //! Graphics page.
 
 #[allow(unused_imports)]
+use crate::gui::widgets::Control;
 use crate::gui::*;
 
 impl App {
@@ -13,12 +14,15 @@ impl App {
         }
         self.gpu = self.gpu.min(gpus.len() - 1);
         ui.horizontal(|ui| {
-            ui.label(tr("Display Device Selection"));
-            egui::ComboBox::from_id_salt("gpu").selected_text(gpu_name(gpus[self.gpu].1)).show_ui(ui, |ui| {
-                for (i, (_, n)) in gpus.iter().enumerate() {
-                    ui.selectable_value(&mut self.gpu, i, gpu_name(n));
-                }
-            });
+            let l = ui.label(tr("Display Device Selection")).id;
+            egui::ComboBox::from_id_salt("gpu")
+                .selected_text(gpu_name(gpus[self.gpu].1))
+                .show_ui(ui, |ui| {
+                    for (i, (_, n)) in gpus.iter().enumerate() {
+                        ui.selectable_value(&mut self.gpu, i, gpu_name(n));
+                    }
+                })
+                .name_by(l);
         });
         let rows: Vec<(&str, String)> = report::fields(gpus[self.gpu].1).map(|(k, v)| (k, v.to_string())).collect();
         boxed(ui, "GPU", &rows);
