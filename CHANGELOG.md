@@ -7,6 +7,10 @@ generated from its section below.
 
 ## [Unreleased]
 
+## [1.1.0-beta.3] - 2026-11-13
+
+The third 1.1 beta (M4 of the [1.1 roadmap](docs/v1.1/ROADMAP.md)): code moves with no visible change. OS calls leave the app for the platform crate (61 fewer `unsafe` outside it) and the interface's main file is split by job. Nothing should look or behave differently; anything that does is a bug. **Known, as in beta.2:** the overlay stays at about 3 % of one core and its private memory grows about 1.5 MB per minute in a 30-minute test; that is the last item before 1.1.0.
+
 ### Changed
 
 - **Code:** the timers, firmware tables, TSC and add-chain clock, macOS CPU load and sysctl, Ctrl+C and file-path calls moved into the platform crate as safe functions; then the Windows sensors (PDH, battery), the macOS SMC, PCI enumeration and DXCore NPUs. 61 fewer `unsafe` outside it. Nothing looks different.
@@ -684,7 +688,8 @@ features.
 - GUI with CPU-Z's tabs.
 - Installers for Windows (MSI), macOS (DMG/PKG), Debian/Ubuntu (DEB) and Arch.
 
-[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.1.0-beta.2...HEAD
+[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.1.0-beta.3...HEAD
+[1.1.0-beta.3]: https://github.com/joaoregis/cpuzeez/compare/v1.1.0-beta.2...v1.1.0-beta.3
 [1.1.0-beta.2]: https://github.com/joaoregis/cpuzeez/compare/v1.1.0-beta.1...v1.1.0-beta.2
 [1.1.0-beta.1]: https://github.com/joaoregis/cpuzeez/compare/v1.0.2...v1.1.0-beta.1
 [1.0.2]: https://github.com/joaoregis/cpuzeez/compare/v1.0.1...v1.0.2
