@@ -1,6 +1,8 @@
 //! One file per page (S0-E04). Each adds methods to `App` or free page functions.
 
 mod about;
+pub(super) mod benchmarks;
+pub(super) mod common;
 mod graphics;
 mod mainboard;
 pub(crate) mod mainboard_more;
@@ -8,7 +10,8 @@ mod memory;
 pub(crate) mod memory_more;
 mod processor;
 pub(crate) mod processor_more;
-mod tools;
+mod settings;
+pub(super) mod tools;
 pub(crate) use mainboard::mainboard_tab;
 pub(crate) use memory::memory_tab;
 

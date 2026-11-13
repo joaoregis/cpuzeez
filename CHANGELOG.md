@@ -10,6 +10,7 @@ generated from its section below.
 ### Changed
 
 - **Code:** the timers, firmware tables, TSC and add-chain clock, macOS CPU load and sysctl, Ctrl+C and file-path calls moved into the platform crate as safe functions; then the Windows sensors (PDH, battery), the macOS SMC, PCI enumeration and DXCore NPUs. 61 fewer `unsafe` outside it. Nothing looks different.
+- **Code:** `gui/mod.rs` is split by job (page state, frame-loop chores, navigation, page helpers, translations, start-up), from 1618 lines to 386. Nothing looks different.
 
 ## [1.1.0-beta.2] - 2026-11-13
 

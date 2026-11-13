@@ -217,3 +217,62 @@ pub(crate) fn write_png(path: &std::path::Path, img: &egui::ColorImage) -> Resul
     enc.write_header()?.write_image_data(&data)?;
     Ok(())
 }
+
+pub(super) enum Shot {
+    Clipboard,
+    Bmp,
+    Png(std::path::PathBuf),
+}
+
+/// One `-screenshots` capture.
+#[derive(Clone, Copy)]
+pub(super) enum Step {
+    Page(Page),
+    Bench(BenchView),
+    Tool(ToolView),
+    System(system::SysTab),
+    /// ZeeZ Live › Bottleneck, on a recorded capture.
+    Bottleneck,
+    /// The About page in Brazilian Portuguese, to show the translations.
+    AboutPt,
+}
+
+pub(super) const SHOTS: [(&str, Step); 25] = [
+    ("overview", Step::Page(Page::Overview)),
+    ("processor", Step::Page(Page::Processor)),
+    ("mainboard", Step::Page(Page::Mainboard)),
+    ("memory", Step::Page(Page::Memory)),
+    ("graphics", Step::Page(Page::Graphics)),
+    ("devices", Step::Page(Page::Devices)),
+    ("sensors", Step::Page(Page::Sensors)),
+    ("bench", Step::Bench(BenchView::Cpu)),
+    ("membench", Step::Bench(BenchView::Memory)),
+    ("stress", Step::Bench(BenchView::Stress)),
+    ("history", Step::Bench(BenchView::History)),
+    ("compare", Step::Tool(ToolView::Compare)),
+    ("clocks", Step::Tool(ToolView::Clocks)),
+    ("system-processes", Step::System(system::SysTab::Processes)),
+    ("system-performance", Step::System(system::SysTab::Performance)),
+    ("system-history", Step::System(system::SysTab::AppHistory)),
+    ("system-startup", Step::System(system::SysTab::Startup)),
+    ("system-users", Step::System(system::SysTab::Users)),
+    ("system-services", Step::System(system::SysTab::Services)),
+    ("live", Step::Page(Page::Live)),
+    ("bottleneck", Step::Bottleneck),
+    ("settings", Step::Page(Page::Settings)),
+    ("about", Step::Page(Page::About)),
+    ("about-pt", Step::AboutPt),
+    ("overview-light", Step::Page(Page::Overview)),
+];
+
+/// `-screenshots=DIR`: visit every tab and tool window, save a PNG of each,
+/// then quit. Used for the README and by CI on every OS.
+pub(super) struct AutoShots {
+    pub(super) dir: std::path::PathBuf,
+    pub(super) step: usize,
+    pub(super) wait: u32,
+    pub(super) started: std::time::Instant,
+    /// Step whose one-time setup already ran, and when.
+    pub(super) prepared: Option<usize>,
+    pub(super) since: std::time::Instant,
+}

@@ -3,6 +3,15 @@
 #[allow(unused_imports)]
 use crate::gui::*;
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(in crate::gui) enum ToolView {
+    Compare,
+    Clocks,
+    Timers,
+    Reports,
+    Drives,
+}
+
 impl App {
     pub(crate) fn tools_page(&mut self, ui: &mut egui::Ui, r: &[Section]) {
         widgets::page_header(ui, tr("Tools"), "", |_| {});
