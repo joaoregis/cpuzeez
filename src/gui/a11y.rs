@@ -471,10 +471,10 @@ fn every_live_tab_holds_together_at_every_scale() {
 #[test]
 fn every_tools_tab_holds_together_at_every_scale() {
     use super::ToolView;
-    page_at_every_zoom(super::Page::Tools, |a| a.tool_view = ToolView::Clocks);
-    page_at_every_zoom(super::Page::Tools, |a| a.tool_view = ToolView::Timers);
-    page_at_every_zoom(super::Page::Tools, |a| a.tool_view = ToolView::Drives);
-    page_at_every_zoom(super::Page::Tools, |a| a.tool_view = ToolView::Reports);
+    page_at_every_zoom(super::Page::Tools, |a| a.tools.view = ToolView::Clocks);
+    page_at_every_zoom(super::Page::Tools, |a| a.tools.view = ToolView::Timers);
+    page_at_every_zoom(super::Page::Tools, |a| a.tools.view = ToolView::Drives);
+    page_at_every_zoom(super::Page::Tools, |a| a.tools.view = ToolView::Reports);
 }
 
 /// The Services inspector open on a service with long values, in the

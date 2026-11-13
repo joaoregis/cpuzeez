@@ -192,19 +192,19 @@ impl App {
             }));
         // Hybrid CPUs (P/E cores) only: elsewhere the column would be empty.
         if cores.iter().all(|r| r.kind.is_empty()) {
-            self.cores_table.hidden.insert("type".into());
+            self.processor.cores.hidden.insert("type".into());
         }
         // Columns with nothing to show here (no CPPC ranking, no C-state counters).
         if cores.iter().all(|r| r.cppc.is_none()) {
-            self.cores_table.hidden.insert("cppc".into());
+            self.processor.cores.hidden.insert("cppc".into());
         }
         if cores.iter().all(|r| r.cstates.is_empty()) {
-            self.cores_table.hidden.insert("cstates".into());
+            self.processor.cores.hidden.insert("cstates".into());
         }
         let h = (cores.len() as f32 + 3.0) * 30.0;
         widgets::card(ui, "", "", |ui| {
             ui.allocate_ui(egui::vec2(ui.available_width(), h.min(520.0)), |ui| {
-                table.show(ui, &cores, &mut self.cores_table, |_, _| {});
+                table.show(ui, &cores, &mut self.processor.cores, |_, _| {});
             });
         });
         ui.add_space(theme::GAP);

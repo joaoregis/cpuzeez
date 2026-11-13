@@ -139,7 +139,7 @@ impl App {
             let h = ((devs.len() as f32 + 3.0) * 30.0).min(420.0);
             widgets::card(ui, "", "", |ui| {
                 ui.allocate_ui(egui::vec2(ui.available_width(), h), |ui| {
-                    table.show(ui, &devs, &mut self.pcie_table, |_, _| {});
+                    table.show(ui, &devs, &mut self.mainboard.pcie, |_, _| {});
                 });
             });
             ui.add_space(theme::GAP);

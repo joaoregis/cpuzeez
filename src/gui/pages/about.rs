@@ -36,22 +36,22 @@ impl App {
             }
             if ui.button(tr("Clocks")).clicked() {
                 self.page = Page::Tools;
-                self.tool_view = ToolView::Clocks;
+                self.tools.view = ToolView::Clocks;
             }
             if ui.button(tr("Timers")).clicked() {
                 self.page = Page::Tools;
-                self.tool_view = ToolView::Timers;
+                self.tools.view = ToolView::Timers;
             }
         });
         ui.separator();
         ui.horizontal_wrapped(|ui| {
             ui.hyperlink_to(tr("Project page"), crate::REPO_URL);
             if ui.button(tr("Check for updates")).clicked() {
-                let slot = self.update_manual.clone();
+                let slot = self.updates.manual.clone();
                 *slot.lock().unwrap() = Some(tr("Checking...").into());
-                let found = self.update.clone();
+                let found = self.updates.release.clone();
                 let channel = self.mon.settings.channel();
-                self.update_dismissed = false;
+                self.updates.dismissed = false;
                 std::thread::spawn(move || {
                     let r = crate::update::check(channel);
                     // Translated when the check ends (the language can't change mid-check in practice).
@@ -63,7 +63,7 @@ impl App {
                     *slot.lock().unwrap() = Some(text);
                 });
             }
-            if let Some(t) = self.update_manual.lock().unwrap().as_deref() {
+            if let Some(t) = self.updates.manual.lock().unwrap().as_deref() {
                 ui.label(t);
             }
         });

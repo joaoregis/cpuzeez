@@ -45,10 +45,10 @@ impl App {
             }
             Step::Bench(v) => {
                 self.page = Page::Benchmarks;
-                self.bench_view = v;
+                self.benches.view = v;
                 match v {
-                    BenchView::Cpu => self.bench.autorun(&self.ctx),
-                    BenchView::Memory => self.bench.autorun_memory(&self.ctx),
+                    BenchView::Cpu => self.benches.cpu.autorun(&self.ctx),
+                    BenchView::Memory => self.benches.cpu.autorun_memory(&self.ctx),
                     BenchView::Latency | BenchView::Gpu | BenchView::Storage => true,
                     BenchView::Stress => {
                         if first && !self.mon.stress.running() {
@@ -59,8 +59,8 @@ impl App {
                     BenchView::History => {
                         if first {
                             // This session's results only: nothing from the user's history.json.
-                            self.history.preview(self.bench.session_entries(&self.ctx));
-                            self.history_dirty = false;
+                            self.benches.history.preview(self.benches.cpu.session_entries(&self.ctx));
+                            self.benches.history_dirty = false;
                         }
                         true
                     }
@@ -68,7 +68,7 @@ impl App {
             }
             Step::Tool(v) => {
                 self.page = Page::Tools;
-                self.tool_view = v;
+                self.tools.view = v;
                 if v == ToolView::Compare && first {
                     // Masked (serials, MAC/IP addresses and raw dumps removed)
                     // and into this run's own output dir — never a fixed name
@@ -85,11 +85,11 @@ impl App {
                     let masked = report.map(report::masked);
                     let path = dir.join(format!("{}-screenshot-report.json", crate::NAME));
                     let _ = std::fs::write(&path, masked.as_deref().map(report::to_json).unwrap_or_default());
-                    self.compare.current = true;
-                    self.compare.b = path.display().to_string();
-                    self.compare.run(masked.as_deref());
+                    self.tools.compare.current = true;
+                    self.tools.compare.b = path.display().to_string();
+                    self.tools.compare.run(masked.as_deref());
                     // Published image: no user name from the path.
-                    self.compare.b = path.file_name().map_or(String::new(), |n| n.to_string_lossy().into());
+                    self.tools.compare.b = path.file_name().map_or(String::new(), |n| n.to_string_lossy().into());
                 }
                 true
             }

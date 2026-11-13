@@ -14,24 +14,25 @@ impl App {
             ui.label(no_data(ui, "SPD", &self.ctx));
             return;
         }
-        self.slot = self.slot.min(dimms.len() - 1);
+        self.memory.slot = self.memory.slot.min(dimms.len() - 1);
         ui.horizontal(|ui| {
             let l = ui.label(tr("Memory Slot Selection")).id;
             egui::ComboBox::from_id_salt("slot")
-                .selected_text(trf("Slot #{}", &[&dimms[self.slot].0]))
+                .selected_text(trf("Slot #{}", &[&dimms[self.memory.slot].0]))
                 .show_ui(ui, |ui| {
                     for (i, (v, _)) in dimms.iter().enumerate() {
-                        ui.selectable_value(&mut self.slot, i, trf("Slot #{}", &[v]));
+                        ui.selectable_value(&mut self.memory.slot, i, trf("Slot #{}", &[v]));
                     }
                 })
                 .name_by(l);
         });
-        let rows: Vec<(&str, String)> = report::fields(dimms[self.slot].1).map(|(k, v)| (k, v.to_string())).collect();
+        let rows: Vec<(&str, String)> =
+            report::fields(dimms[self.memory.slot].1).map(|(k, v)| (k, v.to_string())).collect();
         boxed(ui, "Module", &rows);
         // CPU-Z style timings table for the selected module: one column per
         // JEDEC bin / XMP / EXPO profile.
         let mods = crate::spd::modules(&self.ctx);
-        let Some(m) = mods.get(self.slot) else { return };
+        let Some(m) = mods.get(self.memory.slot) else { return };
         let cols: Vec<(String, &crate::spd::decode::Timing)> = m
             .jedec
             .iter()
