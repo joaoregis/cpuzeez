@@ -8,7 +8,7 @@ impl App {
         widgets::page_header(ui, tr("Tools"), "", |_| {});
         widgets::segmented(
             ui,
-            &mut self.tool_view,
+            &mut self.tools.view,
             &[
                 (ToolView::Compare, icon::GIT_DIFF, tr("Compare reports")),
                 (ToolView::Clocks, icon::SPEEDOMETER, tr("Clocks")),
@@ -17,11 +17,11 @@ impl App {
                 (ToolView::Reports, icon::EXPORT, tr("Reports")),
             ],
         );
-        match self.tool_view {
-            ToolView::Compare => self.compare.page(ui, Some(r)),
+        match self.tools.view {
+            ToolView::Compare => self.tools.compare.page(ui, Some(r)),
             ToolView::Clocks => self.clocks_body(ui),
             ToolView::Timers => timers_body(ui, r),
-            ToolView::Drives => self.drivehealth.page(ui, &self.ctx, &mut self.mon),
+            ToolView::Drives => self.tools.drives.page(ui, &self.ctx, &mut self.mon),
             ToolView::Reports => {
                 widgets::card(ui, icon::FILE_TEXT, tr("Save a report"), |ui| {
                     ui.label(

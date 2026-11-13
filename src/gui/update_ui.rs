@@ -3,33 +3,47 @@
 #[allow(unused_imports)]
 use crate::gui::*;
 
+/// The update check's result, its banner and the installer.
+#[derive(Default)]
+pub(crate) struct Updates {
+    /// Newer release found by the background check (None = none / not yet).
+    pub release: Arc<Mutex<Option<Release>>>,
+    pub dismissed: bool,
+    pub installer: Option<Installer>,
+    /// About > Check for updates: Some(result text) once finished.
+    pub manual: Arc<Mutex<Option<String>>>,
+    /// The note after a failed update was dismissed.
+    pub failed_seen: bool,
+}
+
 impl App {
     pub(crate) fn update_banner(&mut self, ui: &mut egui::Ui) {
-        if self.installer.as_ref().is_some_and(|i| matches!(i.stage(), Stage::Quit)) {
+        if self.updates.installer.as_ref().is_some_and(|i| matches!(i.stage(), Stage::Quit)) {
             // The update helper waits for us: quit for real (not to the tray),
             // through on_exit, which stops PresentMon and the ETW session; a
             // bare process exit left them running and the installer blocked.
-            self.installer = None;
+            self.updates.installer = None;
             self.mon.quit(ui.ctx());
             return;
         }
         if let Some(&code) = crate::update::FAILED.get()
-            && !self.update_failed_seen
+            && !self.updates.failed_seen
         {
             egui::Panel::top("update-failed").show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     widgets::pill(ui, &failed_text(code), widgets::Tone::Danger);
                     if ui.small_button(icon::X).on_hover_text(tr("Dismiss")).clicked() {
-                        self.update_failed_seen = true;
+                        self.updates.failed_seen = true;
                     }
                 });
             });
         }
-        if self.update_dismissed {
+        if self.updates.dismissed {
             return;
         }
-        let Some(rel) = self.update.lock().unwrap().clone() else { return };
-        egui::Panel::top("update").show(ui, |ui| update_bar(ui, &rel, &mut self.installer, &mut self.update_dismissed));
+        let Some(rel) = self.updates.release.lock().unwrap().clone() else { return };
+        egui::Panel::top("update")
+            .show(ui, |ui| update_bar(ui, &rel, &mut self.updates.installer, &mut self.updates.dismissed));
     }
 }
 

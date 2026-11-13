@@ -204,30 +204,22 @@ struct App {
     /// The first-run privacy screen, until the user continues.
     welcome: Option<welcome::Welcome>,
     page: Page,
-    /// Reload history.json when the History view is opened.
-    history_dirty: bool,
-    /// Mini monitor whose editor is open in Settings, and its JSON import box.
-    mini_edit: Option<usize>,
-    mini_import: String,
-    bench_view: BenchView,
-    tool_view: ToolView,
-    core: usize,
-    slot: usize,
-    gpu: usize,
+    /// Settings: the mini monitor editor.
+    minis: settings_ui::Minis,
     status: String,
     shot: Option<Shot>,
     auto: Option<AutoShots>,
-    bench: bench_tab::State,
+    /// Each page's own state.
+    processor: pages::Processor,
+    mainboard: pages::Mainboard,
+    memory: pages::Memory,
+    graphics: pages::Graphics,
     devices: devices::State,
-    history: tools::History,
-    compare: tools::Compare,
-    /// Newer release found by the background check (None = none / not yet).
-    update: Arc<Mutex<Option<Release>>>,
-    update_dismissed: bool,
-    installer: Option<Installer>,
+    benches: pages::Benches,
+    tools: pages::Tools,
+    /// The update check, its banner and the installer.
+    updates: update_ui::Updates,
     logo: Option<egui::TextureHandle>,
-    /// About > Check for updates: Some(result text) once finished.
-    update_manual: Arc<Mutex<Option<String>>>,
     /// Last window title sent (● REC, MHz while minimized).
     title: String,
     /// Sensors page, stress monitor, tray and mini monitor (gui/sensors.rs).
@@ -236,23 +228,12 @@ struct App {
     /// Ctrl+K search (S1-U02).
     palette: palette::Palette,
     overview: overview::State,
-    /// Processor › Cores table (sort, columns).
-    cores_table: table::State,
-    pcie_table: table::State,
-    latency: latency_view::State,
-    cpusuite: cpusuite_view::State,
-    memplus: memplus_view::State,
-    drivehealth: drivehealth_view::State,
-    gpubench: gpubench_view::State,
-    diskbench: diskbench_view::State,
     system: system::State,
     live: live::State,
     /// This copy's single-instance slot (Windows); another launch asks through it.
     instance: Option<Arc<cpuzeez_platform::instance::Instance>>,
     /// Set by the listener when another launch asked to see this copy.
     show_asked: Arc<std::sync::atomic::AtomicBool>,
-    /// The note after a failed update was dismissed.
-    update_failed_seen: bool,
     #[cfg(feature = "soak")]
     soak: Option<soak::Tour>,
 }
@@ -271,43 +252,27 @@ impl App {
             access: Default::default(),
             welcome: None,
             page: Page::Overview,
-            history_dirty: true,
-            mini_edit: None,
-            mini_import: String::new(),
-            bench_view: BenchView::Cpu,
-            tool_view: ToolView::Compare,
-            core: 0,
-            slot: 0,
-            gpu: 0,
+            minis: Default::default(),
             status: String::new(),
             shot: None,
             auto: None,
-            bench: bench_tab::State::default(),
-            devices: devices::State::default(),
-            history: tools::History::default(),
-            compare: tools::Compare::default(),
-            update: Arc::new(Mutex::new(None)),
-            update_dismissed: false,
-            installer: None,
+            processor: Default::default(),
+            mainboard: Default::default(),
+            memory: Default::default(),
+            graphics: Default::default(),
+            devices: Default::default(),
+            benches: Default::default(),
+            tools: Default::default(),
+            updates: Default::default(),
             logo: None,
-            update_manual: Arc::new(Mutex::new(None)),
             title: String::new(),
             mon,
             palette: Default::default(),
             overview: Default::default(),
-            cores_table: Default::default(),
-            pcie_table: Default::default(),
-            latency: Default::default(),
-            cpusuite: Default::default(),
-            memplus: Default::default(),
-            drivehealth: Default::default(),
-            gpubench: Default::default(),
-            diskbench: Default::default(),
             system: Default::default(),
             live: Default::default(),
             instance,
             show_asked,
-            update_failed_seen: false,
             #[cfg(feature = "soak")]
             soak: None,
         }
@@ -505,7 +470,7 @@ impl eframe::App for App {
         }
         if std::mem::take(&mut self.mon.show_stress) {
             self.page = Page::Benchmarks;
-            self.bench_view = BenchView::Stress;
+            self.benches.view = BenchView::Stress;
         }
         let p = theme::palette(ui);
         egui::Panel::left("nav")
@@ -550,7 +515,7 @@ impl eframe::App for App {
         frame_log("all", "monitor", t0);
         if let Some(i) = self.mon.edit_mini.take() {
             self.page = Page::Settings;
-            self.mini_edit = Some(i);
+            self.minis.edit = Some(i);
         }
         self.take_screenshot(&ectx);
         self.auto_shots(&ectx, report.as_deref());
@@ -805,7 +770,7 @@ impl App {
                 );
                 widgets::segmented(
                     ui,
-                    &mut self.bench_view,
+                    &mut self.benches.view,
                     &[
                         (BenchView::Cpu, icon::CPU, tr("Processor")),
                         (BenchView::Memory, icon::MEMORY, tr("Memory")),
@@ -816,45 +781,45 @@ impl App {
                         (BenchView::History, icon::CLOCK_COUNTER_CLOCKWISE, tr("History")),
                     ],
                 );
-                match self.bench_view {
+                match self.benches.view {
                     BenchView::Cpu => {
-                        self.bench.cpu_page(ui, &self.ctx, &mut self.mon);
+                        self.benches.cpu.cpu_page(ui, &self.ctx, &mut self.mon);
                         ui.add_space(theme::GAP);
                         let t0 = benchkit_view::cpu_temp(&mut self.mon);
-                        self.cpusuite.page(ui, &self.ctx, t0);
+                        self.benches.cpusuite.page(ui, &self.ctx, t0);
                     }
                     BenchView::Memory => {
                         let t0 = benchkit_view::cpu_temp(&mut self.mon);
-                        self.bench.memory_page(ui, &self.ctx, t0);
+                        self.benches.cpu.memory_page(ui, &self.ctx, t0);
                         ui.add_space(theme::GAP);
-                        self.memplus.page(ui, &self.ctx, t0);
+                        self.benches.memplus.page(ui, &self.ctx, t0);
                     }
                     BenchView::Latency => {
                         let t0 = benchkit_view::cpu_temp(&mut self.mon);
-                        self.latency.page(ui, &self.ctx, t0)
+                        self.benches.latency.page(ui, &self.ctx, t0)
                     }
                     BenchView::Gpu => {
                         let t0 = benchkit_view::cpu_temp(&mut self.mon);
-                        self.gpubench.page(ui, &self.ctx, t0)
+                        self.benches.gpu.page(ui, &self.ctx, t0)
                     }
                     BenchView::Storage => {
                         let t0 = benchkit_view::cpu_temp(&mut self.mon);
-                        self.diskbench.page(ui, &self.ctx, t0)
+                        self.benches.disk.page(ui, &self.ctx, t0)
                     }
                     BenchView::Stress => {
                         let gpus = cache::gpu_adapters(&self.ctx).map(|g| g.to_vec()).unwrap_or_default();
                         stress::page(ui, &mut self.mon, true, &gpus)
                     }
                     BenchView::History => {
-                        if self.history_dirty {
-                            self.history.reload();
-                            self.history_dirty = false;
+                        if self.benches.history_dirty {
+                            self.benches.history.reload();
+                            self.benches.history_dirty = false;
                         }
-                        self.history.page(ui)
+                        self.benches.history.page(ui)
                     }
                 }
-                if self.bench_view != BenchView::History {
-                    self.history_dirty = true;
+                if self.benches.view != BenchView::History {
+                    self.benches.history_dirty = true;
                 }
             }
             Page::Tools => self.tools_page(ui, r),
@@ -874,7 +839,7 @@ impl App {
                 let tjmax = self.mon.tjmax();
                 let mut minis = self.mon.settings.minis.clone();
                 widgets::card(ui, icon::MONITOR, tr("Mini monitors"), |ui| {
-                    mini::settings_card(ui, &mut minis, &mut self.mini_edit, &mut self.mini_import, tjmax);
+                    mini::settings_card(ui, &mut minis, &mut self.minis.edit, &mut self.minis.import, tjmax);
                 });
                 if minis != self.mon.settings.minis {
                     let on = minis.iter().any(|m| m.open);
@@ -945,7 +910,7 @@ impl App {
     /// The update check, only when the user opted in and cpuzeez.ini allows it (P1).
     fn check_updates_if_allowed(&self) {
         if crate::update::startup_check_allowed(self.ctx.cfg.check_updates, self.mon.settings.update_check) {
-            let slot = self.update.clone();
+            let slot = self.updates.release.clone();
             let channel = self.mon.settings.channel();
             std::thread::spawn(move || *slot.lock().unwrap() = crate::update::check(channel));
         }

@@ -11,7 +11,7 @@ impl App {
         let (fam, model, step) = c.sig;
         let tel = self.mon.tel();
         tel.want("processor", &["cpu/clock"]);
-        let core_mhz = crate::telemetry::core_mhz(&tel.snapshot(), self.core);
+        let core_mhz = crate::telemetry::core_mhz(&tel.snapshot(), self.processor.core);
         let bus = crate::cpu::bus_mhz(c);
         boxed(
             ui,
@@ -38,7 +38,7 @@ impl App {
         ui.columns(2, |cols| {
             boxed(
                 &mut cols[0],
-                &trf("Clocks (Core #{})", &[&self.core]),
+                &trf("Clocks (Core #{})", &[&self.processor.core]),
                 &[
                     ("Core Speed", core_mhz.map(|m| units::clock(m, false, 2)).unwrap_or_else(|| pi("Core Speed"))),
                     ("Multiplier", core_mhz.zip(bus).map(|(m, b)| format!("x {:.1}", m / b)).unwrap_or_default()),
@@ -68,10 +68,10 @@ impl App {
             let l = ui.label(tr("Selection")).id;
             let n = c.cores.max(1);
             egui::ComboBox::from_id_salt("core")
-                .selected_text(trf("Core #{}", &[&self.core]))
+                .selected_text(trf("Core #{}", &[&self.processor.core]))
                 .show_ui(ui, |ui| {
                     for i in 0..n {
-                        ui.selectable_value(&mut self.core, i, trf("Core #{}", &[&i]));
+                        ui.selectable_value(&mut self.processor.core, i, trf("Core #{}", &[&i]));
                     }
                 })
                 .name_by(l);

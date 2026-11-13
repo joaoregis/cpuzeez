@@ -733,3 +733,10 @@ mod tests {
         h.get_by_label("Always on top");
     }
 }
+
+/// Settings: the mini monitor whose editor is open, and its JSON import box.
+#[derive(Default)]
+pub(super) struct Minis {
+    pub edit: Option<usize>,
+    pub import: String,
+}

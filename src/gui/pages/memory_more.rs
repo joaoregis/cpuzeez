@@ -276,7 +276,7 @@ impl App {
             });
             if go {
                 self.page = Page::Benchmarks;
-                self.bench_view = BenchView::Memory;
+                self.benches.view = BenchView::Memory;
             }
             ui.add_space(theme::GAP);
         }

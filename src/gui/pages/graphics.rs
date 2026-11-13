@@ -12,21 +12,22 @@ impl App {
             ui.label(no_data(ui, "graphics", &self.ctx));
             return;
         }
-        self.gpu = self.gpu.min(gpus.len() - 1);
+        self.graphics.gpu = self.graphics.gpu.min(gpus.len() - 1);
         ui.horizontal(|ui| {
             let l = ui.label(tr("Display Device Selection")).id;
             egui::ComboBox::from_id_salt("gpu")
-                .selected_text(gpu_name(gpus[self.gpu].1))
+                .selected_text(gpu_name(gpus[self.graphics.gpu].1))
                 .show_ui(ui, |ui| {
                     for (i, (_, n)) in gpus.iter().enumerate() {
-                        ui.selectable_value(&mut self.gpu, i, gpu_name(n));
+                        ui.selectable_value(&mut self.graphics.gpu, i, gpu_name(n));
                     }
                 })
                 .name_by(l);
         });
-        let rows: Vec<(&str, String)> = report::fields(gpus[self.gpu].1).map(|(k, v)| (k, v.to_string())).collect();
+        let rows: Vec<(&str, String)> =
+            report::fields(gpus[self.graphics.gpu].1).map(|(k, v)| (k, v.to_string())).collect();
         boxed(ui, "GPU", &rows);
-        for (_, perf) in report::groups(gpus[self.gpu].1, "Performance Level") {
+        for (_, perf) in report::groups(gpus[self.graphics.gpu].1, "Performance Level") {
             let rows: Vec<(&str, String)> = report::fields(perf).map(|(k, v)| (k, v.to_string())).collect();
             boxed(ui, "Clocks", &rows);
         }

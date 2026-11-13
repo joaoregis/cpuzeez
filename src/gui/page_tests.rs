@@ -138,7 +138,7 @@ fn tools_page() {
         h.get_by_label_contains(tab).click();
         h.run();
         h.run();
-        assert_eq!(h.state().tool_view, view, "the {tab} tab opens");
+        assert_eq!(h.state().tools.view, view, "the {tab} tab opens");
         named(&h, tab);
     }
     h.get_by_label_contains("Reports").click();
@@ -155,7 +155,11 @@ fn about_page() {
     h.get_by_label("Project page");
     h.get_by_label("Clocks").click();
     h.run();
-    assert_eq!((h.state().page, h.state().tool_view), (Page::Tools, ToolView::Clocks), "About links to Tools ▸ Clocks");
+    assert_eq!(
+        (h.state().page, h.state().tools.view),
+        (Page::Tools, ToolView::Clocks),
+        "About links to Tools ▸ Clocks"
+    );
 }
 
 #[test]
