@@ -107,8 +107,11 @@ impl App {
                     };
                     self.system.services.selected_name = Some(name.into());
                 }
-                // Let the sampler and the background queries (services, startup) answer.
-                !first && self.auto.as_ref().is_some_and(|a| a.since.elapsed() > Duration::from_secs(3))
+                // Let the sampler and the background queries (services, startup) answer;
+                // the service list can take longer on a busy runner.
+                let waited = self.auto.as_ref().map_or(Duration::ZERO, |a| a.since.elapsed());
+                let listed = tab != system::SysTab::Services || self.system.services.loaded();
+                !first && waited > Duration::from_secs(3) && (listed || waited > Duration::from_secs(15))
             }
             Step::Bottleneck => {
                 self.page = Page::Live;
@@ -160,19 +163,14 @@ impl App {
         a.wait = 0;
         a.step += 1;
         self.shot = Some(Shot::Png(a.dir.join(format!("{name}.png"))));
-        ectx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
+        request(ectx);
     }
 
     pub(crate) fn take_screenshot(&mut self, ectx: &egui::Context) {
         if self.shot.is_none() {
             return;
         }
-        let img = ectx.input(|i| {
-            i.raw.events.iter().find_map(|e| match e {
-                egui::Event::Screenshot { image, .. } => Some(image.clone()),
-                _ => None,
-            })
-        });
+        let img = ectx.data_mut(|d| d.remove_temp::<std::sync::Arc<egui::ColorImage>>(egui::Id::unique(SHOT)));
         let Some(img) = img else { return };
         match self.shot.take() {
             Some(Shot::Clipboard) => {
@@ -196,6 +194,18 @@ impl App {
             None => {}
         }
     }
+}
+
+const SHOT: &str = "screenshot";
+
+/// Asks for a screenshot of the next frame. egui 0.37 hands it to a callback
+/// after painting; it waits in the context's data for `take_screenshot`.
+pub(crate) fn request(ectx: &egui::Context) {
+    let c = ectx.clone();
+    ectx.request_screenshot(move |img| {
+        c.data_mut(|d| d.insert_temp(egui::Id::unique(SHOT), img));
+        c.request_repaint();
+    });
 }
 
 pub(crate) fn write_png(path: &std::path::Path, img: &egui::ColorImage) -> Result<(), Box<dyn std::error::Error>> {

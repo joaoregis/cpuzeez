@@ -6,6 +6,7 @@ use super::theme::{self, icon};
 use super::widgets;
 use crate::Ctx;
 use crate::diskbench::{Run, Score, TESTS};
+use crate::gui::widgets::Control;
 use eframe::egui::{self, RichText};
 use std::path::PathBuf;
 
@@ -125,16 +126,20 @@ impl State {
             ui.add_space(4.0);
             ui.add_enabled_ui(self.run.is_none(), |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(tr("Where"));
+                    let l = ui.label(tr("Where")).id;
                     let shown = places
                         .iter()
                         .find(|x| x.0 == self.dir)
                         .map_or_else(|| tr("App data folder").to_string(), |x| x.1.clone());
-                    egui::ComboBox::from_id_salt("disk-where").selected_text(shown).width(320.0).show_ui(ui, |ui| {
-                        for (path, label) in &places {
-                            ui.selectable_value(&mut self.dir, path.clone(), label);
-                        }
-                    });
+                    egui::ComboBox::from_id_salt("disk-where")
+                        .selected_text(shown)
+                        .width(320.0)
+                        .show_ui(ui, |ui| {
+                            for (path, label) in &places {
+                                ui.selectable_value(&mut self.dir, path.clone(), label);
+                            }
+                        })
+                        .name_by(l);
                     ui.label(tr("Test file"));
                     for (s, l) in SIZES {
                         ui.selectable_value(&mut self.size, s, l);

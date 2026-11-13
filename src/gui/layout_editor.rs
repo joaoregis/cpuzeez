@@ -5,6 +5,7 @@
 use super::i18n::tr;
 use super::layout_view::ALIASES;
 use super::theme::icon;
+use super::widgets::Control;
 use cpuzeez_core::layout::{Direction, Kind, Layout, Theme, Widget, presets};
 use eframe::egui;
 
@@ -37,6 +38,9 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("GPU only", "Só a GPU"),
     ("Label", "Rótulo"),
     ("Add reading", "Adicionar leitura"),
+    ("Shown as", "Exibir como"),
+    ("Device", "Dispositivo"),
+    ("Reading", "Leitura"),
     ("Copy as JSON", "Copiar como JSON"),
     ("Import JSON", "Importar JSON"),
     ("Paste a layout's JSON here", "Cole aqui o JSON de um layout"),
@@ -71,6 +75,9 @@ pub const ES: &[(&str, &str)] = &[
     ("GPU only", "Solo la GPU"),
     ("Label", "Etiqueta"),
     ("Add reading", "Añadir lectura"),
+    ("Shown as", "Mostrar como"),
+    ("Device", "Dispositivo"),
+    ("Reading", "Lectura"),
     ("Copy as JSON", "Copiar como JSON"),
     ("Import JSON", "Importar JSON"),
     ("Paste a layout's JSON here", "Pegue aquí el JSON de un diseño"),
@@ -115,22 +122,22 @@ pub fn editor(
             ui.selectable_value(&mut l.direction, d, tr(name));
         }
         if l.direction == Direction::Grid {
-            ui.label(tr("Columns"));
-            ui.add(egui::DragValue::new(&mut l.columns).range(1..=4));
+            let c = ui.label(tr("Columns")).id;
+            ui.add(egui::DragValue::new(&mut l.columns).range(1..=4)).name_by(c);
         }
     });
     let st = &mut l.style;
     ui.horizontal_wrapped(|ui| {
-        ui.label(tr("Text size"));
-        ui.add(egui::Slider::new(&mut st.scale, 0.6..=4.0).fixed_decimals(1));
-        ui.label(tr("Background"));
-        ui.add(egui::Slider::new(&mut st.opacity, 0.0..=1.0).fixed_decimals(2));
+        let l = ui.label(tr("Text size")).id;
+        ui.add(egui::Slider::new(&mut st.scale, 0.6..=4.0).fixed_decimals(1)).name_by(l);
+        let l = ui.label(tr("Background")).id;
+        ui.add(egui::Slider::new(&mut st.opacity, 0.0..=1.0).fixed_decimals(2)).name_by(l);
     });
     ui.horizontal_wrapped(|ui| {
-        ui.label(tr("Corners"));
-        ui.add(egui::DragValue::new(&mut st.corner).range(0..=24));
-        ui.label(tr("Padding"));
-        ui.add(egui::DragValue::new(&mut st.padding).range(0..=24));
+        let l = ui.label(tr("Corners")).id;
+        ui.add(egui::DragValue::new(&mut st.corner).range(0..=24)).name_by(l);
+        let l = ui.label(tr("Padding")).id;
+        ui.add(egui::DragValue::new(&mut st.padding).range(0..=24)).name_by(l);
         ui.checkbox(&mut st.outline, tr("Outline"));
         ui.label(tr("Theme"));
         for (t, name) in [(Theme::Follow, "Follow the app"), (Theme::Dark, "Dark"), (Theme::Light, "Light")] {
@@ -143,18 +150,24 @@ pub fn editor(
     for (i, w) in l.widgets.iter_mut().enumerate() {
         ui.horizontal_wrapped(|ui| {
             let kind = KINDS.iter().find(|k| k.0 == w.kind).map_or("", |k| k.1);
-            egui::ComboBox::from_id_salt((salt, "kind", i)).selected_text(tr(kind)).width(110.0).show_ui(ui, |ui| {
-                for (k, name) in KINDS {
-                    ui.selectable_value(&mut w.kind, k, tr(name));
-                }
-            });
+            egui::ComboBox::from_id_salt((salt, "kind", i))
+                .selected_text(tr(kind))
+                .width(110.0)
+                .show_ui(ui, |ui| {
+                    for (k, name) in KINDS {
+                        ui.selectable_value(&mut w.kind, k, tr(name));
+                    }
+                })
+                .response
+                .accessible_name(tr("Shown as"));
             if w.kind == Kind::Throttle {
                 // Which device to watch; the metric is only a filter here.
                 let m = w.metric.clone().unwrap_or_default();
                 let shown = THROTTLE_DEVICES.iter().find(|a| a.0 == m).map_or(THROTTLE_DEVICES[0].1, |a| a.1);
-                egui::ComboBox::from_id_salt((salt, "throttle", i)).selected_text(tr(shown)).width(220.0).show_ui(
-                    ui,
-                    |ui| {
+                egui::ComboBox::from_id_salt((salt, "throttle", i))
+                    .selected_text(tr(shown))
+                    .width(220.0)
+                    .show_ui(ui, |ui| {
                         for (alias, what) in THROTTLE_DEVICES {
                             ui.selectable_value(
                                 &mut w.metric,
@@ -162,16 +175,22 @@ pub fn editor(
                                 tr(what),
                             );
                         }
-                    },
-                );
+                    })
+                    .response
+                    .accessible_name(tr("Device"));
             } else if !matches!(w.kind, Kind::Header | Kind::Separator | Kind::Clock) {
                 let m = w.metric.clone().unwrap_or_default();
                 let shown = ALIASES.iter().find(|a| a.0 == m).map_or(m.clone(), |a| tr(a.1).to_string());
-                egui::ComboBox::from_id_salt((salt, "metric", i)).selected_text(shown).width(220.0).show_ui(ui, |ui| {
-                    for (alias, what) in ALIASES {
-                        ui.selectable_value(&mut w.metric, Some(alias.to_string()), tr(what));
-                    }
-                });
+                egui::ComboBox::from_id_salt((salt, "metric", i))
+                    .selected_text(shown)
+                    .width(220.0)
+                    .show_ui(ui, |ui| {
+                        for (alias, what) in ALIASES {
+                            ui.selectable_value(&mut w.metric, Some(alias.to_string()), tr(what));
+                        }
+                    })
+                    .response
+                    .accessible_name(tr("Reading"));
             }
             if w.kind != Kind::Separator {
                 let mut label = w.label.clone().unwrap_or_default();

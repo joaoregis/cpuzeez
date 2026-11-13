@@ -88,6 +88,33 @@ def analyze(samples, minutes, max_cpu=None, max_mem_mb=None):
     return problems, sm
 
 
+def thread_cpu_pct(samples, top=10):
+    """Mean CPU per thread, % of one core, from the samples that carry
+    `thread_cpu` ({tid: (name, cpu_s)}, Windows only). A thread counts from
+    the first sample it appears in, so one that dies between samples loses
+    its last stretch (ponytail: sampling at 60 s, fine for threads that live
+    for the whole run, which is what the table is for)."""
+    first, last = {}, {}
+    t0 = t1 = None
+    for s in samples:
+        tc = s.get("thread_cpu")
+        if not tc:
+            continue
+        t0 = s["minute"] if t0 is None else t0
+        t1 = s["minute"]
+        for tid, (name, cpu) in tc.items():
+            first.setdefault(tid, (name, cpu, s["minute"]))
+            last[tid] = cpu
+    if t0 is None or t1 <= t0:
+        return {}
+    out = {}
+    for tid, (name, cpu, at) in first.items():
+        span = (t1 - at) * 60
+        if span > 0:
+            out[f"{name or 'unnamed'} ({tid})"] = round((last[tid] - cpu) / span * 100, 2)
+    return dict(sorted(out.items(), key=lambda kv: -kv[1])[:top])
+
+
 def selftest():
     def series(f, minutes=240, step=1):
         return [dict(minute=m, **f(m)) for m in range(0, minutes + 1, step)]
@@ -115,6 +142,11 @@ def selftest():
     assert t["overlay_frame_ms_first_quarter"] < t["overlay_frame_ms_last_quarter"], t
     assert abs(t["overlay_frame_ms_per_hour"] - 0.6) < 1e-6, t
     assert frame_trend(["soak-frame overlay_ms=1 frames=1"]) == {}, "too few minutes: no trend"
+    ts = [dict(minute=m, thread_cpu={1: ("ui", m * 0.72), 2: ("", m * 0.36)}) for m in range(0, 31)]
+    tp = thread_cpu_pct(ts)
+    assert abs(tp["ui (1)"] - 1.2) < 0.01 and abs(tp["unnamed (2)"] - 0.6) < 0.01, tp
+    assert list(tp)[0] == "ui (1)", "busiest thread first"
+    assert thread_cpu_pct([dict(minute=1)]) == {}, "no per-thread data (not Windows): nothing"
     print("soak selftest: ok")
 
 
@@ -151,6 +183,30 @@ def _windows_sampler():
     k32.GetProcessTimes.argtypes = [w.HANDLE] + [ctypes.POINTER(FT)] * 4
     psapi.GetProcessMemoryInfo.argtypes = [w.HANDLE, ctypes.POINTER(MEM), w.DWORD]
     k32.CloseHandle.argtypes = [w.HANDLE]
+    k32.OpenThread.restype = w.HANDLE
+    k32.OpenThread.argtypes = [w.DWORD, w.BOOL, w.DWORD]
+    k32.GetThreadTimes.argtypes = [w.HANDLE] + [ctypes.POINTER(FT)] * 4
+    k32.GetThreadDescription.argtypes = [w.HANDLE, ctypes.POINTER(ctypes.c_void_p)]
+    k32.LocalFree.argtypes = [ctypes.c_void_p]
+
+    def thread_cpu(tid):
+        """(name, cpu seconds) of one thread, or None if it is gone or closed to us."""
+        h = k32.OpenThread(0x800, False, tid)  # THREAD_QUERY_LIMITED_INFORMATION
+        if not h:
+            return None
+        try:
+            c, e, kt, ut = FT(), FT(), FT(), FT()
+            if not k32.GetThreadTimes(h, *map(ctypes.byref, (c, e, kt, ut))):
+                return None
+            name = ctypes.c_void_p()
+            if k32.GetThreadDescription(h, ctypes.byref(name)) >= 0 and name.value:
+                label = ctypes.wstring_at(name.value)
+                k32.LocalFree(name)
+            else:
+                label = ""
+            return label, sum((x.hi << 32 | x.lo) for x in (kt, ut)) / 1e7
+        finally:
+            k32.CloseHandle(h)
 
     def sample(pid):
         h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
@@ -168,15 +224,20 @@ def _windows_sampler():
         finally:
             k32.CloseHandle(h)
         snap = k32.CreateToolhelp32Snapshot(4, 0)  # TH32CS_SNAPTHREAD
-        threads = 0
+        threads, per_thread = 0, {}
         t = TH()
         t.dwSize = ctypes.sizeof(t)
         ok = k32.Thread32First(snap, ctypes.byref(t))
         while ok:
-            threads += t.th32OwnerProcessID == pid
+            if t.th32OwnerProcessID == pid:
+                threads += 1
+                got = thread_cpu(t.th32ThreadID)
+                if got:
+                    per_thread[t.th32ThreadID] = got
             ok = k32.Thread32Next(snap, ctypes.byref(t))
         k32.CloseHandle(snap)
-        return dict(private_mb=m.PrivateUsage / 1048576, ws_mb=m.WorkingSetSize / 1048576, handles=hc.value, threads=threads, cpu_s=cpu_s)
+        return dict(private_mb=m.PrivateUsage / 1048576, ws_mb=m.WorkingSetSize / 1048576, handles=hc.value, threads=threads, cpu_s=cpu_s,
+                    thread_cpu=per_thread)
 
     return sample
 
@@ -270,7 +331,8 @@ def frame_trend(log_lines):
 
 def report(path, mode, minutes, problems, sm, extra):
     lines = [f"# Soak: {mode}, {minutes} min", "", f"Result: **{'FAILED' if problems else 'ok'}**", ""]
-    lines += [f"- {k}: {v}" for k, v in {**sm, **extra}.items()]
+    for k, v in {**sm, **extra}.items():
+        lines += [f"- {k}:"] + [f"  - {n}: {x} %" for n, x in v.items()] if isinstance(v, dict) else [f"- {k}: {v}"]
     lines += [""] + [f"- PROBLEM: {p}" for p in problems]
     text = "\n".join(lines) + "\n"
     print(text)
@@ -336,7 +398,9 @@ def run_gui(exe, minutes, interval, out, max_cpu, max_mem, overlay_only=False):
         problems.append("app history recorded nothing")
     log.close()
     trend = frame_trend(open(os.path.join(root, "stderr.log"), errors="replace").read().splitlines())
-    report(out, "overlay" if overlay_only else "gui", minutes, problems, sm, {"captures_recorded": sessions, "history_rows": rows, **trend})
+    per_thread = thread_cpu_pct(samples)
+    report(out, "overlay" if overlay_only else "gui", minutes, problems, sm,
+           {"captures_recorded": sessions, "history_rows": rows, **trend, **({"thread_cpu_pct": per_thread} if per_thread else {})})
     if problems and os.path.exists(os.path.join(root, "stderr.log")):
         print("--- last log lines ---")
         print("".join(open(os.path.join(root, "stderr.log")).readlines()[-15:]))

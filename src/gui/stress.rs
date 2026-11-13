@@ -12,6 +12,7 @@ use super::theme::{self, icon};
 use super::widgets::{self, Tone};
 use crate::bench::{Load, StressHandle};
 use crate::benchkit::Job;
+use crate::gui::widgets::Control;
 use crate::memtest::MemTest;
 use crate::telemetry::{Series, ThrottleKind, Unit};
 use eframe::egui::{self, CornerRadius, Margin, RichText, Stroke};
@@ -333,9 +334,9 @@ pub fn page(ui: &mut egui::Ui, mon: &mut Monitor, controls: bool, gpus: &[String
         parts(ui, mon, gpus, running);
     }
     ui.horizontal_wrapped(|ui| {
-        ui.checkbox(&mut mon.stress.auto_stop, tr("Stop at"));
+        let c = ui.checkbox(&mut mon.stress.auto_stop, tr("Stop at")).id;
         let mut l = limit;
-        if ui.add(egui::DragValue::new(&mut l).range(50.0..=115.0).suffix(" °C")).changed() {
+        if ui.add(egui::DragValue::new(&mut l).range(50.0..=115.0).suffix(" °C")).labelled_by(c).changed() {
             mon.stress.limit = Some(l);
         }
         if let Some(last) = &mon.stress.last {
@@ -455,8 +456,8 @@ fn parts(ui: &mut egui::Ui, mon: &mut Monitor, gpus: &[String], running: bool) {
         ui.horizontal_wrapped(|ui| {
             ui.checkbox(&mut st.cpu_on, tr("CPU"));
             let max = crate::os::logical_cpus();
-            ui.add(egui::DragValue::new(&mut st.threads).range(1..=max));
-            ui.label(tr("Threads"));
+            let d = ui.add(egui::DragValue::new(&mut st.threads).range(1..=max));
+            d.name_by(ui.label(tr("Threads")).id);
             for (l, name) in [(Load::Light, "Light"), (Load::Heavy, "Heavy"), (Load::Mixed, "Mixed")] {
                 ui.selectable_value(&mut st.load, l, tr(name));
             }

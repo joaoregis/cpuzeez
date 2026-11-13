@@ -55,13 +55,32 @@ The CPU figure is the main window touring every page, which is heavier than the 
 
 Where it goes (per-thread CPU over 30 s): the interface thread about 1–1.9 %, two worker threads about 1 % each. With the overlay up, eframe keeps running the main window's interface while it is minimised (the overlay is its child viewport); not building the hidden page was tried and saved little (≈ 3 % instead of 3.5 %), so it was left out. 1.0.0 ships with this number; reaching 2 % is a 1.1.0 goal ([plan, item 9](v1.1/README.md#9-overlay-cpu-down-to-the-2--goal)).
 
+## The overlay alone, per thread (M3-03)
+
+2026-11-13, Windows 11, `soak.py --gui --overlay-only … 30 --interval 30`, the same machine and settings for both builds; the new report lists the busiest threads as a share of one core. `main` is the interface thread (the overlay is its child viewport); `metrics-*` are the sampler's workers.
+
+| Thread | egui 0.36 (`main`, `706b541`) | egui 0.37 (M3-02) |
+|---|---|---|
+| `main` (interface) | 1.46 % | 0.99 % |
+| `cz-procs` | 0.71 % | 0.72 % |
+| `metrics-memory` | 0.46 % | 0.44 % |
+| unnamed worker | 0.31 % | 0.38 % |
+| `metrics-gpu`, `metrics-gpu-engines` | 0.15 %, 0.14 % | 0.13 %, 0.13 % |
+| `metrics-frames`, `cz-soak-frames` | 0.08 %, 0.03 % | 0.07 %, 0.03 % |
+| **Whole process, mean / p95** | **3.62 % / 5.41 %** | **3.16 % / 4.16 %** |
+| Private memory, first → last | 142.8 → 176.9 MB | 155.2 → 189.0 MB |
+
+- The bump to 0.37 does not cost CPU. The interface thread is the largest share in both, and the three workers that sample memory, processes and the GPU come next; the 2 % goal is not met by either.
+- **Memory is not flat, on either version.** Private memory grows about 1.5 MB/min (≈ 90 MB/h) from minute 8 to the end, with handles and threads steady, and peaks over the 150 MB budget. The 2026-11-09 run of 1.0.0 on the same machine stayed at 118 → 120 MB. So the growth came in after 1.0.0 and is not from egui 0.37. Not yet bisected; M3-05 cannot pass until it is.
+- The per-thread numbers are means over the run, from samples every 30 s: a thread that lives for the whole run is measured well, one that ends early loses its last stretch.
+
 ## Not measured yet
 
 - **Repeating the overlay run** after work on the 2 % budget:
 
   ```bash
   cargo build --release --features soak --target-dir target/soak
-  python .github/scripts/soak.py --gui --overlay-only target/soak/release/cpuzeez.exe 30 --report soak.md --max-cpu 2 --max-mem-mb 150
+  python .github/scripts/soak.py --gui --overlay-only target/soak/release/cpuzeez.exe 30 --interval 30 --report soak.md --max-cpu 2 --max-mem-mb 150
   ```
 
   The report lists CPU, memory, handles and threads, and fails above the budgets.

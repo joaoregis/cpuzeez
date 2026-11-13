@@ -27,8 +27,8 @@ pub const PT_BR: &[(&str, &str)] = &[
     ("Turned off in cpuzeez.ini (CheckUpdates=0).", "Desativado no cpuzeez.ini (CheckUpdates=0)."),
     ("Nothing is recorded until you start it", "Nada é gravado até você iniciar"),
     (
-        "Sensor logs, benchmark history and, later, game sessions are only saved when you ask. While something records, ● REC shows in the window title and the sidebar.",
-        "Logs de sensores, histórico de benchmarks e, no futuro, sessões de jogo só são salvos quando você pede. Enquanto algo grava, ● REC aparece no título da janela e na barra lateral.",
+        "Sensor logs, benchmark history and, later, game sessions are only saved when you ask. While something records, REC shows in the window title and the sidebar.",
+        "Logs de sensores, histórico de benchmarks e, no futuro, sessões de jogo só são salvos quando você pede. Enquanto algo grava, REC aparece no título da janela e na barra lateral.",
     ),
     ("Permissions", "Permissões"),
     (
@@ -55,8 +55,8 @@ pub const ES: &[(&str, &str)] = &[
     ("Turned off in cpuzeez.ini (CheckUpdates=0).", "Desactivado en cpuzeez.ini (CheckUpdates=0)."),
     ("Nothing is recorded until you start it", "No se graba nada hasta que lo inicies"),
     (
-        "Sensor logs, benchmark history and, later, game sessions are only saved when you ask. While something records, ● REC shows in the window title and the sidebar.",
-        "Los registros de sensores, el historial de pruebas y, más adelante, las sesiones de juego solo se guardan cuando lo pides. Mientras algo graba, ● REC aparece en el título de la ventana y en la barra lateral.",
+        "Sensor logs, benchmark history and, later, game sessions are only saved when you ask. While something records, REC shows in the window title and the sidebar.",
+        "Los registros de sensores, el historial de pruebas y, más adelante, las sesiones de juego solo se guardan cuando lo pides. Mientras algo graba, REC aparece en el título de la ventana y en la barra lateral.",
     ),
     ("Permissions", "Permisos"),
     (
@@ -95,7 +95,7 @@ pub fn page(ui: &mut egui::Ui, w: &mut Welcome, updates_allowed: bool) -> Option
         });
         ui.add_space(theme::GAP);
         widgets::card(ui, icon::RECORD, tr("Nothing is recorded until you start it"), |ui| {
-            text(ui, "Sensor logs, benchmark history and, later, game sessions are only saved when you ask. While something records, ● REC shows in the window title and the sidebar.");
+            text(ui, "Sensor logs, benchmark history and, later, game sessions are only saved when you ask. While something records, REC shows in the window title and the sidebar.");
         });
         ui.add_space(theme::GAP);
         widgets::card(ui, icon::SHIELD_CHECK, tr("Permissions"), |ui| {

@@ -29,16 +29,16 @@ pub const ES: &[(&str, &str)] = &[
 ];
 
 fn card_id() -> egui::Id {
-    egui::Id::new("cz-card-title")
+    egui::Id::unique("cz-card-title")
 }
 fn requests_id() -> egui::Id {
-    egui::Id::new("cz-pin-requests")
+    egui::Id::unique("cz-pin-requests")
 }
 fn cache_id() -> egui::Id {
-    egui::Id::new("cz-pin-values")
+    egui::Id::unique("cz-pin-values")
 }
 fn pinned_id() -> egui::Id {
-    egui::Id::new("cz-pinned-keys")
+    egui::Id::unique("cz-pinned-keys")
 }
 
 /// The card being drawn (set by `widgets::card` around its body).

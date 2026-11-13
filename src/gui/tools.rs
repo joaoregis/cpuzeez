@@ -5,6 +5,7 @@ use super::i18n::{tr, trf};
 use super::theme::{self, Palette, icon};
 use super::widgets;
 use crate::diff::{Change, ChangeKind};
+use crate::gui::widgets::Control;
 use crate::history::{self, Entry};
 use crate::report::Section;
 use eframe::egui::{self, Color32, Pos2, RichText, Stroke};
@@ -278,13 +279,17 @@ impl History {
                 reload = ui.button(format!("{} {}", icon::ARROW_CLOCKWISE, tr("Reload"))).clicked();
             }
             let label = self.kind.as_deref().map_or(tr("All"), tr).to_string();
-            egui::ComboBox::from_id_salt("hist-kind").selected_text(label).show_ui(ui, |ui| {
-                ui.selectable_value(&mut self.kind, None, tr("All"));
-                for k in self.kinds() {
-                    let t = tr(&k).to_string();
-                    ui.selectable_value(&mut self.kind, Some(k), t);
-                }
-            });
+            egui::ComboBox::from_id_salt("hist-kind")
+                .selected_text(label)
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.kind, None, tr("All"));
+                    for k in self.kinds() {
+                        let t = tr(&k).to_string();
+                        ui.selectable_value(&mut self.kind, Some(k), t);
+                    }
+                })
+                .response
+                .accessible_name(tr("Kind"));
             ui.label(tr("Kind"));
         });
         if reload {
@@ -333,7 +338,7 @@ impl History {
                     }
                     ui.label(short_date(&e.when));
                     let buf = self.labels.entry(*idx).or_insert_with(|| e.label.clone());
-                    let r = ui.add_sized([120.0, 22.0], egui::TextEdit::singleline(buf));
+                    let r = ui.add_sized([120.0, 22.0], egui::TextEdit::singleline(buf)).accessible_name(tr("Label"));
                     if r.lost_focus() && *buf != e.label {
                         relabel = Some((i, buf.clone()));
                     }
@@ -558,15 +563,15 @@ impl Compare {
         widgets::card(ui, icon::FILES, "", |ui| {
             ui.checkbox(&mut self.current, tr("Compare the current system with a file"));
             egui::Grid::new("cmp-paths").num_columns(2).spacing([8.0, 6.0]).show(ui, |ui| {
-                ui.label(tr("Old report (A)"));
+                let l = ui.label(tr("Old report (A)")).id;
                 if self.current {
                     ui.label(RichText::new(tr("Current system")).italics());
                 } else {
-                    ui.add(egui::TextEdit::singleline(&mut self.a).desired_width(f32::INFINITY));
+                    ui.add(egui::TextEdit::singleline(&mut self.a).desired_width(f32::INFINITY)).name_by(l);
                 }
                 ui.end_row();
-                ui.label(tr("New report (B)"));
-                ui.add(egui::TextEdit::singleline(&mut self.b).desired_width(f32::INFINITY));
+                let l = ui.label(tr("New report (B)")).id;
+                ui.add(egui::TextEdit::singleline(&mut self.b).desired_width(f32::INFINITY)).name_by(l);
                 ui.end_row();
             });
             ui.checkbox(&mut self.volatile, tr("Include live values (clocks, temperatures, voltages…)"));

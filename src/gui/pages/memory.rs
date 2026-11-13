@@ -1,6 +1,7 @@
 //! Memory page (SPD + memory controller).
 
 #[allow(unused_imports)]
+use crate::gui::widgets::Control;
 use crate::gui::*;
 
 impl App {
@@ -15,15 +16,15 @@ impl App {
         }
         self.slot = self.slot.min(dimms.len() - 1);
         ui.horizontal(|ui| {
-            ui.label(tr("Memory Slot Selection"));
-            egui::ComboBox::from_id_salt("slot").selected_text(trf("Slot #{}", &[&dimms[self.slot].0])).show_ui(
-                ui,
-                |ui| {
+            let l = ui.label(tr("Memory Slot Selection")).id;
+            egui::ComboBox::from_id_salt("slot")
+                .selected_text(trf("Slot #{}", &[&dimms[self.slot].0]))
+                .show_ui(ui, |ui| {
                     for (i, (v, _)) in dimms.iter().enumerate() {
                         ui.selectable_value(&mut self.slot, i, trf("Slot #{}", &[v]));
                     }
-                },
-            );
+                })
+                .name_by(l);
         });
         let rows: Vec<(&str, String)> = report::fields(dimms[self.slot].1).map(|(k, v)| (k, v.to_string())).collect();
         boxed(ui, "Module", &rows);
