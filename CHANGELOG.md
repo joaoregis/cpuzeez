@@ -7,6 +7,10 @@ generated from its section below.
 
 ## [Unreleased]
 
+## [1.1.0-beta.2] - 2026-11-13
+
+The second 1.1 beta (M3 of the [1.1 roadmap](docs/v1.1/ROADMAP.md)): the interface moves to egui 0.37, which touches every page, so look at spacing and icons. Nothing was done about the overlay's CPU: it stays at about 3 % of one core in a 30-minute test, over the 2 % goal. **Known:** in that same test the overlay's private memory grows about 1.5 MB per minute; it is on this version and the one before it, and the cause is not found.
+
 ### Changed
 
 - **CI:** a ratchet on `unsafe` outside `crates/platform` (`.github/scripts/unsafe_ratchet.py`): a new `unsafe` block, or more in a file, fails the build until it moves to `platform`.
@@ -675,7 +679,8 @@ features.
 - GUI with CPU-Z's tabs.
 - Installers for Windows (MSI), macOS (DMG/PKG), Debian/Ubuntu (DEB) and Arch.
 
-[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.1.0-beta.1...HEAD
+[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.1.0-beta.2...HEAD
+[1.1.0-beta.2]: https://github.com/joaoregis/cpuzeez/compare/v1.1.0-beta.1...v1.1.0-beta.2
 [1.1.0-beta.1]: https://github.com/joaoregis/cpuzeez/compare/v1.0.2...v1.1.0-beta.1
 [1.0.2]: https://github.com/joaoregis/cpuzeez/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/joaoregis/cpuzeez/compare/v1.0.0...v1.0.1
