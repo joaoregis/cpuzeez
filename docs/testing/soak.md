@@ -41,6 +41,8 @@ The `soak` feature is in no release. It also needs `CPUZEEZ_SOAK=1`, which the s
 
 The report (`--report`) lists the numbers and the verdict, and the script exits non-zero on any failure.
 
+**Per-thread CPU (Windows).** The report also lists the busiest threads as a share of one core (`thread_cpu_pct`), named when the app named the thread (`cz-…`) and `unnamed (tid)` otherwise. It is reported, not judged: it is what the 2 % work (M3-03 to M3-05) is measured against. A thread counts from the first sample it appears in.
+
 ## Checking the analysis itself
 
 ```bash

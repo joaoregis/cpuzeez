@@ -48,9 +48,9 @@
     "semantic_hash": "d383254af63eead6545e55212e0cfee5"
   },
   ".github/scripts/soak.py": {
-    "mtime": 1794496845.3698933,
-    "seen": 1794496966.599838,
-    "ast_hash": "7faeccf9f16e6c3c9877fb1eb545ef37",
+    "mtime": 1794578786.007175,
+    "seen": 1794582899.8931136,
+    "ast_hash": "329cfb439802b156781b8657ac53a31d",
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
@@ -1086,9 +1086,9 @@
     "semantic_hash": ""
   },
   "src/gui/shots.rs": {
-    "mtime": 1794507773.2115304,
-    "seen": 1794508526.1078186,
-    "ast_hash": "4c008d6e9fa380d668d2c7bd978debc7",
+    "mtime": 1794508841.3175898,
+    "seen": 1794508923.6857994,
+    "ast_hash": "cb4bcf9d55f70653c44162f45d944264",
     "semantic_hash": ""
   },
   "src/gui/soak.rs": {
@@ -1122,9 +1122,9 @@
     "semantic_hash": "99e5b7520957b633f3205e7e6761105e"
   },
   "src/gui/system_services.rs": {
-    "mtime": 1794508042.2776802,
-    "seen": 1794508526.107826,
-    "ast_hash": "4b5e1fb85b7783eeb5b03096a93046e6",
+    "mtime": 1794508841.3164713,
+    "seen": 1794508923.6858084,
+    "ast_hash": "08c208d1ec9bc756f2c1e9e29a458e1a",
     "semantic_hash": ""
   },
   "src/gui/system_startup.rs": {
@@ -1404,9 +1404,9 @@
     "semantic_hash": "54308fe455dd423c7c4bf63850af3527"
   },
   "CHANGELOG.md": {
-    "mtime": 1794508516.491405,
-    "seen": 1794508526.1078775,
-    "ast_hash": "26929461171308e8f69cd71b8f28ffa7",
+    "mtime": 1794582882.7297263,
+    "seen": 1794582899.8933797,
+    "ast_hash": "2923b8a1f7dd5c86d04090f18ab35194",
     "semantic_hash": ""
   },
   "FEATURES.md": {
@@ -1572,10 +1572,10 @@
     "semantic_hash": "b91cb2329e3c4d1b070d912d72cd2019"
   },
   "docs/performance.md": {
-    "mtime": 1794232498.815898,
-    "seen": 1794489545.8789346,
-    "ast_hash": "fe5bd5301b737d1b0c3fa4f89af784fd",
-    "semantic_hash": "fe5bd5301b737d1b0c3fa4f89af784fd"
+    "mtime": 1794582872.8164258,
+    "seen": 1794582899.8934164,
+    "ast_hash": "3d4b69f17bed3060020b8d78f86b67a0",
+    "semantic_hash": ""
   },
   "docs/security/review-2026-11-09.md": {
     "mtime": 1794321215.630711,
@@ -1602,10 +1602,10 @@
     "semantic_hash": "fa282eb2b94246573641cf9b63d18f9e"
   },
   "docs/testing/soak.md": {
-    "mtime": 1794232498.8168979,
-    "seen": 1794489545.8789399,
-    "ast_hash": "a84babd9b27d30c389bb0a11127789df",
-    "semantic_hash": "a84babd9b27d30c389bb0a11127789df"
+    "mtime": 1794579036.9486372,
+    "seen": 1794582899.8934243,
+    "ast_hash": "786d47dec332d4012c5c23ceaa11e84b",
+    "semantic_hash": ""
   },
   "docs/v1.1/README.md": {
     "mtime": 1794269760.3848064,
@@ -1614,9 +1614,9 @@
     "semantic_hash": "36d0bfc66092621b054d601f80b46b79"
   },
   "docs/v1.1/ROADMAP.md": {
-    "mtime": 1794508508.684273,
-    "seen": 1794508526.1079216,
-    "ast_hash": "25114b44ec1580b96da2c796b92d5698",
+    "mtime": 1794582872.8059068,
+    "seen": 1794582899.8934271,
+    "ast_hash": "104e10681df2420ed9dbdcf99ed7f458",
     "semantic_hash": ""
   },
   "docs/v1/README.md": {
