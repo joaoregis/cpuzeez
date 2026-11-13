@@ -46,7 +46,7 @@ type Table = &'static [(&'static str, &'static str)];
 /// (pt-BR, es) tables of every GUI file.
 pub(super) fn tables() -> &'static [(Table, Table)] {
     &[
-        (super::PT_BR, super::ES),
+        (super::strings::PT_BR, super::strings::ES),
         (super::overview::PT_BR, super::overview::ES),
         (super::sensors::PT_BR, super::sensors::ES),
         (super::stress::PT_BR, super::stress::ES),

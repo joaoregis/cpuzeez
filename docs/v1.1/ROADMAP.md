@@ -1,7 +1,7 @@
 # CPU ZeeZ 1.1.0: roadmap
 
 > Part of the [1.1 plan](README.md). The plan says **why** each item is partial and what "finished" means; this document is the **work list**: the decisions, the releases, the order, one row per pull request with its dependencies and a testable "done when", the gates, and the risks.
-> **Status:** M0–M2 released (`1.0.1`, `1.0.2`, `1.1.0-beta.1`), M3 released (`1.1.0-beta.2`, no soak, owner's decision), M4 in progress · **Baseline:** `v1.0.0` (`b33cdd4`), `main` at `f0e39c0` · **Date:** 2026-11-09.
+> **Status:** M0–M2 released (`1.0.1`, `1.0.2`, `1.1.0-beta.1`), M3 released (`1.1.0-beta.2`, no soak, owner's decision), M4 done · **Baseline:** `v1.0.0` (`b33cdd4`), `main` at `f0e39c0` · **Date:** 2026-11-09.
 
 ## 1. Decisions (2026-11-09)
 
@@ -116,7 +116,7 @@ Total: about 23–30 work days, plus waiting on soaks and CI.
 | M4-05 | `gui/mod.rs` step 1: page-specific state (of App's 40 fields) moves into each page's `State` | 6 | M2 | Visual regression shows no difference; kittest green  — ✅ `App` keeps 26 fields, from 45: `pages::{Processor, Mainboard, Memory, Graphics, Benches, Tools}`, `update_ui::Updates`, `settings_ui::Minis` |
 | M4-06 | Step 2: the frame loop's tasks (title, shortcuts, update check, persistence) move to `app_tasks.rs` | 6 | M4-05 | Same  — ✅ `take_pins`, `take_widths`, `hotkeys`, `check_updates_if_allowed` and `window_title` |
 | M4-07 | Step 3: navigation (sidebar, command palette targets, `NAV`) moves to `nav.rs` | 6 | M4-06 | Same  — ✅ `nav.rs`: `Page`, `NAV`, `NAV_BOTTOM`, `page_name`, the sidebar, the logo and `run_palette` |
-| M4-08 | Step 4: the shared page helpers (`boxed`, `heading`, `sget`, …) move to `pages/common.rs`. `mod.rs` keeps `App`, `ui()` and the page dispatch | 6 | M4-07 | `gui/mod.rs` < 400 lines |
+| M4-08 | Step 4: the shared page helpers (`boxed`, `heading`, `sget`, …) move to `pages/common.rs`. `mod.rs` keeps `App`, `ui()` and the page dispatch | 6 | M4-07 | `gui/mod.rs` < 400 lines  — ✅ 386 lines, from 1618: `pages/common.rs` (helpers), `pages/{benchmarks, settings}.rs`, `strings.rs` (the general pt-BR/es tables), `start.rs` (`run`), the screenshot types in `shots.rs`, `app_tests.rs` |
 
 M4-02 to M4-04 and M4-05 to M4-08 touch different files and can alternate. No other GUI pull request is open while M4-05 to M4-08 run.
 
