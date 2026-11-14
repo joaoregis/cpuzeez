@@ -7,6 +7,11 @@ generated from its section below.
 
 ## [Unreleased]
 
+### Changed
+
+- **CI:** the macOS `.pkg` and the Arch package are built, installed, run and removed on every push, as the `.deb` and the MSI already were.
+- **Docs:** the Linux and macOS screenshots in the README come from CI on every run (artifacts `readme-linux`, `readme-macos`, `readme-macos-intel`), only the pages that show no processes, users, startup items or services.
+
 ### Fixed
 
 - **Found by a 60-minute fuzz run per parser:** a PCI device whose Resizable BAR field claims more than 2^63 bytes, a monitor EDID whose timings multiply past 32 bits, and an SPD with an absurdly short clock period no longer crash the report; PresentMon output whose UTF-8 byte-order mark arrives split across two reads is read the same as in one piece.

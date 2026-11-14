@@ -91,7 +91,7 @@ Processor, caches, mainboard, memory and SPD, graphics, sensors, drives, network
 
 ## Screenshots
 
-Captured with `cpuzeez -screenshots=DIR`, which renders every page and saves a PNG. The Windows set comes from an AMD Ryzen 9 7900X, MSI PRO X870-P WIFI, 2×16 GB DDR5-6000 and an RTX 4060, running elevated with PawnIO. Serial numbers, MACs and IPs are masked in this mode.
+Captured with `cpuzeez -screenshots=DIR`, which renders every page and saves a PNG. The Windows set comes from an AMD Ryzen 9 7900X, MSI PRO X870-P WIFI, 2×16 GB DDR5-6000 and an RTX 4060, running elevated with PawnIO. Serial numbers, MACs and IPs are masked in this mode. The Linux and macOS sets come from CI: every run keeps them as the `readme-linux`, `readme-macos` and `readme-macos-intel` artifacts, from GitHub's virtual machines (so no GPU and few sensors).
 
 ### Windows 11
 

@@ -91,7 +91,7 @@ Processador, caches, placa-mãe, memória e SPD, gráficos, sensores, discos, re
 
 ## Screenshots
 
-Geradas com `cpuzeez -screenshots=DIR`, que renderiza cada página e salva um PNG. As do Windows vêm de um AMD Ryzen 9 7900X, MSI PRO X870-P WIFI, 2×16 GB DDR5-6000 e uma RTX 4060, rodando como administrador com o PawnIO. Números de série, MACs e IPs ficam mascarados nesse modo.
+Geradas com `cpuzeez -screenshots=DIR`, que renderiza cada página e salva um PNG. As do Windows vêm de um AMD Ryzen 9 7900X, MSI PRO X870-P WIFI, 2×16 GB DDR5-6000 e uma RTX 4060, rodando como administrador com o PawnIO. Números de série, MACs e IPs ficam mascarados nesse modo. As de Linux e macOS vêm do CI: toda execução as guarda como os artefatos `readme-linux`, `readme-macos` e `readme-macos-intel`, das máquinas virtuais do GitHub (por isso sem GPU e com poucos sensores).
 
 ### Windows 11
 

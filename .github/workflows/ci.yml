@@ -21,11 +21,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: Windows x64, os: windows-latest }
-          - { name: Ubuntu x64, os: ubuntu-latest }
+          - { name: Windows x64, os: windows-latest, shots: windows }
+          - { name: Ubuntu x64, os: ubuntu-latest, shots: linux }
           - { name: Ubuntu arm64, os: ubuntu-24.04-arm }
-          - { name: macOS arm64, os: macos-latest }
-          - { name: macOS x64, os: macos-15-intel }
+          - { name: macOS arm64, os: macos-latest, shots: macos }
+          - { name: macOS x64, os: macos-15-intel, shots: macos-intel }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
@@ -61,6 +61,7 @@ jobs:
         run: |
           cargo test --bin cpuzeez --features soak soak
           python .github/scripts/soak.py --selftest
+          python .github/scripts/readme_shots.py --selftest
       - name: Build release
         run: cargo build --release
       - name: Static C runtime (starts without the VC++ redistributable)
@@ -100,6 +101,15 @@ jobs:
           else
             target/release/cpuzeez -screenshots=out/screenshots
           fi
+      - name: README screenshots (the safe pages; every one the READMEs show)
+        if: matrix.shots
+        shell: bash
+        run: python3 .github/scripts/readme_shots.py out/screenshots out/readme/${{ matrix.shots }} ${{ matrix.shots }}
+      - if: matrix.shots
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: readme-${{ matrix.shots }}
+          path: out/readme/
       - name: GUI on Wayland (headless Weston)
         if: runner.os == 'Linux'
         # A normal run takes ~1 min. Rarely (5e49edf, da4c3e8) the app or headless
@@ -241,6 +251,82 @@ jobs:
           test -f /usr/share/applications/cpuzeez.desktop
           sudo apt-get remove -y cpuzeez
           test ! -e /usr/bin/cpuzeez  # not `command -v`: bash's hash table still remembers it
+
+  macos-pkg:
+    name: macOS .pkg installs, runs and uninstalls
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - run: cargo build --release --locked
+      - name: Build the .pkg as the release does (one architecture), install, run, uninstall
+        run: |
+          set -e
+          # macOS's bash 3.2 cannot source a process substitution.
+          MAC_VER=$(python3 .github/scripts/pkgver.py "$(cargo pkgid | sed 's/.*[#@]//')" | sed -n 's/^MAC_VER=//p')
+          test -n "$MAC_VER"
+          APP=pkgroot/Applications/CpuZeeZ.app
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" pkgroot/usr/local/bin
+          cp target/release/cpuzeez "$APP/Contents/MacOS/cpuzeez"
+          sed "s/@VERSION@/$MAC_VER/g" packaging/macos/Info.plist > "$APP/Contents/Info.plist"
+          cp assets/cpuzeez.icns "$APP/Contents/Resources/cpuzeez.icns"
+          codesign --force --deep -s - "$APP"
+          cp target/release/cpuzeez pkgroot/usr/local/bin/cpuzeez
+          codesign --force -s - pkgroot/usr/local/bin/cpuzeez
+          # Not relocatable here: the installer would otherwise put the app where it
+          # finds a bundle with the same id, such as pkgroot/ itself (flaky in CI).
+          pkgbuild --analyze --root pkgroot comp.plist
+          plutil -replace 0.BundleIsRelocatable -bool NO comp.plist
+          pkgbuild --root pkgroot --component-plist comp.plist --identifier io.github.joaoregis.cpuzeez --version "$MAC_VER" --install-location / ci.pkg
+          rm -rf pkgroot
+          sudo installer -pkg ci.pkg -target /
+          pkgutil --pkg-info io.github.joaoregis.cpuzeez
+          /usr/local/bin/cpuzeez -txt=/tmp/pkg-report && test -s /tmp/pkg-report.txt
+          /Applications/CpuZeeZ.app/Contents/MacOS/cpuzeez -help >/dev/null
+          # The README's removal: the app and the command line tool, then the receipt.
+          sudo rm -rf /Applications/CpuZeeZ.app /usr/local/bin/cpuzeez
+          sudo pkgutil --forget io.github.joaoregis.cpuzeez
+          test ! -e /Applications/CpuZeeZ.app && test ! -e /usr/local/bin/cpuzeez
+          ! pkgutil --pkg-info io.github.joaoregis.cpuzeez
+
+  arch-pkg:
+    name: Arch package builds, installs, runs and uninstalls
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install toolchain prerequisites
+        run: |
+          for i in 1 2 3; do
+            pacman -Syu --noconfirm --needed base-devel curl git python && break
+            [ "$i" = 3 ] && exit 1
+            echo "pacman attempt $i failed; retrying in 30 s"; sleep 30
+          done
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - run: cargo build --release --locked
+      - name: The release tarball and PKGBUILD, makepkg, install, run, uninstall
+        run: |
+          set -e
+          VER=$(cargo pkgid | sed 's/.*[#@]//')
+          ARCH_VER=$(python .github/scripts/pkgver.py "$VER" | sed -n 's/^ARCH_VER=//p')
+          useradd -m builder
+          D=/home/builder/pkg/cpuzeez-$VER
+          mkdir -p "$D"
+          cp target/release/cpuzeez README.md LICENSE-MIT LICENSE-APACHE packaging/linux/cpuzeez.desktop assets/icon.svg assets/icon-*.png "$D/"
+          cp packaging/arch/PKGBUILD /home/builder/pkg/
+          sed -i "s/@VERSION@/$ARCH_VER/; s/@SRCVER@/$VER/" /home/builder/pkg/PKGBUILD
+          chown -R builder /home/builder/pkg
+          su builder -c "cd /home/builder/pkg && makepkg --nodeps --noconfirm"
+          pacman -U --noconfirm /home/builder/pkg/cpuzeez-bin-*.pkg.tar.zst
+          cpuzeez -txt=/tmp/arch-report && test -s /tmp/arch-report.txt
+          test -f /usr/share/applications/cpuzeez.desktop
+          pacman -R --noconfirm cpuzeez-bin
+          test ! -e /usr/bin/cpuzeez && test ! -e /usr/share/applications/cpuzeez.desktop
 
   msrv:
     name: Builds on the declared minimum Rust (rust-version)
