@@ -276,7 +276,12 @@ jobs:
           codesign --force --deep -s - "$APP"
           cp target/release/cpuzeez pkgroot/usr/local/bin/cpuzeez
           codesign --force -s - pkgroot/usr/local/bin/cpuzeez
-          pkgbuild --root pkgroot --identifier io.github.joaoregis.cpuzeez --version "$MAC_VER" --install-location / ci.pkg
+          # Not relocatable here: the installer would otherwise put the app where it
+          # finds a bundle with the same id, such as pkgroot/ itself (flaky in CI).
+          pkgbuild --analyze --root pkgroot comp.plist
+          plutil -replace 0.BundleIsRelocatable -bool NO comp.plist
+          pkgbuild --root pkgroot --component-plist comp.plist --identifier io.github.joaoregis.cpuzeez --version "$MAC_VER" --install-location / ci.pkg
+          rm -rf pkgroot
           sudo installer -pkg ci.pkg -target /
           pkgutil --pkg-info io.github.joaoregis.cpuzeez
           /usr/local/bin/cpuzeez -txt=/tmp/pkg-report && test -s /tmp/pkg-report.txt
