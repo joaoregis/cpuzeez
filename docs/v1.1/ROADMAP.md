@@ -1,7 +1,7 @@
 # CPU ZeeZ 1.1.0: roadmap
 
 > Part of the [1.1 plan](README.md). The plan says **why** each item is partial and what "finished" means; this document is the **work list**: the decisions, the releases, the order, one row per pull request with its dependencies and a testable "done when", the gates, and the risks.
-> **Status:** M0–M2 released (`1.0.1`, `1.0.2`, `1.1.0-beta.1`), M3 released (`1.1.0-beta.2`, no soak, owner's decision), M4 released (`1.1.0-beta.3`) · **Baseline:** `v1.0.0` (`b33cdd4`), `main` at `f0e39c0` · **Date:** 2026-11-09.
+> **Status:** `1.1.0` released (M0–M5; the soaks waived by the owner) · **Baseline:** `v1.0.0` (`b33cdd4`), `main` at `f0e39c0` · **Date:** 2026-11-09.
 
 ## 1. Decisions (2026-11-09)
 
@@ -130,11 +130,11 @@ M4-02 to M4-04 and M4-05 to M4-08 touch different files and can alternate. No ot
 | M5-02 | **Screenshots from CI on every OS**: the Linux (Weston) and macOS jobs upload the README set (the safe pages only: no process lists, users, startup or services). A per-OS tolerance | 7 | M3-02, M2-10 | The artifacts have every README page on all three OSes  — ✅ every native job with a README folder keeps the safe pages as `readme-<os>` (Windows, Linux, macOS arm64 and Intel) and fails when a README page is missing (`readme_shots.py`). No per-OS tolerance is needed: nothing compares these sets, only the Windows visual regression compares PR with base |
 | M5-03 | READMEs (en, pt-BR) show the new pages on Linux and macOS from those artifacts | 7 | M5-02 | No hand-taken shot left in `docs/screenshots/`  — ✅ Linux, macOS and macOS Intel replaced from run 43536868305. The Windows set stays from the owner's machine: it is the `-screenshots` automation too (not hand-taken), on real hardware, which a CI virtual machine cannot show |
 | M5-04 | **Installers on CI** (item 16): the macOS `.pkg` and the Arch package install, start and uninstall | 16 | — | Both jobs green  — ✅ `macos-pkg` (pkgbuild as release.yml, `installer`, a report, removal as the README says) and `arch-pkg` (the release tarball and PKGBUILD, `makepkg`, `pacman -U`, a report, `pacman -R`) |
-| M5-05 | **Final soaks** on the release candidate build: overlay-only for 30 min, the full tour for 8 h | 9, S3-02 | M4 | Both pass; `performance.md` updated |
-| M5-06 | Docs: the CHANGELOG `1.1.0` section, `audit/README.md` known gaps, the v1 ROADMAP rows, this roadmap ✅ | — | everything | Release go |
+| M5-05 | **Final soaks** on the release candidate build: overlay-only for 30 min, the full tour for 8 h | 9, S3-02 | M4 | Both pass; `performance.md` updated  — ⛔ waived by the owner (no soaks in 1.1, 2026-11-13); the last numbers are the 2026-11-13 overlay runs in `performance.md` |
+| M5-06 | Docs: the CHANGELOG `1.1.0` section, `audit/README.md` known gaps, the v1 ROADMAP rows, this roadmap ✅ | — | everything | Release go  — ✅ the CHANGELOG `1.1.0` section, `audit/README.md` §7, the v1 ROADMAP rows S0-E04, S0-E06, S0-T05, this roadmap |
 | M5-07 | **Last, at the owner's request: the overlay's memory growth.** Private memory grows about 1.5 MB/min in the overlay-only soak on 0.36 and 0.37 alike; 1.0.0 was flat. Find the change after 1.0.0 that does it, from the code first | — | everything else | The cause is named and fixed, or written down as known in the 1.1.0 notes  — ✅ written down as known (no soak, owner's decision): headless probes of the process collector, the telemetry with frames and the whole `App` with the overlay are flat once their windows fill; the growth needs the real renderer, and the machine took two Windows updates between the flat and the growing runs. See [performance](../performance.md#the-overlays-memory-growth-m5-07) |
 
-**Gate `1.1.0`:** every row ✅ or explicitly moved, with a reason, to the [carry-over](#4-carry-over-needs-a-person-or-hardware). Both soaks pass. CI is green on the release commit.
+**Gate `1.1.0`:** every row ✅ or explicitly moved, with a reason, to the [carry-over](#4-carry-over-needs-a-person-or-hardware). CI is green on the release commit. The two soaks were waived by the owner (2026-11-13).
 
 ---
 
