@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `8cb5b799`
+- Built from commit: `38da3ddc`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -21,7 +21,7 @@
 - intel.rs
 - Stage
 - System Performance Charts
-- layout_editor.rs
+- Window
 - Windows Services Backend
 - tr
 - CPU Benchmark Runner
@@ -42,7 +42,7 @@
 - Process Snapshot Platform
 - Super I/O Sensor Chips
 - actions.rs
-- Community 26
+- super
 - Windows GPU Probe
 - CPU Test Suite
 - Single Instance and SIDs
@@ -93,7 +93,7 @@
 - Class
 - telemetry.rs (2)
 - chipset.rs
-- telemetry.rs (3)
+- Reading
 - desktop.rs
 - display.rs
 - gpu_engines.rs
@@ -102,9 +102,9 @@
 - amd_pm.rs
 - mod.rs (5)
 - users.rs
-- Window
+- i18n.rs
 - large_pages.rs
-- AtomicUsize
+- pci/macos.rs
 - core/src/robustness.rs
 - report.rs
 - overlay.rs
@@ -112,7 +112,7 @@
 - soak.py
 - nvml.rs
 - live.rs
-- .cpu_tab
+- body
 - windows.rs (4)
 - devices.rs
 - pins.rs
@@ -129,21 +129,21 @@
 - nightly.yml
 - Page
 - applog.rs
-- SysTab
+- lock
 - Action
 - availability.rs
 - live.rs (2)
 - PresentMon bundled sidecar (ETW)
 - Ctx
 - hashmap
-- details
+- .memory_more
 - table.rs
 - memtest.rs
 - CHANGELOG.md
 - live_frames.rs
 - detail.rs
 - .render_table
-- details
+- core/src/services.rs
 - superio.rs
 - Source
 - layout_editor.rs
@@ -151,8 +151,8 @@
 - linux.rs (2)
 - layout_editor.rs
 - health.rs
-- mainboard_more.rs
 - controller
+- gpu/edid.rs
 - Aes
 - gui/tools.rs
 - Column
@@ -195,31 +195,31 @@
 - fixture.rs
 - live_mangohud.rs
 - telemetry/os.rs
-- StartupType
+- ServiceOp
 - diskio.rs
 - ServiceAccount
-- Class
+- Rng
 - storage-and-cleanup.md
-- controller
+- .parse
 - ROADMAP.md
 - make_icons.py
 - superio.rs (4)
 - Graphify neste projeto
 - bench_views_test.rs
 - actions.rs (2)
-- .parse
-- edid.rs
+- apple_table
+- smart
 - layout.rs (2)
 - super
-- smart
+- .tick
 - encryption.rs
 - CTRL_C
-- Rng
+- SysTab
 - bench_views_test.rs
 - CLAUDE.md
 - benchkit.rs
-- soak.rs
-- .tick
+- src/soak.rs
+- Problem
 - hwmon.rs
 - db.rs
 - Ctx
@@ -240,14 +240,14 @@
 - instant
 - settings_card
 - small_text_parsers
-- DetailTab
+- .cpu_tab
 - LimiterKind
 - bmp.rs
 - ci.yml (5)
 - LimiterKind
 - macos.rs (4)
+- DetailTab
 - Kind
-- lock
 - Mode
 - Tab
 - .about_tab
@@ -336,9 +336,9 @@ Nodes (14): command(), in_path(), launch(), open_path(), Stage, Downloading, Fai
 Cohesion: 0.07
 Nodes (44): ago_text(), AXIS_FONT, chart(), Line, LINE_WIDTH, MARGIN_BOTTOM, MARGIN_LEFT, nearest() (+36 more)
 
-### Community 5 - "layout_editor.rs"
-Cohesion: 0.20
-Nodes (14): b64(), device(), list(), next_tag(), parse_plist(), plist(), Pv, Arr (+6 more)
+### Community 5 - "Window"
+Cohesion: 0.29
+Nodes (20): analyze_verdicts(), avg(), cpu_saturated(), Finding, gpu_headroom(), gpu_saturated(), n0(), pct() (+12 more)
 
 ### Community 6 - "Windows Services Backend"
 Cohesion: 0.03
@@ -420,7 +420,7 @@ Nodes (59): ASR_AM4_FANS, ASR_AM4_VOLTS, ASR_AM5_VOLTS, ASR_INTEL_FANS, ASR_INTE
 Cohesion: 0.13
 Nodes (22): decode(), ELEVATED_FLAG, encode(), hex(), MAX_ENCODED, ProcessOp, Affinity, Dump (+14 more)
 
-### Community 26 - "Community 26"
+### Community 26 - "super"
 Cohesion: 0.05
 Nodes (30): UserSession, Access, ES, kernel_module(), pawnio_doc(), PT_BR, relaunch_elevated(), label() (+22 more)
 
@@ -624,7 +624,7 @@ Nodes (25): throttle_kind(), AT_LIMIT, c(), CLOCK_DROP, Cond, cond(), Debounce, 
 Cohesion: 0.13
 Nodes (28): amd_chipset(), amd_umc(), chipset_names(), chipset_token(), ChipsetSummary, collect(), decode_umc(), decode_umc_more() (+20 more)
 
-### Community 77 - "telemetry.rs (3)"
+### Community 77 - "Reading"
 Cohesion: 0.16
 Nodes (14): Reading, battery(), cpu_extra(), disks(), DiskSnap, gpu(), gpu_group(), ids() (+6 more)
 
@@ -660,17 +660,17 @@ Nodes (6): Caps, detect(), Hw, NoHw, none(), PAUSED
 Cohesion: 0.09
 Nodes (5): query_wts_str(), send_message(), sessions(), state_label(), to_wide()
 
-### Community 86 - "Window"
-Cohesion: 0.29
-Nodes (20): analyze_verdicts(), avg(), cpu_saturated(), Finding, gpu_headroom(), gpu_saturated(), n0(), pct() (+12 more)
+### Community 86 - "i18n.rs"
+Cohesion: 0.17
+Nodes (18): bottleneck_texts_are_translated(), codes_and_fallback(), current(), CURRENT, from_code(), Lang, En, Es (+10 more)
 
 ### Community 87 - "large_pages.rs"
 Cohesion: 0.08
 Nodes (4): alloc(), HUGE, lock_memory_privilege(), Region
 
-### Community 88 - "AtomicUsize"
-Cohesion: 0.17
-Nodes (18): bottleneck_texts_are_translated(), codes_and_fallback(), current(), CURRENT, from_code(), Lang, En, Es (+10 more)
+### Community 88 - "pci/macos.rs"
+Cohesion: 0.20
+Nodes (14): b64(), device(), list(), next_tag(), parse_plist(), plist(), Pv, Arr (+6 more)
 
 ### Community 89 - "core/src/robustness.rs"
 Cohesion: 0.18
@@ -699,6 +699,10 @@ Nodes (13): db_apple(), cstr(), Dev, FanRpm, get(), Info, load(), Memory (+5 mor
 ### Community 95 - "live.rs"
 Cohesion: 0.10
 Nodes (11): HotkeyAction, .ALL, Capture, CycleStyle, EditMode, Marker, ToggleOverlay, Hotkeys (+3 more)
+
+### Community 96 - "body"
+Cohesion: 0.12
+Nodes (15): description, label, placeholder, render, value, body, attributes, id (+7 more)
 
 ### Community 97 - "windows.rs (4)"
 Cohesion: 0.16
@@ -764,9 +768,9 @@ Nodes (16): NAV, NAV_BOTTOM, Page, About, Benchmarks, Devices, Graphics, Live (+
 Cohesion: 0.18
 Nodes (11): diagnostics_bundle(), info(), install_panic_hook(), LOCK, MAX, path(), warn(), write() (+3 more)
 
-### Community 114 - "SysTab"
-Cohesion: 0.29
-Nodes (7): SysTab, AppHistory, Performance, Processes, Services, Startup, Users
+### Community 114 - "lock"
+Cohesion: 0.17
+Nodes (15): App, apps(), begin_capture(), end_capture(), hub_picks_the_target_and_reports(), ignored(), lock(), pin_target() (+7 more)
 
 ### Community 115 - "Action"
 Cohesion: 0.16
@@ -788,7 +792,7 @@ Nodes (13): ADR 0001: ZeeZ Live is the brand, ZeeZ Live (Overlay, Capture, Repor
 Cohesion: 0.15
 Nodes (15): active_from_deltas(), active_mhz(), add_chain_mhz(), aperf_mperf(), aperf_mperf_regs(), chain(), live_source(), loaded_mhz() (+7 more)
 
-### Community 121 - "details"
+### Community 121 - ".memory_more"
 Cohesion: 0.22
 Nodes (9): active_profile(), App, edac(), ES, finds_the_running_profile_and_tuning(), Live, num(), PT_BR (+1 more)
 
@@ -816,7 +820,7 @@ Nodes (14): BASIC, Level, Advanced, .ALL, Basic, Expert, level_of(), levels() (+
 Cohesion: 0.21
 Nodes (18): add(), dates(), Entry, entry(), join(), load(), load_from(), memory_line() (+10 more)
 
-### Community 128 - "details"
+### Community 128 - "core/src/services.rs"
 Cohesion: 0.08
 Nodes (31): small_text_parsers(), a_dacl_that_refuses_administrators(), CHANGE_CONFIG, is_protected(), is_third_party(), parse_systemd_secs(), parse_systemd_show(), protected_and_third_party_classification() (+23 more)
 
@@ -848,13 +852,13 @@ Nodes (7): editor(), ES, KINDS, layout_editor_edits(), PT_BR, THROTTLE_DEVICES, 
 Cohesion: 0.26
 Nodes (16): a_healthy_build_has_nothing_to_say(), check(), Display, each_mistake(), Facts, Finding, finding(), good() (+8 more)
 
-### Community 136 - "mainboard_more.rs"
-Cohesion: 0.43
-Nodes (6): ioreg_hex(), uuid_bytes(), apple_table(), fetch(), sysfs_fallback(), sysfs_table()
+### Community 136 - "controller"
+Cohesion: 0.21
+Nodes (13): CM_Get_DevNode_PropertyW(), CM_Get_DevNode_Registry_PropertyW(), controller(), KEY_INSTANCE_ID, KEY_LINK_SPEED, KEY_LINK_WIDTH, prop_bytes(), prop_u32() (+5 more)
 
-### Community 137 - "controller"
-Cohesion: 0.12
-Nodes (15): description, label, placeholder, render, value, body, attributes, id (+7 more)
+### Community 137 - "gpu/edid.rs"
+Cohesion: 0.31
+Nodes (10): decode(), displayid(), displayid_ext(), dtd(), Monitor, parse(), PNP, pnp_name() (+2 more)
 
 ### Community 138 - "Aes"
 Cohesion: 0.26
@@ -1012,7 +1016,7 @@ Nodes (10): adapters(), app(), cpu(), ctx(), drives(), every_hardware_page_draws
 Cohesion: 0.32
 Nodes (4): cpu_load(), parse_proc_stat(), throttle_counts(), ticks()
 
-### Community 180 - "StartupType"
+### Community 180 - "ServiceOp"
 Cohesion: 0.08
 Nodes (22): Risk, Critical, Irreversible, Normal, ServiceOp, Pause, Restart, SetAccount (+14 more)
 
@@ -1024,17 +1028,9 @@ Nodes (11): a_reset_counter_is_no_activity_not_garbage(), Counters, DISKSTATS, d
 Cohesion: 0.29
 Nodes (4): Units, .DEFAULT, CURRENT, set()
 
-### Community 183 - "Class"
-Cohesion: 0.33
-Nodes (5): Problem, FromTemp, HighCpu, MemoryGrowing, NotResponding
-
 ### Community 184 - "storage-and-cleanup.md"
 Cohesion: 0.10
 Nodes (19): ADR 0002: Privileges, Restart as administrator button, ADR 0005: Task Manager under one System entry, System hub (Processes, Performance, App history, Startup, Users, Services), BOARDS Super I/O map (src/sensors/superio.rs), Ideas for later versions, Storage audit and safe cleanup (idea), Duplicate file finder (size, partial hash, SHA-256) (+11 more)
-
-### Community 185 - "controller"
-Cohesion: 0.21
-Nodes (13): CM_Get_DevNode_PropertyW(), CM_Get_DevNode_Registry_PropertyW(), controller(), KEY_INSTANCE_ID, KEY_LINK_SPEED, KEY_LINK_WIDTH, prop_bytes(), prop_u32() (+5 more)
 
 ### Community 186 - "ROADMAP.md"
 Cohesion: 0.18
@@ -1060,9 +1056,13 @@ Nodes (9): StartupOp, SetEnabled, apply(), enum_reg_strings(), query(), read_app
 Cohesion: 0.18
 Nodes (8): Priority, AboveNormal, .ALL, BelowNormal, High, Idle, Normal, Realtime
 
-### Community 193 - "edid.rs"
-Cohesion: 0.31
-Nodes (10): decode(), displayid(), displayid_ext(), dtd(), Monitor, parse(), PNP, pnp_name() (+2 more)
+### Community 192 - "apple_table"
+Cohesion: 0.43
+Nodes (6): ioreg_hex(), uuid_bytes(), apple_table(), fetch(), sysfs_fallback(), sysfs_table()
+
+### Community 193 - "smart"
+Cohesion: 0.33
+Nodes (5): nvme_log(), sat_smart(), sat_smart_cmd(), smart(), smartctl()
 
 ### Community 194 - "layout.rs (2)"
 Cohesion: 0.18
@@ -1072,9 +1072,9 @@ Nodes (10): Style, .ALL, Bar, Graph, Number, Ring, Theme, Dark (+2 more)
 Cohesion: 0.43
 Nodes (7): amd_cppc_highest(), cppc_ranks(), intel_hwp_highest(), intel_limits_decode(), intel_pkg_limits(), Limit, ranks()
 
-### Community 196 - "smart"
-Cohesion: 0.33
-Nodes (5): nvme_log(), sat_smart(), sat_smart_cmd(), smart(), smartctl()
+### Community 196 - ".tick"
+Cohesion: 0.29
+Nodes (5): display_hz(), frame_age(), readings(), recent(), recent_ms()
 
 ### Community 197 - "encryption.rs"
 Cohesion: 0.31
@@ -1084,17 +1084,21 @@ Nodes (6): crypt(), DONE, read(), STARTED, Status, status()
 Cohesion: 0.70
 Nodes (4): imported_reports(), n(), settings_from_any_version(), update_answers()
 
+### Community 199 - "SysTab"
+Cohesion: 0.29
+Nodes (7): SysTab, AppHistory, Performance, Processes, Services, Startup, Users
+
 ### Community 200 - "bench_views_test.rs"
 Cohesion: 0.57
 Nodes (5): cpu_suite_modes(), ctx(), memory_and_latency_views(), storage_view_warns_before_writing(), themed()
 
-### Community 203 - "soak.rs"
+### Community 203 - "src/soak.rs"
 Cohesion: 0.23
 Nodes (9): App, enabled(), frame(), NAME, overlay_frame(), overlay_only(), PID, start() (+1 more)
 
-### Community 204 - ".tick"
-Cohesion: 0.29
-Nodes (5): display_hz(), frame_age(), readings(), recent(), recent_ms()
+### Community 204 - "Problem"
+Cohesion: 0.33
+Nodes (5): Problem, FromTemp, HighCpu, MemoryGrowing, NotResponding
 
 ### Community 205 - "hwmon.rs"
 Cohesion: 0.25
@@ -1160,10 +1164,6 @@ Nodes (5): Composition, meminfo(), MEMINFO, parse_meminfo(), Tour
 Cohesion: 0.43
 Nodes (7): Counters, NET_DEV, parse_proc_net_dev(), proc_net_dev(), Rates, rates(), rates_in_megabits()
 
-### Community 225 - "DetailTab"
-Cohesion: 0.33
-Nodes (6): DetailTab, Network, Overview, Security, Threads, Windows
-
 ### Community 226 - "LimiterKind"
 Cohesion: 0.32
 Nodes (6): chart_colours_meet_the_graphics_minimum(), class_colours_are_distinct_and_readable(), contrast(), luminance(), surfaces(), text_colours_meet_aa_on_every_surface()
@@ -1180,13 +1180,13 @@ Nodes (5): LimiterKind, Compositor, FpsCap, Menu, VSync
 Cohesion: 0.54
 Nodes (6): fill(), memory_type(), memory_without_smbios(), partial_and_unavailable_data(), preserves_smbios_and_handles_nested_banks(), probe()
 
-### Community 231 - "Kind"
+### Community 231 - "DetailTab"
+Cohesion: 0.33
+Nodes (6): DetailTab, Network, Overview, Security, Threads, Windows
+
+### Community 232 - "Kind"
 Cohesion: 0.40
 Nodes (4): Kind, App, Background, System
-
-### Community 232 - "lock"
-Cohesion: 0.17
-Nodes (15): App, apps(), begin_capture(), end_capture(), hub_picks_the_target_and_reports(), ignored(), lock(), pin_target() (+7 more)
 
 ### Community 233 - "Mode"
 Cohesion: 0.40
@@ -1244,16 +1244,16 @@ Nodes (5): Impact, High, Low, Medium, NotMeasured
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Ctx` connect `Ctx` to `sensors.rs`, `Ctl`, `intel.rs`, `Source`, `System Performance Charts`, `tr`, `CPU Benchmark Runner`, `Memory Benchmark`, `Storage Drives Probe`, `Network Adapters`, `Ctx`, `CPU Sensors and Power Limits`, `Community 26`, `mod.rs`, `superio.rs (2)`, `tr`, `timers.rs`, `peripherals.rs`, `f`, `diff.rs`, `overview.rs`, `mod.rs (2)`, `Telemetry`, `bottleneck_ui.rs`, `software.rs`, `mod.rs (3)`, `mod.rs (4)`, `telemetry.rs (2)`, `chipset.rs`, `.tick`, `telemetry.rs (3)`, `src/pci/mod.rs`, `App`, `run`, `devices.rs`, `battery.rs`, `usb.rs`, `LimiterKind`, `availability.rs`, `Ctx`, `gui/mod.rs`, `.render_table`?**
-  _High betweenness centrality (0.128) - this node is a cross-community bridge._
+- **Why does `Ctx` connect `Ctx` to `sensors.rs`, `Ctl`, `intel.rs`, `Source`, `System Performance Charts`, `tr`, `CPU Benchmark Runner`, `Memory Benchmark`, `Storage Drives Probe`, `Network Adapters`, `Ctx`, `CPU Sensors and Power Limits`, `super`, `mod.rs`, `superio.rs (2)`, `tr`, `timers.rs`, `peripherals.rs`, `f`, `diff.rs`, `overview.rs`, `mod.rs (2)`, `Telemetry`, `bottleneck_ui.rs`, `software.rs`, `mod.rs (3)`, `.tick`, `mod.rs (4)`, `telemetry.rs (2)`, `chipset.rs`, `Reading`, `src/pci/mod.rs`, `App`, `run`, `devices.rs`, `battery.rs`, `usb.rs`, `LimiterKind`, `availability.rs`, `Ctx`, `gui/mod.rs`, `.render_table`?**
+  _High betweenness centrality (0.122) - this node is a cross-community bridge._
 - **Are the 9 inferred relationships involving `Ctx` (e.g. with `cli()` and `no_data()`) actually correct?**
   _`Ctx` has 9 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `Msr`, `I2cDev`, `Idle` to the rest of the system?**
   _504 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `sensors.rs` be split into smaller, more focused modules?**
   _Cohesion score 0.060362173038229376 - nodes in this community are weakly interconnected._
-- **Why does `tr()` connect `tr` to `sensors.rs`, `Ctl`, `layout_editor.rs`, `System Performance Charts`, `layout_editor.rs`, `tr`, `gui/tools.rs`, `system_history.rs`, `system.rs`, `Community 26`, `palette.rs`, `system_services.rs`, `diff.rs`, `split.rs`, `overview.rs`, `bottleneck_ui.rs`, `mini.rs`, `tray.rs (2)`, `live_sessions.rs`, `App`, `AtomicUsize`, `settings_card`, `.cpu_tab`, `live.rs`, `devices.rs`, `pins.rs`, `gui/mod.rs`, `.about_tab`, `LimiterKind`, `Settings`, `Step`, `details`, `table.rs`, `detail.rs`?**
-  _High betweenness centrality (0.044) - this node is a cross-community bridge._
+- **Why does `tr()` connect `tr` to `sensors.rs`, `Ctl`, `layout_editor.rs`, `System Performance Charts`, `layout_editor.rs`, `tr`, `gui/tools.rs`, `system_history.rs`, `system.rs`, `super`, `palette.rs`, `system_services.rs`, `diff.rs`, `split.rs`, `overview.rs`, `bottleneck_ui.rs`, `mini.rs`, `tray.rs (2)`, `live_sessions.rs`, `App`, `i18n.rs`, `settings_card`, `live.rs`, `.cpu_tab`, `devices.rs`, `pins.rs`, `gui/mod.rs`, `.about_tab`, `LimiterKind`, `Settings`, `Step`, `.memory_more`, `table.rs`, `detail.rs`?**
+  _High betweenness centrality (0.045) - this node is a cross-community bridge._
 - **Are the 150 inferred relationships involving `tr()` (e.g. with `.banner()` and `.frame()`) actually correct?**
   _`tr()` has 150 INFERRED edges - model-reasoned connections that need verification._
 - **Should `Ctl` be split into smaller, more focused modules?**
