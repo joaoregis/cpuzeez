@@ -311,7 +311,8 @@ impl OutputLines {
     pub fn feed(&mut self, chunk: &[u8]) -> Vec<String> {
         self.bytes.extend_from_slice(chunk);
         if self.utf16.is_none() {
-            if self.bytes.len() < 2 {
+            // Wait for the third byte after EF BB: a UTF-8 BOM split across chunks.
+            if self.bytes.len() < 2 || (self.bytes.len() < 3 && self.bytes[..2] == [0xEF, 0xBB]) {
                 return Vec::new();
             }
             let bom16 = self.bytes[..2] == [0xFF, 0xFE];
