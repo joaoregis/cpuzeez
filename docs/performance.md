@@ -74,6 +74,18 @@ Where it goes (per-thread CPU over 30 s): the interface thread about 1–1.9 %, 
 - **Memory is not flat, on either version.** Private memory grows about 1.5 MB/min (≈ 90 MB/h) from minute 8 to the end, with handles and threads steady, and peaks over the 150 MB budget. The 2026-11-09 run of 1.0.0 on the same machine stayed at 118 → 120 MB. So the growth came in after 1.0.0 and is not from egui 0.37. Not yet bisected; M3-05 cannot pass until it is.
 - The per-thread numbers are means over the run, from samples every 30 s: a thread that lives for the whole run is measured well, one that ends early loses its last stretch.
 
+## The overlay's memory growth (M5-07)
+
+The 30-minute overlay soaks of 2026-11-13 grew about 1.5 MB/min on egui 0.36 and 0.37 alike; the 1.0.0 run of 2026-11-09 on the same machine stayed flat. Looked at without a soak (no window on the owner's machine), each part of the overlay case run alone for minutes, private memory read from the process list:
+
+| Probe (an ignored test, run once) | Result |
+|---|---|
+| The process collector the bottleneck pill keeps awake, 1200 steps | flat (12–14 MB) |
+| The telemetry engine with the overlay's sources and the synthetic game's frames, 4 min | flat after the history fills (45 → 47 MB) |
+| The whole `App` with the overlay shown, driven by egui_kittest at 20 frames/s, 4 min | grows for 2.5 min while the frame and metric windows fill, then flat at 28.5 MB |
+
+The code after 1.0.0 that runs in this case (the bottleneck pill, the frame hub, the soak hooks) holds nothing that grows. What the probes cannot run is the real renderer and the window system. Between the flat run and the growing ones the machine took two Windows updates (KB5132688 on 2026-11-11, KB5132061 on 2026-11-12), and both builds grow the same, so the likeliest place is the rendering path or the system under it, not a change in CPU ZeeZ. **Not proven**: it would take a 1.0.0 soak on the same machine now, which the owner chose not to run. 1.1.0 ships with it written down as known.
+
 ## Left open in 1.1 (M3-04, M3-05)
 
 No further soak was run: the owner closed M3 without one (2026-11-13). Nothing was changed to lower the overlay's CPU, so the numbers above are the 1.1 numbers: **3.2–3.6 % of one core, over the 2 % goal**, with the memory growth noted above.
