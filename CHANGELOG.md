@@ -9,18 +9,47 @@ generated from its section below.
 
 ## [1.1.0] - 2026-11-13
 
-The 1.1 release: the three betas below plus the last round of checks. **No new features**; what changed is how sure the app is of itself. Every page and tab is drawn and driven in a test, side panels resize and fit at any zoom, the interface moved to egui 0.37 with a name on every control for screen readers, OS calls moved into the platform crate behind a CI ratchet, a 60-minute fuzz run per parser found and fixed four crashes, and the macOS `.pkg` and the Arch package are installed and removed on every push like the `.deb` and the MSI.
+CPU ZeeZ 1.1 adds **no new features**: it makes the app surer of itself, with tests on every page, layouts that fit any window, screen-reader names, safer code and every package tested on each push. Everything below changed since 1.0.2, over three betas; every pre-release is listed below this entry.
 
-**Known:** the overlay costs about 3 % of one core next to a game, over the 2 % goal, and in a 30-minute test its private memory grows about 1.5 MB per minute on Windows; the app's own parts measured alone stay flat, so the renderer or the system is the likely place. Both are in [performance.md](docs/performance.md).
+**Known:** the overlay costs about 3 % of one core next to a game, over the 2 % goal, and in a 30-minute test its private memory grows about 1.5 MB per minute on Windows; the app's own parts measured alone stay flat, so the renderer or the system is the likely place. Both are in [performance.md](https://github.com/joaoregis/cpuzeez/blob/v1.1.0/docs/performance.md).
+
+### Highlights
+
+- **Every page and tab tested**: drawn and driven in CI from fixed data; a new page without a test fails the build.
+- **Fits any window and zoom**: resizable side panels, tabs that wrap, ZeeZ Live and Settings that fit at 200 %.
+- **Screen readers**: every control has a name, on egui 0.37.
+- **Safer code**: OS calls moved into the platform crate behind a CI ratchet on `unsafe`; a 60-minute fuzz run per parser found and fixed four crashes.
+- **Every package tested**: the MSI, `.deb`, macOS `.pkg` and Arch package are installed, run and removed on every push.
 
 ### Changed
 
-- **CI:** the macOS `.pkg` and the Arch package are built, installed, run and removed on every push, as the `.deb` and the MSI already were.
+- **System ▸ Services and Processes: the side panel can be resized.** Drag the line between the table and the inspector (or the details panel), or focus it with Tab and use ← and →; a double-click puts it back. The width is kept per panel, between 280 points and 60 % of the window.
+- **Accessibility:** every combo box, number field, slider and checkbox has a name a screen reader reads: the label beside it, or a short one where nothing visible names it. A test fails on any control without one.
+- **Build:** eframe, egui and egui_kittest 0.37. The interface looks the same; spacing and icons may differ slightly.
+- **Build:** the Phosphor icon font ships in the repository (`assets/fonts/Phosphor.ttf`, MIT) with the 104 icons the app uses; the `egui-phosphor` crate is gone, so the next egui release no longer waits for it.
+- **Packages:** a pre-release of a minor version (`1.1.0-beta.1`) gets package versions that upgrade in order: MSI and macOS `1.0.60001`, between `1.0.2` and `1.1.0`.
+- **Screenshots:** `-screenshots` shows ZeeZ Live with a recorded game's frames (FPS, lows, GPU Busy) instead of whatever app was in front, and never starts PresentMon.
+- **Docs:** the README's table of what needs administrator or root is generated from the code, in English and Portuguese, and a test fails when they differ (`python .github/scripts/permissions_map.py --write` regenerates it).
 - **Docs:** the Linux and macOS screenshots in the README come from CI on every run (artifacts `readme-linux`, `readme-macos`, `readme-macos-intel`), only the pages that show no processes, users, startup items or services.
+- **Tests:** every page and tab is drawn and driven in a test, from fixed data that reads no hardware: controls have names, and copy, pin, the detail level and the tabs work. A new page or tab without a test fails CI.
+- **Tests:** each overlay style has a drawing budget (shapes and text per frame) that CI checks, and the soak report shows the overlay's drawing time as a trend and, on Windows, the busiest threads' CPU.
+- **CI:** the macOS `.pkg` and the Arch package are built, installed, run and removed on every push, as the `.deb` and the MSI already were.
+- **CI:** a ratchet on `unsafe` outside `crates/platform` (`.github/scripts/unsafe_ratchet.py`): a new `unsafe` block, or more in a file, fails the build until it moves to `platform`.
+- **Code:** the timers, firmware tables, TSC and add-chain clock, macOS CPU load and sysctl, Ctrl+C, file paths, the Windows sensors (PDH, battery), the macOS SMC, PCI enumeration and DXCore NPUs moved into the platform crate as safe functions: 61 fewer `unsafe` outside it. Nothing looks different.
+- **Code:** `gui/mod.rs` is split by job (page state, frame-loop chores, navigation, page helpers, translations, start-up), from 1618 lines to 386. Nothing looks different.
 
 ### Fixed
 
 - **Found by a 60-minute fuzz run per parser:** a PCI device whose Resizable BAR field claims more than 2^63 bytes, a monitor EDID whose timings multiply past 32 bits, and an SPD with an absurdly short clock period no longer crash the report; PresentMon output whose UTF-8 byte-order mark arrives split across two reads is read the same as in one piece.
+- **Windows: the taskbar icon after an update.** A pinned CPU ZeeZ turned into a blank page after an update and a restart. The shortcut's icon was a copy kept by Windows Installer for that one version, which the update deletes; it now comes from `cpuzeez.exe` itself. A pin made before this version needs to be pinned again once.
+- **ZeeZ Live ▸ Live fits the window.** The frame tiles (FPS, 1% low, 0.1% low, GPU Busy) ran past the right edge of a 1120-pixel window; they now take as many columns as fit. The overlay preview turns into a column when its one-line strip is wider than the page.
+- **System ▸ Services and Processes on a narrow window.** The inspector and the details panel open over the table when both do not fit side by side; the inspector used to disappear below 700 points.
+- **System ▸ Services: the inspector fits its panel** in every language and zoom: long values wrap or are cut with the full text on hover, and the combo boxes no longer push it past the window.
+- **System ▸ Processes:** at 200 % the network note covered the *Problems* filters; it now has its own line.
+- **Settings at 200 %:** a row's controls move below its label when they do not fit beside it.
+- **Tabs wrap** onto a second line when they do not fit (Tools and System at a large zoom or in a long translation).
+- Icons in monospace text and the ● in *REC* and the sensor legend drew as empty boxes where the font lacked them; *REC* now uses the record icon and the sensor marks a bullet that every font has.
+- **CI: the fuzz workflow runs again.** Its job timeout used arithmetic, which workflow expressions do not have, so GitHub rejected the file and the nightly fuzzing had not run since 2026-11-10.
 
 ## [1.1.0-beta.3] - 2026-11-13
 
