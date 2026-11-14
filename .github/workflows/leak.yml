@@ -1,0 +1,51 @@
+name: Overlay memory
+
+# M5-07: does the overlay's private memory grow, and since which version?
+# Builds each ref's soak build on the same runner image and runs this
+# branch's soak.py against it (overlay only, real window and renderer).
+on:
+  workflow_dispatch:
+    inputs:
+      refs:
+        description: "Refs to compare, JSON list"
+        default: '["v1.0.0", "v1.1.0"]'
+      minutes:
+        description: "Soak duration in minutes"
+        default: "30"
+
+# Read-only token: nothing here pushes, comments or publishes.
+permissions:
+  contents: read
+
+jobs:
+  overlay:
+    name: overlay ${{ matrix.ref }}
+    runs-on: windows-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        ref: ${{ fromJSON(inputs.refs) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: tools
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ matrix.ref }}
+          path: app
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - run: cargo build --release --features soak
+        working-directory: app
+      - name: Soak, overlay only
+        shell: bash
+        run: |
+          python tools/.github/scripts/soak.py --gui --overlay-only app/target/release/cpuzeez.exe "${{ inputs.minutes }}" \
+            --interval 30 --report "soak-${{ matrix.ref }}.md" || echo "::warning::soak reported problems for ${{ matrix.ref }}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: overlay-memory-${{ matrix.ref }}
+          path: soak-*
