@@ -7,6 +7,11 @@ generated from its section below.
 
 ## [Unreleased]
 
+### Changed
+
+- **CI:** the macOS `.pkg` and the Arch package are built, installed, run and removed on every push, as the `.deb` and the MSI already were.
+- **Docs:** the Linux and macOS screenshots in the README come from CI on every run (artifacts `readme-linux`, `readme-macos`, `readme-macos-intel`), only the pages that show no processes, users, startup items or services.
+
 ## [1.1.0-beta.3] - 2026-11-13
 
 The third 1.1 beta (M4 of the [1.1 roadmap](docs/v1.1/ROADMAP.md)): code moves with no visible change. OS calls leave the app for the platform crate (61 fewer `unsafe` outside it) and the interface's main file is split by job. Nothing should look or behave differently; anything that does is a bug. **Known, as in beta.2:** the overlay stays at about 3 % of one core and its private memory grows about 1.5 MB per minute in a 30-minute test; that is the last item before 1.1.0.
