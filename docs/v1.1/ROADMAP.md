@@ -132,7 +132,7 @@ M4-02 to M4-04 and M4-05 to M4-08 touch different files and can alternate. No ot
 | M5-04 | **Installers on CI** (item 16): the macOS `.pkg` and the Arch package install, start and uninstall | 16 | — | Both jobs green |
 | M5-05 | **Final soaks** on the release candidate build: overlay-only for 30 min, the full tour for 8 h | 9, S3-02 | M4 | Both pass; `performance.md` updated |
 | M5-06 | Docs: the CHANGELOG `1.1.0` section, `audit/README.md` known gaps, the v1 ROADMAP rows, this roadmap ✅ | — | everything | Release go |
-| M5-07 | **Last, at the owner's request: the overlay's memory growth.** Private memory grows about 1.5 MB/min in the overlay-only soak on 0.36 and 0.37 alike; 1.0.0 was flat. Find the change after 1.0.0 that does it, from the code first | — | everything else | The cause is named and fixed, or written down as known in the 1.1.0 notes |
+| M5-07 | **Last, at the owner's request: the overlay's memory growth.** Private memory grows about 1.5 MB/min in the overlay-only soak on 0.36 and 0.37 alike; 1.0.0 was flat. Find the change after 1.0.0 that does it, from the code first | — | everything else | The cause is named and fixed, or written down as known in the 1.1.0 notes  — ✅ written down as known (no soak, owner's decision): headless probes of the process collector, the telemetry with frames and the whole `App` with the overlay are flat once their windows fill; the growth needs the real renderer, and the machine took two Windows updates between the flat and the growing runs. See [performance](../performance.md#the-overlays-memory-growth-m5-07) |
 
 **Gate `1.1.0`:** every row ✅ or explicitly moved, with a reason, to the [carry-over](#4-carry-over-needs-a-person-or-hardware). Both soaks pass. CI is green on the release commit.
 
@@ -159,7 +159,7 @@ Tracked here so nothing is lost. None of it blocks 1.1.0.
 | egui 0.37 changes break many kittest tests at once | M3-02 | The icon font is vendored first (M3-01), so the bump changes only egui. M2 leaves a test on every page to show what broke |
 | The overlay cannot reach 2 % within the shared event loop | M3 | Measure per thread first. One experiment per pull request. The decision point after M3-04 |
 | A repaint change leaks or freezes the overlay (as in 1.0) | M3-04 | Every experiment runs the overlay-only soak with the memory gate, not only CPU. **Not done: no experiment shipped** |
-| **Open:** private memory grows ≈ 1.5 MB/min in the overlay-only soak, on 0.36 and 0.37 alike; the 1.0.0 run was flat | after 1.0.0 | Not bisected and not seen in a game, only in the soak build. Owner's call whether to chase it before 1.1.0 |
+| **Open:** private memory grows ≈ 1.5 MB/min in the overlay-only soak, on 0.36 and 0.37 alike; the 1.0.0 run was flat | after 1.0.0 | M5-07: not in the app's own logic (headless probes are flat); likely the renderer or the system. Known in the 1.1.0 notes |
 | The `mod.rs` split conflicts with other work | M4 | Run it last, with no other GUI pull request open, one step per pull request |
 | nextest changes timings or misses doctests | M1-08 | Keep `cargo test --doc`; compare one week of job durations |
 | The fuzz campaign uses a lot of CI time | M5-01 | A manual trigger with a duration input, not a schedule; matrix jobs under the 6 h limit |
