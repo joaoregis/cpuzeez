@@ -265,7 +265,9 @@ jobs:
       - name: Build the .pkg as the release does (one architecture), install, run, uninstall
         run: |
           set -e
-          . <(python3 .github/scripts/pkgver.py "$(cargo pkgid | sed 's/.*[#@]//')")
+          # macOS's bash 3.2 cannot source a process substitution.
+          MAC_VER=$(python3 .github/scripts/pkgver.py "$(cargo pkgid | sed 's/.*[#@]//')" | sed -n 's/^MAC_VER=//p')
+          test -n "$MAC_VER"
           APP=pkgroot/Applications/CpuZeeZ.app
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" pkgroot/usr/local/bin
           cp target/release/cpuzeez "$APP/Contents/MacOS/cpuzeez"
