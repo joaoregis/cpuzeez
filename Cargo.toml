@@ -29,7 +29,7 @@ png = { version = "0.18", optional = true }
 # App history (docs/v1/dependencies.md §2.2, Q6a): SQLite compiled in, no system library.
 rusqlite = { version = "0.41", features = ["bundled"], optional = true }
 # ZeeZ Live hotkeys on Windows, macOS and X11 (docs/v1/dependencies.md §2.2).
-global-hotkey = { version = "0.9", optional = true }
+global-hotkey = { version = "0.10", optional = true }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 
