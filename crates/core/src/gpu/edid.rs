@@ -181,7 +181,7 @@ pub fn parse(e: &[u8]) -> Option<Monitor> {
     }
     // Largest area wins; the first (preferred) timing wins ties.
     mon.max_res = timings.into_iter().fold(None, |best: Option<(u32, u32, u32)>, t| match best {
-        Some(b) if b.0 * b.1 >= t.0 * t.1 => Some(b),
+        Some(b) if u64::from(b.0) * u64::from(b.1) >= u64::from(t.0) * u64::from(t.1) => Some(b),
         _ => Some(t),
     });
     Some(mon)

@@ -274,8 +274,8 @@ fn ext_node(c: &[u8], id: u16, o: usize) -> Node {
             let count = u32_at(c, o + 8).map_or(0, |r| (r >> 5) & 7) as usize;
             n.push(f("Resizable BARs", count));
             for i in 0..count {
-                if let Some(ctl) = u32_at(c, o + 8 + i * 8) {
-                    let sz = 1u64 << (20 + ((ctl >> 8) & 0x3F));
+                // Bits 13:8 encode 2^(20 + n) bytes; past 2^63 the field is garbage.
+                if let Some(sz) = u32_at(c, o + 8 + i * 8).and_then(|ctl| 1u64.checked_shl(20 + ((ctl >> 8) & 0x3F))) {
                     n.push(f(format!("BAR {i} size"), bytes_text(sz)));
                 }
             }

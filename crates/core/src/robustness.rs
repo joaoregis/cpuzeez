@@ -448,3 +448,26 @@ fn write_fuzz_seeds() {
     put("output_lines", "lines", b"first,second\r\n1,2\r\n3,4\nlast without newline");
     put("output_lines", "split-utf8", "caf\u{e9},\u{1F600}\n".as_bytes());
 }
+
+/// The inputs the 60-minute fuzz campaign of 2026-11-13 crashed on (M5-01),
+/// kept in `fuzz/regressions/`: each must now pass.
+#[test]
+fn fuzz_campaign_crashes() {
+    let mut d = pci::Device::new(pci::Bdf { seg: 0, bus: 1, dev: 0, func: 0 });
+    d.config = include_bytes!("../../../fuzz/regressions/pci_config.bin").to_vec();
+    let _ = pci::decode::device_nodes(&d); // Resizable BAR size past 2^63
+    let _ = edid::parse(include_bytes!("../../../fuzz/regressions/edid.bin")); // width × height past u32
+    let spd = include_bytes!("../../../fuzz/regressions/spd.bin");
+    let (b, hub) = spd.split_at(spd.len().min(1024));
+    let _ = decode::decode(b, hub); // a tCK so short the PC rating overflows
+    // A UTF-8 BOM split across two chunks reads as in one piece.
+    let bom = include_bytes!("../../../fuzz/regressions/output_lines.bin");
+    let lines = |chunks: &[&[u8]]| {
+        let mut o = crate::frames::OutputLines::default();
+        let mut v: Vec<String> = chunks.iter().flat_map(|c| o.feed(c)).collect();
+        v.extend(o.finish());
+        v
+    };
+    assert_eq!(lines(&[&bom[..2], &bom[2..]]), lines(&[bom]));
+    assert_eq!(lines(&[&[0xEF], &[0xBB, 0xBF, b'a', 10]]), vec!["a".to_string()]);
+}

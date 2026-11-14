@@ -202,7 +202,7 @@ fn bandwidth(fam: &str, tck: f64) -> String {
     let rate = 2.0 * f;
     let pc = |round: bool| {
         let x = rate * 8.0 / 100.0;
-        (if round { x.round() } else { (x + 1e-6).floor() }) as u64 * 100
+        ((if round { x.round() } else { (x + 1e-6).floor() }) as u64).saturating_mul(100)
     };
     match fam {
         "SDRAM" => format!("PC{} ({} MHz)", ifloor(f), ifloor(f)),
