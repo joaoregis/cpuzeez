@@ -54,9 +54,9 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1794600587.418523,
-    "seen": 1794604994.6696901,
-    "ast_hash": "2da2fe610759894f6d5938582e1161f7",
+    "mtime": 1794622462.3247843,
+    "seen": 1794622470.8885853,
+    "ast_hash": "3778df40a7f658c7dd8b543383d24d4c",
     "semantic_hash": ""
   },
   ".github/workflows/fuzz.yml": {
@@ -78,8 +78,8 @@
     "semantic_hash": "2b86f1ad5aa96a658dd746fdd65d61fc"
   },
   "Cargo.toml": {
-    "mtime": 1794615963.1827552,
-    "seen": 1794615969.3001187,
+    "mtime": 1794617191.2229686,
+    "seen": 1794622470.8890727,
     "ast_hash": "af6f186f32489a19cbd4945aa090c752",
     "semantic_hash": ""
   },
@@ -156,10 +156,10 @@
     "semantic_hash": "6bd0eba89e0c888582494b56855eb2ca"
   },
   "crates/core/src/frames.rs": {
-    "mtime": 1794232498.7930098,
-    "seen": 1794489545.8786933,
-    "ast_hash": "4979df187dff9c029194850ea247619b",
-    "semantic_hash": "4979df187dff9c029194850ea247619b"
+    "mtime": 1794621235.7833025,
+    "seen": 1794622470.8908384,
+    "ast_hash": "9772ef7f112bf7552242f4dd3a4edaac",
+    "semantic_hash": ""
   },
   "crates/core/src/gpu/db.rs": {
     "mtime": 1794232498.7930098,
@@ -168,10 +168,10 @@
     "semantic_hash": "e45f48c917bee29561dbc66906c64cc6"
   },
   "crates/core/src/gpu/edid.rs": {
-    "mtime": 1794232498.7930098,
-    "seen": 1794489545.8786955,
-    "ast_hash": "21a50f675d6d16b9d6133571e37612e2",
-    "semantic_hash": "21a50f675d6d16b9d6133571e37612e2"
+    "mtime": 1794621235.784434,
+    "seen": 1794622470.8909993,
+    "ast_hash": "688e302cb1818c46fa57667746c0eac3",
+    "semantic_hash": ""
   },
   "crates/core/src/gpu/engines.rs": {
     "mtime": 1794232498.79401,
@@ -228,10 +228,10 @@
     "semantic_hash": "43c41c5a0f280dffb5fe63ac3fda025e"
   },
   "crates/core/src/pci/decode.rs": {
-    "mtime": 1794232498.7960112,
-    "seen": 1794489545.8787055,
-    "ast_hash": "7393c6d215d263c4d49dea1112e1e4c1",
-    "semantic_hash": "7393c6d215d263c4d49dea1112e1e4c1"
+    "mtime": 1794621235.7854335,
+    "seen": 1794622470.8927865,
+    "ast_hash": "73ad020dfeb1bd583815070f73ace7b2",
+    "semantic_hash": ""
   },
   "crates/core/src/pci/mod.rs": {
     "mtime": 1794232498.7960112,
@@ -258,10 +258,10 @@
     "semantic_hash": "77cf558a43c655778fb3b125af12fd75"
   },
   "crates/core/src/robustness.rs": {
-    "mtime": 1794232498.7970104,
-    "seen": 1794489545.8787105,
-    "ast_hash": "53b8554f9ae63338363d6c3862279c3d",
-    "semantic_hash": "53b8554f9ae63338363d6c3862279c3d"
+    "mtime": 1794621235.7854335,
+    "seen": 1794622470.893308,
+    "ast_hash": "8197282287219e0b8475a7be19e3891b",
+    "semantic_hash": ""
   },
   "crates/core/src/screens.rs": {
     "mtime": 1794232498.7980099,
@@ -294,10 +294,10 @@
     "semantic_hash": "09770629b41e2e949e8900102392020c"
   },
   "crates/core/src/spd/decode.rs": {
-    "mtime": 1794232498.799132,
-    "seen": 1794489545.8787165,
-    "ast_hash": "260922a4daee3ed1dd763021e3fa7642",
-    "semantic_hash": "260922a4daee3ed1dd763021e3fa7642"
+    "mtime": 1794621235.7869384,
+    "seen": 1794622470.8941624,
+    "ast_hash": "65fac56ae3b5f1bd99779e0c140660d0",
+    "semantic_hash": ""
   },
   "crates/core/src/spd/jep106.rs": {
     "mtime": 1794232498.799132,
@@ -900,8 +900,8 @@
     "semantic_hash": ""
   },
   "src/gui/fixture.rs": {
-    "mtime": 1794496845.382064,
-    "seen": 1794496966.6164305,
+    "mtime": 1794617191.238056,
+    "seen": 1794622470.911103,
     "ast_hash": "7251793f99d740490ace1cbc80745855",
     "semantic_hash": ""
   },
@@ -1290,8 +1290,8 @@
     "semantic_hash": "c1ec3ed4aa43da7d717648fd10e21a83"
   },
   "src/procs.rs": {
-    "mtime": 1794232498.8597124,
-    "seen": 1794489545.8788872,
+    "mtime": 1794617191.2390559,
+    "seen": 1794622470.9224997,
     "ast_hash": "995067b9f621c5b812704f0c1d0ab65f",
     "semantic_hash": "995067b9f621c5b812704f0c1d0ab65f"
   },
@@ -1404,9 +1404,9 @@
     "semantic_hash": "54308fe455dd423c7c4bf63850af3527"
   },
   "CHANGELOG.md": {
-    "mtime": 1794615963.1817553,
-    "seen": 1794615969.3239968,
-    "ast_hash": "d00a563c85f680e42147ef257224fe0f",
+    "mtime": 1794622462.3247843,
+    "seen": 1794622470.9253716,
+    "ast_hash": "9e174cd34f815956ffc69a7fa7a9145e",
     "semantic_hash": ""
   },
   "FEATURES.md": {
@@ -1416,15 +1416,15 @@
     "semantic_hash": "f02718614d080780b1f2e98d11958d3c"
   },
   "README.md": {
-    "mtime": 1794496845.371992,
-    "seen": 1794496966.6249967,
-    "ast_hash": "66e557602aaf3d25a15555853a1cb27c",
+    "mtime": 1794622462.3262906,
+    "seen": 1794622470.9258401,
+    "ast_hash": "63625392c1ec5557608a025f5a838bf5",
     "semantic_hash": ""
   },
   "README.pt-BR.md": {
-    "mtime": 1794496845.371992,
-    "seen": 1794496966.6249983,
-    "ast_hash": "3741fb238db33b8abe77dab96cef2076",
+    "mtime": 1794622462.327299,
+    "seen": 1794622470.9258428,
+    "ast_hash": "2db4565df0b535b7e02841b76c4f0f15",
     "semantic_hash": ""
   },
   "SECURITY.md": {
@@ -1572,9 +1572,9 @@
     "semantic_hash": "b91cb2329e3c4d1b070d912d72cd2019"
   },
   "docs/performance.md": {
-    "mtime": 1794600587.423522,
-    "seen": 1794604994.6949322,
-    "ast_hash": "0ed88d8b06c505199f5f0067e6365e97",
+    "mtime": 1794621678.5175817,
+    "seen": 1794622470.9298854,
+    "ast_hash": "092ca0722d80e91a551690bb3547fe76",
     "semantic_hash": ""
   },
   "docs/security/review-2026-11-09.md": {
@@ -1614,9 +1614,9 @@
     "semantic_hash": "36d0bfc66092621b054d601f80b46b79"
   },
   "docs/v1.1/ROADMAP.md": {
-    "mtime": 1794615963.1857564,
-    "seen": 1794615969.328427,
-    "ast_hash": "c74112cb117356dc10be5f0c9f0e6cd3",
+    "mtime": 1794622462.3899548,
+    "seen": 1794622470.9308174,
+    "ast_hash": "cb90fd07aa76f5497b85426d6fdab231",
     "semantic_hash": ""
   },
   "docs/v1/README.md": {
@@ -1764,458 +1764,458 @@
     "semantic_hash": ""
   },
   "docs/screenshots/linux/about-pt.png": {
-    "mtime": 1794235048.9789076,
-    "seen": 1794490757.356106,
-    "ast_hash": "6f0edbc8037bd2f1634b1c36f6645d92",
+    "mtime": 1794622462.328299,
+    "seen": 1794622470.9342785,
+    "ast_hash": "c863bdfcf2c77f617da3ed54dd4e2a1b",
     "semantic_hash": ""
   },
   "docs/screenshots/linux/about.png": {
-    "mtime": 1794235048.9789076,
-    "seen": 1794490757.3561072,
-    "ast_hash": "2842fb7721f89d26462a53ab4795f8d2",
+    "mtime": 1794622462.328299,
+    "seen": 1794622470.9342806,
+    "ast_hash": "ba3760339b2811da3f1c3251848f1761",
     "semantic_hash": ""
   },
   "docs/screenshots/linux/bench.png": {
-    "mtime": 1794235048.9804106,
-    "seen": 1794490757.3561082,
-    "ast_hash": "3d41ebe9be3c41ddaf06b84df1af312d",
+    "mtime": 1794622462.3304214,
+    "seen": 1794622470.934283,
+    "ast_hash": "9c9534a0a8e98cc0a4053049f7852194",
     "semantic_hash": ""
   },
   "docs/screenshots/linux/bottleneck.png": {
-    "mtime": 1794235048.9814146,
-    "seen": 1794490757.3561096,
-    "ast_hash": "c0576de41a585759ebacb2244050e164",
+    "mtime": 1794622462.3319304,
+    "seen": 1794622470.9342859,
+    "ast_hash": "149627360569143bc287fac3728644eb",
     "semantic_hash": ""
   },
   "docs/screenshots/linux/clocks.png": {
-    "mtime": 1794235048.9814146,
-    "seen": 1794490757.3561106,
-    "ast_hash": "378089f3449f1a660af16c2a8f8b016c",
+    "mtime": 1794622462.3319304,
+    "seen": 1794622470.9342878,
+    "ast_hash": "1cbe8b31a7370b830aeb2630cdc9ad10",
     "semantic_hash": ""
   },
   "docs/screenshots/linux/compare.png": {
-    "mtime": 1794235048.982623,
-    "seen": 1794490757.3561118,
-    "ast_hash": "d91263170978a36d8d74b364a2b173ce",
+    "mtime": 1794622462.3334367,
+    "seen": 1794622470.93429,
+    "ast_hash": "a91a0eab714ca5d190ea4b7c73f91bb3",
     "semantic_hash": ""
   },
   "docs/screenshots/linux/devices.png": {
-    "mtime": 1794235048.982623,
-    "seen": 1794490757.356113,
-    "ast_hash": "7e1f1ff49e7987cae67b10459eed6cc2",
+    "mtime": 1794622462.3349478,
+    "seen": 1794622470.934292,
+    "ast_hash": "e073eac3d3ff31c0bb5dd69a261eff12",
     "semantic_hash": ""
   },
   "docs/screenshots/linux/graphics.png": {
-    "mtime": 1794235048.983913,
-    "seen": 1794490757.3561141,
-    "ast_hash": "306d20f6885b1d09dd99b77f38da47d3",
+    "mtime": 1794622462.3359544,
+    "seen": 1794622470.934294,
+    "ast_hash": "a49ae1674d50360793980601f5bff659",
     "semantic_hash": ""
   },
   "docs/screenshots/linux/history.png": {
-    "mtime": 1794235048.984917,
-    "seen": 1794490757.356115,
-    "ast_hash": "6dccd47b532e10e9f85a5989cec74484",
+    "mtime": 1794622462.3370843,
+    "seen": 1794622470.934296,
+    "ast_hash": "a12a4a827e16bf67c48cdb55e7fdd5b0",
     "semantic_hash": ""
   },
   "docs/screenshots/linux/mainboard.png": {
-    "mtime": 1794235048.984917,
-    "seen": 1794490757.3561165,
-    "ast_hash": "2362125eed0fe85a8aad894e44452cbd",
+    "mtime": 1794622462.339092,
+    "seen": 1794622470.9343002,
+    "ast_hash": "4d1697e58857edb96005d54379590425",
     "semantic_hash": ""
   },
   "docs/screenshots/linux/membench.png": {
-    "mtime": 1794235048.9859202,
-    "seen": 1794490757.3561177,
-    "ast_hash": "2da16f7702fea547811ed97c52167f6b",
+    "mtime": 1794622462.3406057,
+    "seen": 1794622470.934302,
+    "ast_hash": "bce2b4b19be4b84f6ee8ddbf839aa307",
     "semantic_hash": ""
   },
   "docs/screenshots/linux/memory.png": {
-    "mtime": 1794235048.9859202,
-    "seen": 1794490757.3561192,
-    "ast_hash": "d6cc67aa6b2963e7e4cff924b63ee571",
+    "mtime": 1794622462.341113,
+    "seen": 1794622470.9343038,
+    "ast_hash": "805a28cf1648738c721a82cca642efe6",
     "semantic_hash": ""
   },
   "docs/screenshots/linux/overview-light.png": {
-    "mtime": 1794235048.9872508,
-    "seen": 1794490757.35612,
-    "ast_hash": "918f70836983fe64cb26667b155a71c5",
+    "mtime": 1794622462.3426197,
+    "seen": 1794622470.9343064,
+    "ast_hash": "03d23fc1f430b0d3610f9c9583e1ba35",
     "semantic_hash": ""
   },
   "docs/screenshots/linux/overview.png": {
-    "mtime": 1794235048.9872508,
-    "seen": 1794490757.356121,
-    "ast_hash": "afd12b6eee6ef5f68e2a45d76c6c0bad",
+    "mtime": 1794622462.343628,
+    "seen": 1794622470.934308,
+    "ast_hash": "10171258bc3ab0ccf0d1ce9c8053b240",
     "semantic_hash": ""
   },
   "docs/screenshots/linux/processor.png": {
-    "mtime": 1794235048.9882522,
-    "seen": 1794490757.356122,
-    "ast_hash": "d8601ccdfdac3ac8c86c420a8fbb3bb1",
+    "mtime": 1794622462.345133,
+    "seen": 1794622470.9343102,
+    "ast_hash": "96abf7faccca164beb4b970cfd6d837a",
     "semantic_hash": ""
   },
   "docs/screenshots/linux/sensors.png": {
-    "mtime": 1794235048.989252,
-    "seen": 1794490757.3561232,
-    "ast_hash": "48207061062b1f45f176b6c7673923f0",
+    "mtime": 1794622462.34614,
+    "seen": 1794622470.9343116,
+    "ast_hash": "01c57b5e5c1e590fe4f80ab4e88b6469",
     "semantic_hash": ""
   },
   "docs/screenshots/linux/settings.png": {
-    "mtime": 1794235048.9902525,
-    "seen": 1794490757.3561244,
-    "ast_hash": "af410f9dd350ba0a9f27acdb536b4dae",
+    "mtime": 1794622462.3471408,
+    "seen": 1794622470.9343138,
+    "ast_hash": "08da8b12472e53801ea09b2592ee82bc",
     "semantic_hash": ""
   },
   "docs/screenshots/linux/stress.png": {
-    "mtime": 1794235048.9902525,
-    "seen": 1794490757.3561254,
-    "ast_hash": "13842bcafc5e9cffc4ff15c921ab49db",
+    "mtime": 1794622462.3481402,
+    "seen": 1794622470.9343154,
+    "ast_hash": "3375960273f675a53404db83221e6a51",
     "semantic_hash": ""
   },
   "docs/screenshots/linux/system-performance.png": {
-    "mtime": 1794235048.9912508,
-    "seen": 1794490757.3561268,
-    "ast_hash": "6cfd265b1bb95505c110fd3c5895f10f",
+    "mtime": 1794622462.3492103,
+    "seen": 1794622470.9343178,
+    "ast_hash": "21f7b3bd539f6122db7d42a9ab20438a",
     "semantic_hash": ""
   },
   "docs/screenshots/macos-intel/about-pt.png": {
-    "mtime": 1794235048.9922507,
-    "seen": 1794490757.3561277,
-    "ast_hash": "1a008b18073a571e31a26c74aacf5cc1",
+    "mtime": 1794622462.3492103,
+    "seen": 1794622470.93432,
+    "ast_hash": "c40609ed8cf5f8c86961523cfc95b375",
     "semantic_hash": ""
   },
   "docs/screenshots/macos-intel/about.png": {
-    "mtime": 1794235048.9922507,
-    "seen": 1794490757.356129,
-    "ast_hash": "699babcb0df9a696a2fc195c66f42f19",
+    "mtime": 1794622462.3507173,
+    "seen": 1794622470.9343216,
+    "ast_hash": "2c79fe84a5870faf019dadc2fdeec5a9",
     "semantic_hash": ""
   },
   "docs/screenshots/macos-intel/bench.png": {
-    "mtime": 1794235048.9934227,
-    "seen": 1794490757.3561301,
-    "ast_hash": "f4e70453215b59f15248c1419f2fa16a",
+    "mtime": 1794622462.3517213,
+    "seen": 1794622470.9343243,
+    "ast_hash": "5b61438fda0f57d4dc999e3954208bc9",
     "semantic_hash": ""
   },
   "docs/screenshots/macos-intel/bottleneck.png": {
-    "mtime": 1794235048.9934227,
-    "seen": 1794490757.356131,
-    "ast_hash": "88f5e57da0addfebb756abd82ea13074",
+    "mtime": 1794622462.3527253,
+    "seen": 1794622470.934326,
+    "ast_hash": "58c938d7afa05f138b8dd716d1c14549",
     "semantic_hash": ""
   },
   "docs/screenshots/macos-intel/clocks.png": {
-    "mtime": 1794235048.9944227,
-    "seen": 1794490757.356132,
-    "ast_hash": "5831f4aa0bc168c22fc40c0ce4a7dcec",
+    "mtime": 1794622462.3542278,
+    "seen": 1794622470.9343274,
+    "ast_hash": "0e60bb2d592f98b3df8892efc88416f5",
     "semantic_hash": ""
   },
   "docs/screenshots/macos-intel/compare.png": {
-    "mtime": 1794235048.9949267,
-    "seen": 1794490757.3561335,
-    "ast_hash": "0e75832573f70864dc0626ace70d0038",
+    "mtime": 1794622462.3542278,
+    "seen": 1794622470.934329,
+    "ast_hash": "e9bdb237ac0619ef5f50cfae2ec6ad52",
     "semantic_hash": ""
   },
   "docs/screenshots/macos-intel/devices.png": {
-    "mtime": 1794235048.995931,
-    "seen": 1794490757.3561347,
-    "ast_hash": "ff808fc8816a135219a0f62a5db2e5bf",
+    "mtime": 1794622462.355758,
+    "seen": 1794622470.9343314,
+    "ast_hash": "145e3251048ab4dfe8d69ec1ba6f48f2",
     "semantic_hash": ""
   },
   "docs/screenshots/macos-intel/graphics.png": {
-    "mtime": 1794235048.995931,
-    "seen": 1794490757.3561356,
-    "ast_hash": "fa8f97a9017ca7ef68338a61dd200f42",
+    "mtime": 1794622462.3567665,
+    "seen": 1794622470.9343333,
+    "ast_hash": "81606683f5e48bf63a9917618deb9a42",
     "semantic_hash": ""
   },
   "docs/screenshots/macos-intel/history.png": {
-    "mtime": 1794235048.9969354,
-    "seen": 1794490757.3561368,
-    "ast_hash": "2dc0f9c65b78511f2210630f89e13dff",
+    "mtime": 1794622462.3567665,
+    "seen": 1794622470.934335,
+    "ast_hash": "12380aa8cb582de7cc8238626ae29060",
     "semantic_hash": ""
   },
   "docs/screenshots/macos-intel/mainboard.png": {
-    "mtime": 1794235048.9969354,
-    "seen": 1794490757.356138,
-    "ast_hash": "f9a5f9bfaf05d666da1279aee56db801",
+    "mtime": 1794622462.3597844,
+    "seen": 1794622470.9343383,
+    "ast_hash": "9460953f0a0e411dcfa3ec682fe56455",
     "semantic_hash": ""
   },
   "docs/screenshots/macos-intel/membench.png": {
-    "mtime": 1794235048.9979355,
-    "seen": 1794490757.356139,
-    "ast_hash": "fab53b0d09d07ba2dc4689b55a052d4b",
+    "mtime": 1794622462.3607905,
+    "seen": 1794622470.93434,
+    "ast_hash": "3f06dfde68d93ca6fffdd83a71fe77f6",
     "semantic_hash": ""
   },
   "docs/screenshots/macos-intel/memory.png": {
-    "mtime": 1794235048.998935,
-    "seen": 1794490757.3561401,
-    "ast_hash": "2c37f76713743dbfb84953d109c2fd6e",
+    "mtime": 1794622462.361797,
+    "seen": 1794622470.934342,
+    "ast_hash": "b6f50aac3ecb5f632299018d6d877625",
     "semantic_hash": ""
   },
   "docs/screenshots/macos-intel/overview-light.png": {
-    "mtime": 1794235048.998935,
-    "seen": 1794490757.356141,
-    "ast_hash": "6f9f31fd8a1c8e89d39153071432a0f0",
+    "mtime": 1794622462.3628142,
+    "seen": 1794622470.9343436,
+    "ast_hash": "a4760ef96b5a6876788571f99b34726f",
     "semantic_hash": ""
   },
   "docs/screenshots/macos-intel/overview.png": {
-    "mtime": 1794235048.9999354,
-    "seen": 1794490757.356142,
-    "ast_hash": "534b0101aeb177bb073ef3946dd7cfe9",
+    "mtime": 1794622462.3643227,
+    "seen": 1794622470.9343457,
+    "ast_hash": "a57be432982cd35e7840418f84eb0219",
     "semantic_hash": ""
   },
   "docs/screenshots/macos-intel/processor.png": {
-    "mtime": 1794235049.0009346,
-    "seen": 1794490757.356143,
-    "ast_hash": "8288313d5f99e046b2f003b7bdff12d1",
+    "mtime": 1794622462.3653276,
+    "seen": 1794622470.934347,
+    "ast_hash": "a1f68070e276b4fdbde910aa142da02f",
     "semantic_hash": ""
   },
   "docs/screenshots/macos-intel/sensors.png": {
-    "mtime": 1794235049.0009346,
-    "seen": 1794490757.3561447,
-    "ast_hash": "aa0173aec5cc7266490fbad72bf3ed93",
+    "mtime": 1794622462.3668342,
+    "seen": 1794622470.9343486,
+    "ast_hash": "09ac3030ee151e378e20c19af6421fea",
     "semantic_hash": ""
   },
   "docs/screenshots/macos-intel/settings.png": {
-    "mtime": 1794235049.0019348,
-    "seen": 1794490757.3561456,
-    "ast_hash": "fd1049a0fcc7557c413f911fb30f8fc2",
+    "mtime": 1794622462.3678412,
+    "seen": 1794622470.93435,
+    "ast_hash": "b6923dcb20370c20c77f02c62953d1d5",
     "semantic_hash": ""
   },
   "docs/screenshots/macos-intel/stress.png": {
-    "mtime": 1794235049.0029347,
-    "seen": 1794490757.356147,
-    "ast_hash": "43c3be433d94ac453cd704f28e83b864",
+    "mtime": 1794622462.3689406,
+    "seen": 1794622470.9343517,
+    "ast_hash": "e491d1c96194275f9b7b3a18b8205488",
     "semantic_hash": ""
   },
   "docs/screenshots/macos-intel/system-performance.png": {
-    "mtime": 1794235049.0029347,
-    "seen": 1794490757.356148,
-    "ast_hash": "5ccebad077e1b056632f7fadc0aa65ce",
+    "mtime": 1794622462.3689406,
+    "seen": 1794622470.934353,
+    "ast_hash": "75222ab69214b0b81d6c3c1c6dbf6761",
     "semantic_hash": ""
   },
   "docs/screenshots/macos/about-pt.png": {
-    "mtime": 1794235049.003935,
-    "seen": 1794490757.3561494,
-    "ast_hash": "748946e0d854095d43e69bf83e3d527b",
+    "mtime": 1794622462.3709645,
+    "seen": 1794622470.9343548,
+    "ast_hash": "514308bfdb0a2caacc6eed34aeae12c1",
     "semantic_hash": ""
   },
   "docs/screenshots/macos/about.png": {
-    "mtime": 1794235049.0049348,
-    "seen": 1794490757.3561506,
-    "ast_hash": "424663dfeafec58854e5732859c541ca",
+    "mtime": 1794622462.3709645,
+    "seen": 1794622470.9343562,
+    "ast_hash": "d683141daeb69f86ecb6c3298959e8ed",
     "semantic_hash": ""
   },
   "docs/screenshots/macos/bench.png": {
-    "mtime": 1794235049.0049348,
-    "seen": 1794490757.3561516,
-    "ast_hash": "3e9e69ac344e4a9cc226cb319d5e77cb",
+    "mtime": 1794622462.3724778,
+    "seen": 1794622470.9343576,
+    "ast_hash": "67e9e1b57a45bfbfc171babd609758b6",
     "semantic_hash": ""
   },
   "docs/screenshots/macos/bottleneck.png": {
-    "mtime": 1794235049.0059345,
-    "seen": 1794490757.3561523,
-    "ast_hash": "4c7671bb453966df26967200e0e7637a",
+    "mtime": 1794622462.3734848,
+    "seen": 1794622470.9343596,
+    "ast_hash": "c0ceaa83a3a076a88565c993ec95c368",
     "semantic_hash": ""
   },
   "docs/screenshots/macos/clocks.png": {
-    "mtime": 1794235049.0059345,
-    "seen": 1794490757.3561532,
-    "ast_hash": "1179aed367cebc0eed7745b6e8039c80",
+    "mtime": 1794622462.3747478,
+    "seen": 1794622470.934361,
+    "ast_hash": "34f3c4d4ffe1c212c00341349fdddf61",
     "semantic_hash": ""
   },
   "docs/screenshots/macos/compare.png": {
-    "mtime": 1794235049.0059345,
-    "seen": 1794490757.3561544,
-    "ast_hash": "916e331ebcca7ce072e3bb077e7ff9a3",
+    "mtime": 1794622462.3757474,
+    "seen": 1794622470.9343636,
+    "ast_hash": "1d03f552648039959f43dc7f3d1d9c2a",
     "semantic_hash": ""
   },
   "docs/screenshots/macos/devices.png": {
-    "mtime": 1794235049.007395,
-    "seen": 1794490757.3561554,
-    "ast_hash": "cd4f446084595fac06c4d31617b197cf",
+    "mtime": 1794622462.3757474,
+    "seen": 1794622470.9343657,
+    "ast_hash": "6b9b8a9c683a40283aa02799c762ab8b",
     "semantic_hash": ""
   },
   "docs/screenshots/macos/graphics.png": {
-    "mtime": 1794235049.007395,
-    "seen": 1794490757.3561568,
-    "ast_hash": "9f8dd08ab4d71dd46d7a22cd79f6ac5d",
+    "mtime": 1794622462.377251,
+    "seen": 1794622470.9343674,
+    "ast_hash": "ab449fb600e480104c61753481737ba9",
     "semantic_hash": ""
   },
   "docs/screenshots/macos/history.png": {
-    "mtime": 1794235049.0088973,
-    "seen": 1794490757.356158,
-    "ast_hash": "e44292d91a444b667b042e3738c0318d",
+    "mtime": 1794622462.3782587,
+    "seen": 1794622470.9343696,
+    "ast_hash": "b1454ea782db273478a5ec73eaafd110",
     "semantic_hash": ""
   },
   "docs/screenshots/macos/mainboard.png": {
-    "mtime": 1794235049.0088973,
-    "seen": 1794490757.356159,
-    "ast_hash": "73b29951ee88997b28203f4e40a63cfd",
+    "mtime": 1794622462.3792586,
+    "seen": 1794622470.9343727,
+    "ast_hash": "4131bcc5e164f2f59abdf4193b030fe7",
     "semantic_hash": ""
   },
   "docs/screenshots/macos/membench.png": {
-    "mtime": 1794235049.0099003,
-    "seen": 1794490757.356174,
-    "ast_hash": "b75352bfe16169771f7d4c6227f0ac78",
+    "mtime": 1794622462.3809247,
+    "seen": 1794622470.934374,
+    "ast_hash": "c824fcc945944b272561544f6b789b1a",
     "semantic_hash": ""
   },
   "docs/screenshots/macos/memory.png": {
-    "mtime": 1794235049.0099003,
-    "seen": 1794490757.3561752,
-    "ast_hash": "f1284226921e6584b45a589e0c069bd0",
+    "mtime": 1794622462.3809247,
+    "seen": 1794622470.934376,
+    "ast_hash": "226ac83a7bcd0db1ea841b5deb9c5488",
     "semantic_hash": ""
   },
   "docs/screenshots/macos/overview-light.png": {
-    "mtime": 1794235049.0114038,
-    "seen": 1794490757.3561761,
-    "ast_hash": "94450209816ecb3e488879c65b0072ab",
+    "mtime": 1794622462.3824396,
+    "seen": 1794622470.934378,
+    "ast_hash": "34df3b7478d586dd01da56f65537ecfa",
     "semantic_hash": ""
   },
   "docs/screenshots/macos/overview.png": {
-    "mtime": 1794235049.0114038,
-    "seen": 1794490757.3561773,
-    "ast_hash": "ffb7878bf6e760252c0ba40189492f06",
+    "mtime": 1794622462.3834465,
+    "seen": 1794622470.9343796,
+    "ast_hash": "575adfb6b933adc403a0a3e49de2876d",
     "semantic_hash": ""
   },
   "docs/screenshots/macos/processor.png": {
-    "mtime": 1794235049.0124073,
-    "seen": 1794490757.3561785,
-    "ast_hash": "9e3ea95fd04e8da4748b1f481307c5d3",
+    "mtime": 1794622462.384447,
+    "seen": 1794622470.934381,
+    "ast_hash": "efde339f20f22a44dba3dd0724be836d",
     "semantic_hash": ""
   },
   "docs/screenshots/macos/sensors.png": {
-    "mtime": 1794235049.013407,
-    "seen": 1794490757.3561792,
-    "ast_hash": "6895fbf1de7aaf831678be1e1ed72c72",
+    "mtime": 1794622462.3864439,
+    "seen": 1794622470.9343827,
+    "ast_hash": "8daf0255a889e84a2815cdb56288e17f",
     "semantic_hash": ""
   },
   "docs/screenshots/macos/settings.png": {
-    "mtime": 1794235049.013407,
-    "seen": 1794490757.3561804,
-    "ast_hash": "3f43321dbe5c46285e5fb32865e1849b",
+    "mtime": 1794622462.3864439,
+    "seen": 1794622470.9343846,
+    "ast_hash": "aa1e66b765baa229102ecefe670fc90e",
     "semantic_hash": ""
   },
   "docs/screenshots/macos/stress.png": {
-    "mtime": 1794235049.0144067,
-    "seen": 1794490757.3561816,
-    "ast_hash": "3bfb5623c63948885ef3f0cca8d24aae",
+    "mtime": 1794622462.3879507,
+    "seen": 1794622470.934387,
+    "ast_hash": "44858721f14f95165dc4393fb19ce25f",
     "semantic_hash": ""
   },
   "docs/screenshots/macos/system-performance.png": {
-    "mtime": 1794235049.0144067,
-    "seen": 1794490757.3561828,
-    "ast_hash": "faee678a1f6d184af1e1315343468e89",
+    "mtime": 1794622462.3889558,
+    "seen": 1794622470.9343884,
+    "ast_hash": "c8174b838777b5383221b4d406839ac2",
     "semantic_hash": ""
   },
   "docs/screenshots/windows/about-pt.png": {
-    "mtime": 1794235049.0159094,
-    "seen": 1794490757.356184,
+    "mtime": 1794621143.5437708,
+    "seen": 1794622470.9343903,
     "ast_hash": "13d23619f218fb1ad17645cc1c29be1c",
     "semantic_hash": ""
   },
   "docs/screenshots/windows/about.png": {
-    "mtime": 1794235049.0159094,
-    "seen": 1794490757.3561852,
+    "mtime": 1794621143.5449748,
+    "seen": 1794622470.934392,
     "ast_hash": "246085e5fc77cbaea62eafe288ca73d7",
     "semantic_hash": ""
   },
   "docs/screenshots/windows/bench.png": {
-    "mtime": 1794235049.0174167,
-    "seen": 1794490757.3561862,
+    "mtime": 1794621143.5460124,
+    "seen": 1794622470.934394,
     "ast_hash": "54e837f43c008faf9c59d580d82afc4d",
     "semantic_hash": ""
   },
   "docs/screenshots/windows/bottleneck.png": {
-    "mtime": 1794235049.0184202,
-    "seen": 1794490757.3561873,
+    "mtime": 1794621143.5470202,
+    "seen": 1794622470.9343956,
     "ast_hash": "e0486b237607705807b0f7e87ee68aac",
     "semantic_hash": ""
   },
   "docs/screenshots/windows/clocks.png": {
-    "mtime": 1794235049.0194197,
-    "seen": 1794490757.356188,
+    "mtime": 1794621143.5481732,
+    "seen": 1794622470.934397,
     "ast_hash": "7e20278b7af66739532fa1961aa8b1dd",
     "semantic_hash": ""
   },
   "docs/screenshots/windows/compare.png": {
-    "mtime": 1794235049.0204196,
-    "seen": 1794490757.3561893,
+    "mtime": 1794621143.5486774,
+    "seen": 1794622470.9343987,
     "ast_hash": "2e8c83058fab307738bdccdd10ca4a14",
     "semantic_hash": ""
   },
   "docs/screenshots/windows/devices.png": {
-    "mtime": 1794235049.0214202,
-    "seen": 1794490757.3561902,
+    "mtime": 1794621143.5496826,
+    "seen": 1794622470.9344003,
     "ast_hash": "eb19398096ae00336493e04525b4db0c",
     "semantic_hash": ""
   },
   "docs/screenshots/windows/graphics.png": {
-    "mtime": 1794235049.0214202,
-    "seen": 1794490757.3561912,
+    "mtime": 1794621143.5496826,
+    "seen": 1794622470.934402,
     "ast_hash": "1c8b6b98b6b776ccf1cd0e102a50f0d2",
     "semantic_hash": ""
   },
   "docs/screenshots/windows/history.png": {
-    "mtime": 1794235049.02242,
-    "seen": 1794490757.3561924,
+    "mtime": 1794621143.5511866,
+    "seen": 1794622470.9344037,
     "ast_hash": "d723cd756f0fdc367bcefd1bd515c843",
     "semantic_hash": ""
   },
   "docs/screenshots/windows/mainboard.png": {
-    "mtime": 1794235049.02342,
-    "seen": 1794490757.3561933,
+    "mtime": 1794621143.5521917,
+    "seen": 1794622470.934405,
     "ast_hash": "2520f12e2a86a50d7bdb4497c272e6d4",
     "semantic_hash": ""
   },
   "docs/screenshots/windows/membench.png": {
-    "mtime": 1794235049.0244198,
-    "seen": 1794490757.3561945,
+    "mtime": 1794621143.5531907,
+    "seen": 1794622470.934407,
     "ast_hash": "03e6657a5eebedcef84e829a19621797",
     "semantic_hash": ""
   },
   "docs/screenshots/windows/memory.png": {
-    "mtime": 1794235049.0244198,
-    "seen": 1794490757.356196,
+    "mtime": 1794621143.5531907,
+    "seen": 1794622470.9344082,
     "ast_hash": "cfbbd7d1555249786d1228cdb1deb014",
     "semantic_hash": ""
   },
   "docs/screenshots/windows/overview-light.png": {
-    "mtime": 1794235049.025923,
-    "seen": 1794490757.3561966,
+    "mtime": 1794621143.5546944,
+    "seen": 1794622470.9344096,
     "ast_hash": "8361eff202d673c88823f5ec8746c2f5",
     "semantic_hash": ""
   },
   "docs/screenshots/windows/overview.png": {
-    "mtime": 1794235049.0269265,
-    "seen": 1794490757.3561976,
+    "mtime": 1794621143.5557003,
+    "seen": 1794622470.9344113,
     "ast_hash": "b3e84c9592d23385943c10c9c1eb485b",
     "semantic_hash": ""
   },
   "docs/screenshots/windows/processor.png": {
-    "mtime": 1794235049.0279288,
-    "seen": 1794490757.3561985,
+    "mtime": 1794621143.5566988,
+    "seen": 1794622470.9344127,
     "ast_hash": "4677ef4b30c0d0c22ee8a9879444492f",
     "semantic_hash": ""
   },
   "docs/screenshots/windows/sensors.png": {
-    "mtime": 1794235049.0289285,
-    "seen": 1794490757.3561997,
+    "mtime": 1794621143.5566988,
+    "seen": 1794622470.9344146,
     "ast_hash": "52488796ea0ee165b032cc9c3eace5d0",
     "semantic_hash": ""
   },
   "docs/screenshots/windows/settings.png": {
-    "mtime": 1794235049.0299292,
-    "seen": 1794490757.356201,
+    "mtime": 1794621143.5578277,
+    "seen": 1794622470.934416,
     "ast_hash": "a5901623d8bce188b226df14c0fc6f43",
     "semantic_hash": ""
   },
   "docs/screenshots/windows/stress.png": {
-    "mtime": 1794235049.0299292,
-    "seen": 1794490757.3562016,
+    "mtime": 1794621143.55883,
+    "seen": 1794622470.9344177,
     "ast_hash": "ac59eef413a36758c6eaae5e7c25590d",
     "semantic_hash": ""
   },
   "docs/screenshots/windows/system-performance.png": {
-    "mtime": 1794235049.0309286,
-    "seen": 1794490757.3562028,
+    "mtime": 1794621143.560124,
+    "seen": 1794622470.9344192,
     "ast_hash": "cd27651474b76637c34fb37172e78848",
     "semantic_hash": ""
   },
@@ -2325,6 +2325,30 @@
     "mtime": 1794615963.199273,
     "seen": 1794615976.4948761,
     "ast_hash": "dc7cd68bd91e732e3c2303e0dfd9dfb8",
+    "semantic_hash": ""
+  },
+  ".github/scripts/readme_shots.py": {
+    "mtime": 1794622462.3247843,
+    "seen": 1794622470.8879147,
+    "ast_hash": "0fff8ebe6aeea9d842649c100cc7225b",
+    "semantic_hash": ""
+  },
+  "docs/screenshots/linux/live.png": {
+    "mtime": 1794622462.3380897,
+    "seen": 1794622470.9342978,
+    "ast_hash": "3ec6ae91c1b665cc63d776ebe8e470d9",
+    "semantic_hash": ""
+  },
+  "docs/screenshots/macos-intel/live.png": {
+    "mtime": 1794622462.3582702,
+    "seen": 1794622470.9343364,
+    "ast_hash": "f4cebbfd99759fbcf545d9f1ca08c212",
+    "semantic_hash": ""
+  },
+  "docs/screenshots/macos/live.png": {
+    "mtime": 1794622462.3792586,
+    "seen": 1794622470.934371,
+    "ast_hash": "fe4dbc1209edc46a81ce80fcb5a4e091",
     "semantic_hash": ""
   }
 }

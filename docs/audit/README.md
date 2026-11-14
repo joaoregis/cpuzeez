@@ -134,18 +134,15 @@ Everything below is tracked; none is hidden. IDs are ROADMAP rows; the plan for 
 
 | Gap | Area | State |
 |---|---|---|
-| `gui/mod.rs` still ~1,500 lines (S0-E04) | architecture | planned, ALTO |
-| `unsafe` in the older hardware modules of the binary, with `SAFETY:` notes, not yet in `platform` (S0-E06) | code, safety | planned, MUITO ALTO |
-| Permissions tables in the README are written by hand, not checked against `core::availability` (S0-B04) | docs, UX | planned, MEDIO |
-| Interaction tests missing for Processor, Mainboard, Memory, Graphics, Devices, Sensors, About (S0-T05) | UI tests | planned, MEDIO |
-| Scale test covers six pages (Overview, Settings, Sensors, ZeeZ Live tabs and hardware pages are not in it) (S3-03) | accessibility | planned, MEDIO |
-| No benchmark of the overlay frame (S0-T08); no CPU/memory measurement of the GUI under the overlay | performance | planned, MEDIO / waiting for a free machine |
-| No long fuzz campaign and no recorded results (S0-T07) | vulnerabilities | planned, MEDIO |
+| The overlay costs about 3.2–3.6 % of one core next to a game, over the 2 % goal | performance | measured in [performance.md](../performance.md); no experiment shipped in 1.1 (M3-04/05, owner's decision) |
+| The overlay's private memory grows about 1.5 MB/min in the 30-minute soak on Windows; the 1.0.0 run was flat | performance | headless probes of the app's own parts are flat; likely the renderer or the system ([performance.md](../performance.md#the-overlays-memory-growth-m5-07), M5-07) |
+| `unsafe` left outside `platform`: the four benchmark kernels (by design) and five large FFI files (`gpu/win`, `gpu/nvml`, `gpu/dl`, `storage`, `network`) | code, safety | a CI ratchet only lets it go down; the five move in 1.2 (engineering §7) |
 | Screen readers cannot read table rows or chart internals | accessibility | [accessibility.md](../accessibility.md) |
-| Screenshots in the README predate the new pages, name and icon | docs | waiting for a free machine, then Linux/macOS (ALTO) |
 | Wayland portal, KMS ioctls, per-monitor placement on mixed-DPI setups: pure parts tested, not on real systems | code | §6 |
 | Releases unsigned | CD | [ADR 0009](../adr/0009-releases-stay-unsigned-for-now.md) |
 | Windows monitor positions are divided by one scale factor, so other monitors' rectangles are approximate with mixed DPI | design | noted in `src/gui/screens.rs` |
+
+**Closed in 1.1.0:** `gui/mod.rs` is 386 lines (M4-05 to M4-08); the README permissions tables are generated from `core::availability` and checked (M2-08); every page and tab has an interaction test and a scale test (M2-02 to M2-04); the overlay has a drawing budget per style and its CPU and memory are measured (M2-09, M3-03); a 60-minute fuzz run per target is recorded in [fuzz-results.md](../security/fuzz-results.md) (M5-01); the Linux and macOS README screenshots come from CI (M5-03).
 
 ## 8. Suggested prompts
 

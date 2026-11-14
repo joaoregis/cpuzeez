@@ -7,6 +7,12 @@ generated from its section below.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-13
+
+The 1.1 release: the three betas below plus the last round of checks. **No new features**; what changed is how sure the app is of itself. Every page and tab is drawn and driven in a test, side panels resize and fit at any zoom, the interface moved to egui 0.37 with a name on every control for screen readers, OS calls moved into the platform crate behind a CI ratchet, a 60-minute fuzz run per parser found and fixed four crashes, and the macOS `.pkg` and the Arch package are installed and removed on every push like the `.deb` and the MSI.
+
+**Known:** the overlay costs about 3 % of one core next to a game, over the 2 % goal, and in a 30-minute test its private memory grows about 1.5 MB per minute on Windows; the app's own parts measured alone stay flat, so the renderer or the system is the likely place. Both are in [performance.md](docs/performance.md).
+
 ### Changed
 
 - **CI:** the macOS `.pkg` and the Arch package are built, installed, run and removed on every push, as the `.deb` and the MSI already were.
@@ -697,7 +703,8 @@ features.
 - GUI with CPU-Z's tabs.
 - Installers for Windows (MSI), macOS (DMG/PKG), Debian/Ubuntu (DEB) and Arch.
 
-[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.1.0-beta.3...HEAD
+[Unreleased]: https://github.com/joaoregis/cpuzeez/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/joaoregis/cpuzeez/compare/v1.0.2...v1.1.0
 [1.1.0-beta.3]: https://github.com/joaoregis/cpuzeez/compare/v1.1.0-beta.2...v1.1.0-beta.3
 [1.1.0-beta.2]: https://github.com/joaoregis/cpuzeez/compare/v1.1.0-beta.1...v1.1.0-beta.2
 [1.1.0-beta.1]: https://github.com/joaoregis/cpuzeez/compare/v1.0.2...v1.1.0-beta.1
