@@ -7,6 +7,10 @@ generated from its section below.
 
 ## [Unreleased]
 
+### Changed
+
+- **Docs:** the overlay's memory growth known in 1.1.0 is not CPU ZeeZ: 1.0.0 grows the same on the machine where it was seen, after that machine's Windows updates, and no version grows on a clean Windows runner; a manual workflow (`leak.yml`) compares versions on one runner. Details in [performance.md](docs/performance.md#the-overlays-memory-growth-m5-07).
+
 ## [1.1.0] - 2026-11-13
 
 CPU ZeeZ 1.1 adds **no new features**: it makes the app surer of itself, with tests on every page, layouts that fit any window, screen-reader names, safer code and every package tested on each push. Everything below changed since 1.0.2, over three betas; every pre-release is listed below this entry.
