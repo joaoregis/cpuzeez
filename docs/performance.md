@@ -84,7 +84,16 @@ The 30-minute overlay soaks of 2026-11-13 grew about 1.5 MB/min on egui 0.36 and
 | The telemetry engine with the overlay's sources and the synthetic game's frames, 4 min | flat after the history fills (45 → 47 MB) |
 | The whole `App` with the overlay shown, driven by egui_kittest at 20 frames/s, 4 min | grows for 2.5 min while the frame and metric windows fill, then flat at 28.5 MB |
 
-The code after 1.0.0 that runs in this case (the bottleneck pill, the frame hub, the soak hooks) holds nothing that grows. What the probes cannot run is the real renderer and the window system. Between the flat run and the growing ones the machine took two Windows updates (KB5132688 on 2026-11-11, KB5132061 on 2026-11-12), and both builds grow the same, so the likeliest place is the rendering path or the system under it, not a change in CPU ZeeZ. **Not proven**: it would take a 1.0.0 soak on the same machine now, which the owner chose not to run. 1.1.0 ships with it written down as known.
+The code after 1.0.0 that runs in this case (the bottleneck pill, the frame hub, the soak hooks) holds nothing that grows. What the probes cannot run is the real renderer and the window system. Between the flat run and the growing ones the machine took two Windows updates (KB5132688 on 2026-11-11, KB5132061 on 2026-11-12), and both builds grow the same, so the likeliest place is the rendering path or the system under it, not a change in CPU ZeeZ. **Since then (2026-11-16), measured:**
+
+| Run (overlay only, synthetic game) | Private memory | CPU, % of one core |
+|---|---|---|
+| Owner's machine (RTX 4060 + Radeon iGPU, Windows after KB5132061), 1.0.0, OpenGL, 10 min | **+110 MB/h** (134 → 148 MB) | 3.1 |
+| Owner's machine, 1.1.0, OpenGL, 10 min | **+112 MB/h** (134 → 147 MB) | 2.9 |
+| Owner's machine, 1.1.0, `CZ_RENDERER=wgpu`, 10 min | +24 MB/h (535 → 538 MB, 63 threads) | 3.3 |
+| GitHub `windows-latest` (no GPU, software OpenGL), 1.0.0 to 1.1.0 and every release between, 15–30 min ([Overlay memory](../.github/workflows/leak.yml) workflow) | flat (−1 to +10 MB/h, noise) | 15–18 (the software rasteriser's threads) |
+
+So the growth is **not a change in CPU ZeeZ**: 1.0.0, flat on the same machine on 2026-11-09, now grows exactly as 1.1.0 does, and no build grows on a clean Windows without a GPU driver. It follows the OpenGL path on this machine after its Windows updates; wgpu grows far less but costs four times the memory and 40 more threads, so it is not a fix. The CPU numbers on CI are the software rasteriser, the same for every version (an early 3.7 % for 1.0.0 was a different runner; rerun, it was 16.3 %).
 
 ## Left open in 1.1 (M3-04, M3-05)
 
