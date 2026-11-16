@@ -145,7 +145,7 @@ Every [release](https://github.com/joaoregis/cpuzeez/releases) ships an installe
 
 ### Why Windows or macOS shows a security warning
 
-**CPU ZeeZ is not signed with a publisher certificate.** On Windows, removing the warning needs a code-signing certificate. On macOS it needs a paid Apple Developer membership (US$ 99/year) for notarization. Both cost money every year, and CPU ZeeZ is a free project with no budget for that yet. macOS executables are ad-hoc signed, which keeps them runnable but neither identifies the developer nor counts as notarization.
+**CPU ZeeZ is not signed with a publisher certificate.** On Windows, removing the warning needs a code-signing certificate. On macOS it needs a paid Apple Developer membership (US$ 99/year) for notarization. Both cost money every year, and CPU ZeeZ is a free project with no budget for that yet. macOS executables are ad-hoc signed, which keeps them runnable but neither identifies the developer nor counts as notarization. Windows signing through the SignPath Foundation's free program for open-source projects is being set up; see the [code signing policy](https://joaoregis.github.io/cpuzeez/code-signing.html).
 
 **What the warning means.** Windows and macOS can't tell who published the file. **It doesn't mean malware was found.** SmartScreen is reputation-based and warns about unsigned downloads that few people have run yet.
 

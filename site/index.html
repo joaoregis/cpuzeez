@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CPU ZeeZ</title>
+<meta name="description" content="Free, open-source hardware information, monitoring, FPS overlay and benchmarks for Windows, Linux and macOS. Nothing leaves your computer.">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="top">
+  <nav class="wrap" aria-label="Main">
+    <a class="brand" href="./"><img src="icon.svg" alt="" width="32" height="32">CPU ZeeZ</a>
+    <div class="links">
+      <a href="#features">Features</a>
+      <a href="#screenshots">Screenshots</a>
+      <a href="#download">Download</a>
+      <a href="https://github.com/joaoregis/cpuzeez">GitHub</a>
+    </div>
+  </nav>
+</header>
+
+<main>
+<div class="hero">
+  <div class="wrap">
+    <h1>Know what's in your PC and what holds it back.</h1>
+    <p class="lead">CPU ZeeZ reads your processor, memory, mainboard, graphics and drives, watches every sensor, shows FPS over your games and tells you what limits them. Free and open source, for Windows, Linux and macOS. Nothing leaves your computer.</p>
+    <div class="cta">
+      <a class="btn" id="primary" href="https://github.com/joaoregis/cpuzeez/releases/latest">Download CPU ZeeZ</a>
+      <a class="alt" href="#download">Other systems and files</a>
+      <small id="version">Latest release on GitHub</small>
+    </div>
+    <div class="stage">
+      <svg class="arc" viewBox="0 0 1000 420" aria-hidden="true"><path pathLength="1" d="M60 410 A460 460 0 0 1 940 410" fill="none" stroke="#8b5cf6" stroke-width="10" stroke-linecap="round"/></svg>
+      <img class="shot" src="screenshots/windows/overview.png" width="1120" height="760" alt="The CPU ZeeZ Overview page: a summary of the build, health checks and live tiles for temperatures, clocks and load.">
+    </div>
+  </div>
+</div>
+
+<section id="features">
+  <div class="wrap">
+    <h2>One app instead of five</h2>
+    <p class="intro">The details a hardware report gives you, a monitor that runs next to your games, and the tools to find out why a game stutters.</p>
+    <div class="features">
+      <div>
+        <h3>Everything CPU-Z reports</h3>
+        <p>Processor and topology, caches, mainboard and BIOS, memory timings and SPD from DDR to DDR5, graphics and PCI. Reports in TXT, HTML and JSON, and the same command-line flags.</p>
+      </div>
+      <div>
+        <h3>A hardware monitor</h3>
+        <p>Every sensor with minimum, maximum and average, live charts and CSV logging. Throttling detection, tray icons per metric and small always-on-top monitors.</p>
+      </div>
+      <div>
+        <h3>FPS over your games</h3>
+        <p>ZeeZ Live draws an overlay in its own window, so nothing is injected into the game. FPS, frame time, 1% and 0.1% lows and GPU Busy, with captures, reports and comparisons.</p>
+      </div>
+      <div>
+        <h3>What limits your frame rate</h3>
+        <p>The bottleneck detector measures, then says <em>GPU at its limit</em>, <em>CPU at its limit (core 4)</em>, a frame cap, throttling, full video memory or another program, with the numbers behind it.</p>
+      </div>
+      <div>
+        <h3>A Task Manager on every system</h3>
+        <p>Processes with network, power and GPU use, performance graphs, app history, startup items, users and services. Anything risky asks first.</p>
+      </div>
+      <div>
+        <h3>Benchmarks and a stability test</h3>
+        <p>CPU, memory and cache, GPU, storage and core-to-core latency, each with history and comparison. The stability test stops itself at temperature limits.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="screenshots">
+  <div class="wrap">
+    <h2>See it first</h2>
+    <p class="intro">Windows 11 on a Ryzen 9 7900X with an RTX 4060. Serial numbers, MACs and IPs are masked.</p>
+    <div class="gallery">
+      <figure><img loading="lazy" src="screenshots/windows/bottleneck.png" width="1120" height="760" alt="The bottleneck detector naming what limits the frame rate, with the readings behind its verdict."><figcaption>What limits my FPS?</figcaption></figure>
+      <figure><img loading="lazy" src="screenshots/windows/system-performance.png" width="1120" height="760" alt="System, Performance: CPU, memory, disk, network and GPU graphs."><figcaption>System: performance</figcaption></figure>
+      <figure><img loading="lazy" src="screenshots/windows/sensors.png" width="1120" height="760" alt="The sensors table with current, minimum, maximum and average values."><figcaption>Sensors</figcaption></figure>
+      <figure><img loading="lazy" src="screenshots/windows/memory.png" width="1120" height="760" alt="Memory timings and SPD of each module."><figcaption>Memory and SPD</figcaption></figure>
+      <figure><img loading="lazy" src="screenshots/windows/bench.png" width="1120" height="760" alt="The CPU benchmark suite with single- and multi-threaded scores."><figcaption>Benchmarks</figcaption></figure>
+      <figure><img loading="lazy" src="screenshots/windows/overview-light.png" width="1120" height="760" alt="The Overview in the light theme, in Portuguese."><figcaption>Light theme, in Portuguese</figcaption></figure>
+    </div>
+    <p>More, including Linux and macOS, in the <a href="https://github.com/joaoregis/cpuzeez#screenshots">README</a>.</p>
+  </div>
+</section>
+
+<section id="privacy" class="private">
+  <div class="wrap">
+    <h2>Private by design</h2>
+    <p class="intro">CPU ZeeZ works entirely on your computer.</p>
+    <ul>
+      <li><strong>No telemetry and no account.</strong> The app sends nothing about you or your PC anywhere.</li>
+      <li><strong>Off until you allow it:</strong> the update check (it asks GitHub for the latest release), app history and recording.</li>
+      <li><strong>Rights per action.</strong> Something that needs administrator or root asks for it for that one action, and every change is written to a local log.</li>
+      <li><strong>Open source.</strong> Every line is on GitHub under MIT or Apache-2.0, and every release is built by GitHub Actions from that code.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="download">
+  <div class="wrap">
+    <h2>Download</h2>
+    <p class="intro" id="dl-intro">Every file comes from the <a href="https://github.com/joaoregis/cpuzeez/releases/latest">latest release on GitHub</a>, with <code>SHA256SUMS.txt</code> to check it.</p>
+    <div class="table-scroll">
+    <table class="dl">
+      <thead><tr><th scope="col">System</th><th scope="col">File</th><th scope="col">Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Windows 10 and 11</td><td><a data-asset="windows-x64.msi" href="https://github.com/joaoregis/cpuzeez/releases/latest">Installer (.msi)</a><br><a data-asset="windows-x64-portable.zip" href="https://github.com/joaoregis/cpuzeez/releases/latest">Portable (.zip)</a></td><td>64-bit. The installer adds hardware access (PawnIO) for temperatures, power and memory timings.</td></tr>
+        <tr><td>macOS 11 and later</td><td><a data-asset="macos-universal.dmg" href="https://github.com/joaoregis/cpuzeez/releases/latest">App (.dmg)</a><br><a data-asset="macos-universal.pkg" href="https://github.com/joaoregis/cpuzeez/releases/latest">App and command line (.pkg)</a></td><td>Intel and Apple Silicon in one file.</td></tr>
+        <tr><td>Debian and Ubuntu</td><td><a data-asset="_amd64.deb" href="https://github.com/joaoregis/cpuzeez/releases/latest">x86-64 (.deb)</a><br><a data-asset="_arm64.deb" href="https://github.com/joaoregis/cpuzeez/releases/latest">ARM64 (.deb)</a></td><td>Run with <code>sudo</code> for every sensor.</td></tr>
+        <tr><td>Arch Linux</td><td><a data-asset="x86_64.pkg.tar.zst" href="https://github.com/joaoregis/cpuzeez/releases/latest">Package (.pkg.tar.zst)</a></td><td></td></tr>
+        <tr><td>Other Linux</td><td><a data-asset="linux-x86_64.tar.gz" href="https://github.com/joaoregis/cpuzeez/releases/latest">x86-64 (.tar.gz)</a><br><a data-asset="linux-aarch64.tar.gz" href="https://github.com/joaoregis/cpuzeez/releases/latest">ARM64 (.tar.gz)</a></td><td>A single binary.</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="note">
+      <p><strong>Windows and macOS will warn you the first time.</strong> The builds are not signed with a publisher certificate yet.</p>
+      <p>Windows: <em>More info</em>, then <em>Run anyway</em>. macOS: try to open the app, then <em>System Settings → Privacy &amp; Security → Open Anyway</em>. Details are in the <a href="https://github.com/joaoregis/cpuzeez#install">install guide</a>; how signing will work is in the <a href="code-signing.html">code signing policy</a>.</p>
+      <p>Free code signing provided by <a href="https://about.signpath.io">SignPath.io</a>, certificate by <a href="https://signpath.org">SignPath Foundation</a> (being set up; Windows releases are not signed yet).</p>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>CPU ZeeZ is free software under MIT or Apache-2.0. Not affiliated with CPUID; CPU-Z is a trademark of CPUID.</p>
+    <p><a href="https://github.com/joaoregis/cpuzeez">Source code</a> · <a href="https://github.com/joaoregis/cpuzeez/blob/main/CHANGELOG.md">Changelog</a> · <a href="code-signing.html">Code signing policy</a></p>
+  </div>
+</footer>
+
+<script>
+// Direct download links from the latest release; the links above work without this.
+(async () => {
+  try {
+    const r = await fetch("https://api.github.com/repos/joaoregis/cpuzeez/releases/latest");
+    if (!r.ok) return;
+    const rel = await r.json();
+    const find = s => rel.assets.find(a => a.name.endsWith(s));
+    document.querySelectorAll("a[data-asset]").forEach(a => {
+      const f = find(a.dataset.asset);
+      if (f) a.href = f.browser_download_url;
+    });
+    const ver = rel.tag_name.replace(/^v/, "");
+    document.getElementById("version").textContent = "Version " + ver + ", released " +
+      new Date(rel.published_at).toLocaleDateString("en", { year: "numeric", month: "long", day: "numeric" });
+    const ua = navigator.userAgent;
+    const pick = /Windows/.test(ua) ? ["windows-x64.msi", "Download for Windows"]
+      : /Mac OS X/.test(ua) ? ["macos-universal.dmg", "Download for macOS"]
+      : /Ubuntu|Debian/.test(ua) ? ["_amd64.deb", "Download for Ubuntu and Debian"] : null;
+    const f = pick && find(pick[0]);
+    if (f) {
+      const b = document.getElementById("primary");
+      b.href = f.browser_download_url;
+      b.textContent = pick[1];
+    }
+  } catch (e) { /* offline or rate-limited: the release page links stay */ }
+})();
+</script>
+</body>
+</html>

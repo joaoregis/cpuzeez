@@ -1,0 +1,44 @@
+name: Site
+
+# The landing page and the code signing policy on GitHub Pages
+# (joaoregis.github.io/cpuzeez): site/ plus the README screenshots and the icon.
+on:
+  push:
+    branches: [main]
+    paths: [site/**, docs/screenshots/**, assets/icon.svg, .github/workflows/pages.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Assemble the site
+        run: |
+          mkdir -p _site/screenshots
+          cp -r site/. _site/
+          cp assets/icon.svg _site/
+          cp -r docs/screenshots/windows _site/screenshots/
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

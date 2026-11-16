@@ -1,0 +1,125 @@
+/* CPU ZeeZ site. System fonts on purpose: the app uses the OS's own UI font,
+   and the page loads nothing from anyone else. */
+:root {
+  --ink: #14102a;        /* the icon's tile */
+  --ink-2: #1e1840;
+  --violet: #7c3aed;
+  --lilac: #a78bfa;
+  --mist: #f5f3ff;
+  --paper: #fbfaff;
+  --text: #2a2546;
+  --muted: #5d5878;
+  --line: #e4e0f5;
+  --max: 72rem;
+  --font: system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Ubuntu, Cantarell, "Noto Sans", sans-serif;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--paper);
+}
+img { max-width: 100%; height: auto; display: block; }
+a { color: var(--violet); text-underline-offset: 0.18em; }
+a:hover { text-decoration-thickness: 2px; }
+:focus-visible { outline: 3px solid var(--lilac); outline-offset: 3px; border-radius: 4px; }
+
+.wrap { max-width: var(--max); margin: 0 auto; padding: 0 1.25rem; }
+
+/* ---------------------------------------------------------------- header */
+.top {
+  background: var(--ink);
+  color: var(--mist);
+}
+.top nav {
+  display: flex; align-items: center; gap: 1.5rem;
+  padding-top: 1.1rem; padding-bottom: 1.1rem;
+}
+.brand { display: flex; align-items: center; gap: 0.6rem; color: var(--mist); text-decoration: none; font-weight: 700; font-size: 1.05rem; }
+.brand img { width: 32px; height: 32px; }
+.top nav .links { margin-left: auto; display: flex; gap: 1.25rem; flex-wrap: wrap; }
+.top nav .links a { color: #cfc8f3; text-decoration: none; font-size: 0.95rem; }
+.top nav .links a:hover { color: #fff; text-decoration: underline; }
+
+/* ---------------------------------------------------------------- hero */
+.hero { background: var(--ink); color: var(--mist); padding: 3.5rem 0 0; overflow: hidden; }
+.hero h1 {
+  margin: 0;
+  max-width: 15ch;
+  font-size: clamp(2.5rem, 6.2vw, 4.75rem);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  font-weight: 800;
+}
+.hero p.lead { max-width: 38rem; margin: 1.5rem 0 0; font-size: 1.2rem; color: #d6d0f5; }
+.cta { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.5rem; margin-top: 2rem; }
+.btn {
+  display: inline-block; padding: 0.85rem 1.4rem; border-radius: 10px;
+  background: var(--lilac); color: var(--ink); font-weight: 700; text-decoration: none;
+}
+.btn:hover { background: #c4b5fd; text-decoration: none; }
+.cta .alt { color: #d6d0f5; }
+.cta small { display: block; width: 100%; color: #a39cc9; font-size: 0.9rem; }
+
+/* The memorable part: the app itself, framed by the icon's gauge arc. */
+.stage { position: relative; margin-top: 7rem; }
+.stage svg.arc {
+  position: absolute; left: 50%; top: -5.5rem; width: min(135%, 90rem); transform: translateX(-50%);
+  pointer-events: none;
+}
+.stage .shot {
+  position: relative;
+  margin: 0 auto; width: min(100%, 62rem);
+  border-radius: 14px 14px 0 0;
+  box-shadow: 0 -1px 0 #3a3166, 0 30px 80px rgba(124, 58, 237, 0.35);
+}
+
+/* ---------------------------------------------------------------- sections */
+section { padding: 5rem 0; }
+section + section { border-top: 1px solid var(--line); }
+h2 { font-size: clamp(1.75rem, 3.4vw, 2.5rem); line-height: 1.1; letter-spacing: -0.02em; margin: 0 0 1rem; color: var(--ink); }
+h3 { font-size: 1.15rem; margin: 0 0 0.35rem; color: var(--ink); }
+.intro { max-width: 40rem; color: var(--muted); margin: 0 0 2.5rem; }
+
+.features { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: 2.25rem 3.5rem; }
+.features div { border-left: 3px solid var(--lilac); padding-left: 1.1rem; }
+.features p { margin: 0; color: var(--muted); }
+
+.gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 1.75rem; }
+.gallery figure { margin: 0; }
+.gallery img { border-radius: 8px; border: 1px solid var(--line); }
+.gallery figcaption { margin-top: 0.5rem; font-size: 0.95rem; color: var(--muted); }
+
+.private ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 1rem; max-width: 46rem; }
+.private li { padding-left: 1.75rem; position: relative; }
+.private li::before { content: ""; position: absolute; left: 0; top: 0.55em; width: 0.65rem; height: 0.65rem; border-radius: 50%; background: var(--violet); }
+
+table.dl { width: 100%; border-collapse: collapse; }
+table.dl th, table.dl td { text-align: left; padding: 0.85rem 0.75rem 0.85rem 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.dl th { font-size: 0.95rem; color: var(--muted); font-weight: 600; }
+table.dl td:first-child { font-weight: 600; color: var(--ink); white-space: nowrap; }
+.table-scroll { overflow-x: auto; }
+.note { margin-top: 1.75rem; max-width: 46rem; padding: 1rem 1.25rem; background: var(--mist); border-radius: 10px; font-size: 0.97rem; }
+.note p { margin: 0.4rem 0 0; }
+.note p:first-child { margin-top: 0; }
+
+.doc { max-width: 46rem; padding: 3.5rem 0 5rem; }
+.doc h1 { font-size: clamp(2rem, 4vw, 2.75rem); letter-spacing: -0.02em; color: var(--ink); margin: 0 0 1rem; line-height: 1.1; }
+.doc h2 { font-size: 1.4rem; margin-top: 2.5rem; }
+
+footer { background: var(--ink); color: #a39cc9; padding: 2.5rem 0; font-size: 0.93rem; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 1rem 2rem; justify-content: space-between; }
+footer a { color: #d6d0f5; }
+footer p { margin: 0; }
+
+@media (max-width: 40rem) {
+  .top nav .links { display: none; }
+  section { padding: 3.5rem 0; }
+  .hero { padding-top: 2rem; }
+}
