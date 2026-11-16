@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Code signing policy</title>
+<meta name="description" content="How CPU ZeeZ releases are built and signed, who can approve a signature, and what the app sends over the network.">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="top">
+  <nav class="wrap" aria-label="Main">
+    <a class="brand" href="./"><img src="icon.svg" alt="" width="32" height="32">CPU ZeeZ</a>
+    <div class="links">
+      <a href="./#download">Download</a>
+      <a href="https://github.com/joaoregis/cpuzeez">GitHub</a>
+    </div>
+  </nav>
+</header>
+
+<main class="wrap">
+<article class="doc">
+  <h1>Code signing policy</h1>
+
+  <div class="note">
+    <p><strong>Status:</strong> Windows releases are not signed yet. CPU ZeeZ has applied to the SignPath Foundation's free code signing program for open-source projects. This page will say when signed releases start.</p>
+  </div>
+
+  <p>Free code signing provided by <a href="https://about.signpath.io">SignPath.io</a>, certificate by <a href="https://signpath.org">SignPath Foundation</a>.</p>
+
+  <h2>What is signed</h2>
+  <p>Only files built from this repository's source: <code>cpuzeez.exe</code>, the MSI installer and the portable zip of each release. Every release is built by <a href="https://github.com/joaoregis/cpuzeez/actions/workflows/release.yml">GitHub Actions</a> from a tagged commit on <code>main</code>; nothing built on a personal computer is signed. Third-party programs shipped with the app (Intel's PresentMon, the PawnIO driver and its modules) keep their own publishers' signatures and are not signed by this project.</p>
+
+  <h2>Team roles</h2>
+  <ul>
+    <li><strong>Authors</strong> (commit without further review): <a href="https://github.com/joaoregis">@joaoregis</a>, the owner.</li>
+    <li><strong>Reviewers</strong> (review every change from anyone else, such as a pull request, before it is merged): <a href="https://github.com/joaoregis">@joaoregis</a>.</li>
+    <li><strong>Approvers</strong> (approve each signing request by hand, for a release tag only): <a href="https://github.com/joaoregis">@joaoregis</a>.</li>
+  </ul>
+  <p>Everyone with these roles uses multi-factor authentication on GitHub and on SignPath.</p>
+
+  <h2>Privacy</h2>
+  <p>This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.</p>
+  <p>In detail: there is no telemetry and no account. The only network request the app makes on its own is the update check, which is off until you turn it on; it asks GitHub's public API for the latest release and, when you choose to update, downloads that release from GitHub. Everything else the app records (app history, captures, benchmark results, the action log) stays on your computer.</p>
+  <p>Third-party components shipped with the app make no network requests of their own: Intel's PresentMon reads frame timing from the local system, and the PawnIO driver reads hardware registers. CPU ZeeZ also changes system settings only when you ask (ending a process, a service's startup type, a startup item), warns before risky ones, and the installers uninstall cleanly.</p>
+
+  <h2>Reporting a problem</h2>
+  <p>If you find a signed file that this policy does not cover, or a security problem, follow the <a href="https://github.com/joaoregis/cpuzeez/security/policy">security policy</a>.</p>
+</article>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>CPU ZeeZ is free software under MIT or Apache-2.0. Not affiliated with CPUID; CPU-Z is a trademark of CPUID.</p>
+    <p><a href="./">Home</a> · <a href="https://github.com/joaoregis/cpuzeez">Source code</a></p>
+  </div>
+</footer>
+</body>
+</html>

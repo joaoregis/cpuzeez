@@ -145,7 +145,7 @@ Cada [release](https://github.com/joaoregis/cpuzeez/releases) traz um instalador
 
 ### Por que o Windows ou o macOS mostra um aviso de segurança
 
-**O CPU ZeeZ não é assinado com certificado do publicador.** No Windows, tirar o aviso exige um certificado de assinatura de código. No macOS, exige a assinatura paga do Apple Developer (US$ 99/ano) para a notarização. Os dois custam dinheiro todo ano, e o CPU ZeeZ é um projeto gratuito, ainda sem orçamento para isso. Os executáveis do macOS usam assinatura ad-hoc: ela permite rodar, mas não identifica o desenvolvedor nem vale como notarização.
+**O CPU ZeeZ não é assinado com certificado do publicador.** No Windows, tirar o aviso exige um certificado de assinatura de código. No macOS, exige a assinatura paga do Apple Developer (US$ 99/ano) para a notarização. Os dois custam dinheiro todo ano, e o CPU ZeeZ é um projeto gratuito, ainda sem orçamento para isso. Os executáveis do macOS usam assinatura ad-hoc: ela permite rodar, mas não identifica o desenvolvedor nem vale como notarização. A assinatura no Windows pelo programa gratuito da SignPath Foundation para projetos open source está sendo configurada; veja a [política de assinatura de código](https://joaoregis.github.io/cpuzeez/code-signing.html) (em inglês).
 
 **O que o aviso significa.** O Windows e o macOS não conseguem saber quem publicou o arquivo. **Não significa que um vírus foi encontrado.** O SmartScreen funciona por reputação e avisa sobre downloads sem assinatura que ainda foram pouco executados.
 
